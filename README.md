@@ -1,1 +1,2 @@
-# HiremercyAJO
+# HireMercyapp
+Daily contribution web app
