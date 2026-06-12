@@ -56,6 +56,7 @@ export interface Member {
   staff_name?: string;
   password?: string;
   profile_image?: string;
+  wallet_balance?: number;
   tracking: DayTracking[];
 }
 
@@ -76,6 +77,8 @@ export interface Transaction {
   payment_method: 'Cash' | 'Bank Transfer' | 'Mobile Money' | 'Bank App Transfer';
   status: 'Paid' | 'Pending' | 'Overdue';
   notes?: string;
+  reference?: string;
+  transaction_type?: 'Contribution' | 'Funding' | 'Loan' | 'Payout';
   branch_id: string;
   branch_name: string;
   staff_id?: string;
@@ -108,6 +111,50 @@ export interface PayoutRecord {
   is_partial?: boolean;
 }
 
+export interface LoanRequest {
+  id: string;
+  member_id: string;
+  member_name: string;
+  branch_id: string;
+  branch_name: string;
+  staff_id?: string;
+  staff_name?: string;
+  bank_name: string;
+  account_number: string;
+  account_holder_name: string;
+  requested_amount: number;
+  note?: string;
+  status: 'Pending' | 'Approved' | 'Rejected';
+  created_at: string;
+  reviewed_by?: string;
+  reviewed_at?: string;
+  comment?: string;
+  approved_amount?: number;
+}
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  title: string;
+  message: string;
+  type: 'success' | 'info' | 'warning' | 'error';
+  created_at: string;
+  read: boolean;
+}
+
+export interface AuditLog {
+  id: string;
+  user_id: string;
+  user_name: string;
+  role: UserRole;
+  branch_id?: string;
+  branch_name?: string;
+  action: string;
+  description: string;
+  date: string;
+  time: string;
+}
+
 export interface DashboardStats {
   totalMembers: number;
   activeMembers: number;
@@ -126,6 +173,7 @@ export interface DashboardStats {
   totalStaff: number;
   todayCustomersPaid: number;
   pendingTransfers: number;
+  pendingLoans: number;
 }
 
 export interface AppSettings {

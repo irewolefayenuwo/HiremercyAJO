@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast, Toaster } from 'sonner';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Switch } from '@/components/ui/switch';
-import type { Member, Transaction, PayoutRecord, Branch, Staff, DashboardStats, User, UserRole, AppSettings, NigerianBank, PendingTransfer, AmountChangeRequest } from './types';
+import type { Member, Transaction, PayoutRecord, Branch, Staff, DashboardStats, User, UserRole, AppSettings, NigerianBank, PendingTransfer, AmountChangeRequest, LoanRequest, Notification, AuditLog } from './types';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Title, Tooltip, Legend);
 
@@ -101,6 +101,8 @@ const sampleTransactions: Transaction[] = [
 
 const STORAGE_KEYS = {
   users: 'hiremercy_ajo_users',
+  currentUser: 'hiremercy_ajo_current_user',
+  isAuthenticated: 'hiremercy_ajo_is_authenticated',
   branches: 'hiremercy_ajo_branches',
   staff: 'hiremercy_ajo_staff',
   members: 'hiremercy_ajo_members',
@@ -108,37 +110,57 @@ const STORAGE_KEYS = {
   payouts: 'hiremercy_ajo_payouts',
   settings: 'hiremercy_ajo_settings',
   pendingTransfers: 'hiremercy_ajo_pending_transfers',
-  currentUser: 'hiremercy_ajo_current_user',
-  isAuthenticated: 'hiremercy_ajo_is_authenticated',
+  loanRequests: 'hiremercy_ajo_loan_requests',
+  notifications: 'hiremercy_ajo_notifications',
+  auditLogs: 'hiremercy_ajo_audit_logs',
+  amountChangeRequests: 'hiremercy_ajo_amount_change_requests',
 };
 
-const createSeedUsers = (): User[] => [
-  ...sampleStaff.map((staffMember) => ({
-    id: staffMember.user_id,
-    name: staffMember.name,
-    email: staffMember.email,
-    phone: staffMember.phone,
-    password: staffMember.password,
-    role: 'Staff' as UserRole,
-    branch_id: staffMember.branch_id,
-    branch_name: staffMember.branch_name,
+const createSeedUsers = (): User[] => {
+  const adminUser: User = {
+    id: 'admin',
+    name: 'Super Admin',
+    email: 'admin@hiremercy.com',
+    phone: '+234 800 000 0000',
+    password: 'admin123',
+    role: 'Admin',
+    branch_id: '',
+    branch_name: '',
+    member_id: '',
     is_active: true,
-    created_at: staffMember.created_at,
-  })),
-  ...sampleMembers.filter((member) => member.user_id).map((member) => ({
-    id: member.user_id!,
-    name: member.name,
-    email: member.email || '',
-    phone: member.phone,
-    password: member.password || 'customer123',
-    role: 'Customer' as UserRole,
-    branch_id: member.branch_id,
-    branch_name: member.branch_name,
-    member_id: member.id,
+    created_at: new Date().toISOString(),
+  };
+
+  const staffUsers: User[] = sampleStaff.map((s) => ({
+    id: s.user_id,
+    name: s.name,
+    email: s.email,
+    phone: s.phone,
+    password: s.password,
+    role: 'Staff',
+    branch_id: s.branch_id,
+    branch_name: s.branch_name,
+    member_id: '',
     is_active: true,
-    created_at: member.start_date,
-  })),
-];
+    created_at: s.created_at,
+  }));
+
+  const customerUsers: User[] = sampleMembers.map((m) => ({
+    id: m.user_id || `cust-${m.id}`,
+    name: m.name,
+    email: m.email || '',
+    phone: m.phone,
+    password: m.password || 'customer123',
+    role: 'Customer',
+    branch_id: m.branch_id,
+    branch_name: m.branch_name,
+    member_id: m.id,
+    is_active: true,
+    created_at: m.start_date,
+  }));
+
+  return [adminUser, ...staffUsers, ...customerUsers];
+};
 
 const loadStoredState = <T,>(key: string, fallback: T): T => {
   if (typeof window === 'undefined') return fallback;
@@ -154,6 +176,11 @@ const loadStoredState = <T,>(key: string, fallback: T): T => {
 const saveStoredState = (key: string, value: unknown) => {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(key, JSON.stringify(value));
+};
+
+const formatAmount = (value: number | string | null | undefined): string => {
+  const numericValue = typeof value === 'string' ? parseFloat(value) : value;
+  return Number(numericValue ?? 0).toLocaleString();
 };
 
 function WelcomeScreen({ onComplete }: { onComplete: () => void }) {
@@ -187,10 +214,9 @@ function WelcomeScreen({ onComplete }: { onComplete: () => void }) {
   );
 }
 
-function LoginScreen({ onLogin, onRegister, onForgotPassword, onAdminSetup, hasAdmin }: { onLogin: (email: string, password: string, role: UserRole) => void; onRegister: () => void; onForgotPassword: () => void; onAdminSetup: () => void; hasAdmin: boolean }) {
-  const [email, setEmail] = useState('');
+function LoginScreen({ onLogin, onRegister, onForgotPassword, onAdminSetup, hasAdmin }: { onLogin: (phone: string, password: string) => void; onRegister: () => void; onForgotPassword: () => void; onAdminSetup: () => void; hasAdmin: boolean }) {
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<UserRole>(hasAdmin ? 'Admin' : 'Admin');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -198,16 +224,10 @@ function LoginScreen({ onLogin, onRegister, onForgotPassword, onAdminSetup, hasA
     e.preventDefault();
     setIsLoading(true);
     setTimeout(() => {
-      if (role === 'Admin' && !hasAdmin) {
-        onAdminSetup();
-        setIsLoading(false);
-        return;
-      }
-      onLogin(email.trim(), password, role);
+      onLogin(phone.trim(), password);
       setIsLoading(false);
-    }, 500);
+    }, 300);
   };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -222,22 +242,10 @@ function LoginScreen({ onLogin, onRegister, onForgotPassword, onAdminSetup, hasA
           <CardContent className="p-6">
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <Label className="text-emerald-800">Login As</Label>
-                <Select value={role} onValueChange={(v) => setRole(v as UserRole)}>
-                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {!hasAdmin && <SelectItem value="Admin">Admin (First Time Setup)</SelectItem>}
-                    {hasAdmin && <SelectItem value="Admin">Admin</SelectItem>}
-                    <SelectItem value="Staff">Staff</SelectItem>
-                    <SelectItem value="Customer">Customer</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="email" className="text-emerald-800">Email / Phone</Label>
+                <Label htmlFor="phone" className="text-emerald-800">Phone Number</Label>
                 <div className="relative mt-1">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
-                  <Input id="email" type="text" value={email} onChange={(e) => setEmail(e.target.value)} className="pl-10" placeholder="Enter email or phone" required />
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
+                  <Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="pl-10" placeholder="Enter phone number" required />
                 </div>
               </div>
               <div>
@@ -330,9 +338,9 @@ function RegisterScreen({ onBack, onRegister, branches, isAdminSetup }: { onBack
 }
 
 function ForgotPasswordScreen({ onBack }: { onBack: () => void }) {
-  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [submitted, setSubmitted] = useState(false);
-  const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); setSubmitted(true); toast.success('Password reset link sent to your email'); };
+  const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); setSubmitted(true); toast.success('Password reset instructions sent to your phone'); };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 flex items-center justify-center p-4">
@@ -346,15 +354,15 @@ function ForgotPasswordScreen({ onBack }: { onBack: () => void }) {
           <CardContent className="p-6">
             {!submitted ? (
               <form onSubmit={handleSubmit} className="space-y-4">
-                <p className="text-gray-600 text-center mb-4">Enter your email address and we&apos;ll send you a link to reset your password.</p>
-                <div><Label className="text-emerald-800">Email</Label><div className="relative mt-1"><Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" /><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="pl-10" placeholder="Enter your email" required /></div></div>
-                <Button type="submit" className="w-full bg-gradient-to-r from-emerald-600 to-teal-600">Send Reset Link</Button>
+                <p className="text-gray-600 text-center mb-4">Enter your phone number and we&apos;ll send instructions to reset your password.</p>
+                <div><Label className="text-emerald-800">Phone Number</Label><div className="relative mt-1"><Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" /><Input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="pl-10" placeholder="Enter your phone number" required /></div></div>
+                <Button type="submit" className="w-full bg-gradient-to-r from-emerald-600 to-teal-600">Send Reset Instructions</Button>
               </form>
             ) : (
               <div className="text-center">
                 <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto mb-4" />
-                <p className="text-gray-700">We&apos;ve sent a password reset link to <strong>{email}</strong></p>
-                <p className="text-gray-500 text-sm mt-2">Please check your email and follow the instructions.</p>
+                <p className="text-gray-700">We&apos;ve sent password reset instructions to <strong>{phone}</strong></p>
+                <p className="text-gray-500 text-sm mt-2">Please check your messages and follow the instructions.</p>
               </div>
             )}
           </CardContent>
@@ -377,7 +385,15 @@ function App() {
   const [users, setUsers] = useState<User[]>(() => loadStoredState<User[]>(STORAGE_KEYS.users, createSeedUsers()));
   const [settings, setSettings] = useState<AppSettings>(() => loadStoredState<AppSettings>(STORAGE_KEYS.settings, defaultSettings));
   const [pendingTransfers, setPendingTransfers] = useState<PendingTransfer[]>(() => loadStoredState<PendingTransfer[]>(STORAGE_KEYS.pendingTransfers, []));
-  const [amountChangeRequests] = useState<AmountChangeRequest[]>([]);
+  const [loanRequests, setLoanRequests] = useState<LoanRequest[]>(() => loadStoredState<LoanRequest[]>(STORAGE_KEYS.loanRequests, []));
+  const [notifications, setNotifications] = useState<Notification[]>(() => loadStoredState<Notification[]>(STORAGE_KEYS.notifications, []));
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => loadStoredState<AuditLog[]>(STORAGE_KEYS.auditLogs, []));
+  const [amountChangeRequests, setAmountChangeRequests] = useState<AmountChangeRequest[]>(() => loadStoredState<AmountChangeRequest[]>(STORAGE_KEYS.amountChangeRequests, []));
+  const [isLoanDialogOpen, setIsLoanDialogOpen] = useState(false);
+  const [isLoanReviewOpen, setIsLoanReviewOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [selectedLoanRequest, setSelectedLoanRequest] = useState<LoanRequest | null>(null);
+  const [loanRequestForm, setLoanRequestForm] = useState({ requested_amount: '', bank_name: settings.supported_banks[0]?.name || settings.bank_name, account_number: '', account_holder_name: '', note: '' });
   const [activeSection, setActiveSection] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isQuickPayOpen, setIsQuickPayOpen] = useState(false);
@@ -421,6 +437,10 @@ function App() {
   useEffect(() => { saveStoredState(STORAGE_KEYS.payouts, payouts); }, [payouts]);
   useEffect(() => { saveStoredState(STORAGE_KEYS.settings, settings); }, [settings]);
   useEffect(() => { saveStoredState(STORAGE_KEYS.pendingTransfers, pendingTransfers); }, [pendingTransfers]);
+  useEffect(() => { saveStoredState(STORAGE_KEYS.loanRequests, loanRequests); }, [loanRequests]);
+  useEffect(() => { saveStoredState(STORAGE_KEYS.notifications, notifications); }, [notifications]);
+  useEffect(() => { saveStoredState(STORAGE_KEYS.auditLogs, auditLogs); }, [auditLogs]);
+  useEffect(() => { saveStoredState(STORAGE_KEYS.amountChangeRequests, amountChangeRequests); }, [amountChangeRequests]);
   useEffect(() => { saveStoredState(STORAGE_KEYS.currentUser, currentUser); }, [currentUser]);
   useEffect(() => { saveStoredState(STORAGE_KEYS.isAuthenticated, isAuthenticated); }, [isAuthenticated]);
 
@@ -445,20 +465,15 @@ function App() {
     }
   }, [settings.last_collection_reset_date, transactions]);
 
-  const handleLogin = (email: string, password: string, role: UserRole) => {
-    const normalizedEmail = email.trim().toLowerCase();
-    const normalizedPhone = email.trim();
-    // Find user matching email or phone AND role
+  const handleLogin = (credential: string, password: string) => {
+    const normalizedEmail = credential.trim().toLowerCase();
+    const normalizedPhone = credential.trim();
     const userByCredential = users.find(u =>
       ((u.email || '').toLowerCase() === normalizedEmail || u.phone === normalizedPhone) &&
       u.password === password
     );
     if (!userByCredential) {
-      toast.error('Invalid email/phone or password. Please try again.');
-      return;
-    }
-    if (userByCredential.role !== role) {
-      toast.error(`This account is registered as ${userByCredential.role}. Please select the correct role.`);
+      toast.error('Invalid phone or password. Please try again.');
       return;
     }
     if (!userByCredential.is_active) {
@@ -501,7 +516,7 @@ function App() {
     }
   };
 
-  const handleLogout = () => { setCurrentUser(null); setIsAuthenticated(false); setActiveSection('dashboard'); saveStoredState(STORAGE_KEYS.currentUser, null); saveStoredState(STORAGE_KEYS.isAuthenticated, false); toast.success('Logged out successfully'); };
+  
 
   const handleDelete = () => {
     if (!deleteTarget) return;
@@ -579,7 +594,7 @@ function App() {
       const newPayout: PayoutRecord = { id: `p${Date.now()}`, member_id: member.id, member_name: member.name, type, days_paid: daysPaid, daily_amount: dailyAmount, total_amount: totalAmount, company_profit: companyProfit, net_payout: netPayout, date: new Date().toISOString().split('T')[0], branch_id: member.branch_id, branch_name: member.branch_name, staff_id: currentUser?.id, staff_name: currentUser?.name, status: 'Completed', approved_by: currentUser?.name, is_partial: isPartial };
       setPayouts([newPayout, ...payouts]);
       setMembers(members.map(m => m.id === member.id ? { ...m, tracking: generateEmptyTracking(), cycle_position: m.cycle_position + 1 } : m));
-      toast.success(`${type} completed! Net payout: &#8358;${netPayout.toLocaleString()}${isPartial ? ' (Partial)' : ''}`);
+      toast.success(`${type} completed! Net payout: &#8358;${formatAmount(netPayout)}${isPartial ? ' (Partial)' : ''}`);
     }
     setIsPayoutDialogOpen(false);
     setIsBorrowDialogOpen(false);
@@ -677,15 +692,36 @@ function App() {
 
   // Customer amount change
   const handleCustomerAmountChange = (newAmount: number) => {
-    const myMember = members.find(m => m.user_id === currentUser?.id);
+    if (!currentUser || currentUser.role !== 'Customer') return;
+    const myMember = members.find(m => m.user_id === currentUser.member_id);
     if (!myMember) return;
     const today = new Date();
     const dayOfMonth = today.getDate();
-    if (dayOfMonth < 1 || dayOfMonth > settings.allow_change_until_day) {
-      if (!settings.allow_change_after_grace_period) { toast.error(`Changes only allowed 1st-${settings.allow_change_until_day}rd of each month`); return; }
+    const withinWindow = dayOfMonth >= 1 && dayOfMonth <= settings.allow_change_until_day;
+    if (withinWindow) {
+      setMembers(members.map(m => m.id === myMember.id ? { ...m, daily_amount: newAmount } : m));
+      toast.success(`Daily contribution changed to ₦${formatAmount(newAmount)}`);
+      addNotification(currentUser.id, 'Contribution Updated', `Your daily contribution was changed to ₦${formatAmount(newAmount)}.`, 'success');
+      addAuditLog('Amount change', `Customer changed daily contribution to ₦${formatAmount(newAmount)}`, myMember.branch_id, myMember.branch_name);
+    } else if (settings.allow_change_after_grace_period) {
+      const newRequest: AmountChangeRequest = {
+        id: `acr${Date.now()}`,
+        member_id: myMember.id,
+        member_name: myMember.name,
+        current_amount: myMember.daily_amount,
+        requested_amount: newAmount,
+        requested_at: new Date().toISOString(),
+        status: 'Pending',
+        branch_id: myMember.branch_id,
+        branch_name: myMember.branch_name,
+      };
+      setAmountChangeRequests(prev => [newRequest, ...prev]);
+      toast.success('Amount change request submitted for approval');
+      addNotification(currentUser.id, 'Amount Change Requested', `Your request to change daily contribution to ₦${formatAmount(newAmount)} has been submitted.`, 'info');
+      addAuditLog('Amount change request', `Customer requested daily amount change from ₦${formatAmount(myMember.daily_amount)} to ₦${formatAmount(newAmount)}`, myMember.branch_id, myMember.branch_name);
+    } else {
+      toast.error(`Changes only allowed 1st-${settings.allow_change_until_day}rd of each month`);
     }
-    setMembers(members.map(m => m.id === myMember.id ? { ...m, daily_amount: newAmount } : m));
-    toast.success(`Daily contribution changed to &#8358;${newAmount.toLocaleString()}`);
     setIsAmountChangeOpen(false);
   };
 
@@ -750,11 +786,162 @@ function App() {
 
   const handleSaveSettings = (newSettings: AppSettings) => { setSettings(newSettings); toast.success('Settings saved'); };
 
+  const handleSubmitLoanRequest = () => {
+    if (!currentUser || currentUser.role !== 'Customer') return;
+    const myMember = members.find(m => m.user_id === currentUser.member_id);
+    if (!myMember) return;
+    const requestedAmount = parseInt(loanRequestForm.requested_amount);
+    if (!requestedAmount || requestedAmount < 1000) { toast.error('Enter a valid loan amount of at least ₦1,000'); return; }
+    const daysPaid = myMember.tracking.filter(t => t.paid).length;
+    const maxLoan = Math.min(daysPaid, 30) * myMember.daily_amount;
+    if (daysPaid < 10) { toast.error('You need at least 10 days of contributions to request a loan'); return; }
+    if (requestedAmount > maxLoan) { toast.error(`Maximum loan amount is ₦${formatAmount(maxLoan)}`); return; }
+    const newLoanRequest: LoanRequest = {
+      id: `lr${Date.now()}`,
+      member_id: myMember.id,
+      member_name: myMember.name,
+      branch_id: myMember.branch_id,
+      branch_name: myMember.branch_name,
+      bank_name: loanRequestForm.bank_name,
+      account_number: loanRequestForm.account_number,
+      account_holder_name: loanRequestForm.account_holder_name,
+      requested_amount: requestedAmount,
+      note: loanRequestForm.note,
+      status: 'Pending',
+      created_at: new Date().toISOString(),
+    };
+    setLoanRequests(prev => [newLoanRequest, ...prev]);
+    toast.success('Loan request submitted successfully');
+    addNotification(currentUser.id, 'Loan Request Submitted', `Your loan request for ₦${formatAmount(requestedAmount)} has been submitted.`, 'success');
+    users.filter(u => u.role === 'Admin' || u.role === 'Staff').forEach((adminUser) => addNotification(adminUser.id, 'Loan Request Awaiting Review', `${myMember.name} has submitted a loan request.`, 'info'));
+    addAuditLog('Loan request submitted', `Loan request of ₦${formatAmount(requestedAmount)} created for ${myMember.name}`, myMember.branch_id, myMember.branch_name);
+    setIsLoanDialogOpen(false);
+    setLoanRequestForm({ requested_amount: '', bank_name: settings.supported_banks[0]?.name || settings.bank_name, account_number: '', account_holder_name: '', note: '' });
+  };
+
+  const handleReviewLoanRequest = (loanId: string, approved: boolean, comment?: string) => {
+    const loan = loanRequests.find(l => l.id === loanId);
+    if (!loan) return;
+    const member = members.find(m => m.id === loan.member_id);
+    if (!member) return;
+    const loanUserId = users.find(u => u.member_id === loan.member_id)?.id || '';
+    const updatedRequest = { ...loan, status: approved ? 'Approved' : 'Rejected', reviewed_by: currentUser?.name, reviewed_at: new Date().toISOString(), comment } as LoanRequest;
+    setLoanRequests(loanRequests.map(l => l.id === loanId ? updatedRequest : l));
+    if (approved) {
+      const newPayout: PayoutRecord = {
+        id: `p${Date.now()}`,
+        member_id: member.id,
+        member_name: member.name,
+        type: 'Borrow',
+        days_paid: 0,
+        daily_amount: member.daily_amount,
+        total_amount: loan.requested_amount,
+        company_profit: 0,
+        net_payout: loan.requested_amount,
+        date: new Date().toISOString().split('T')[0],
+        branch_id: member.branch_id,
+        branch_name: member.branch_name,
+        staff_id: currentUser?.id,
+        staff_name: currentUser?.name,
+        status: 'Completed',
+        approved_by: currentUser?.name,
+      };
+      setPayouts(prev => [newPayout, ...prev]);
+      addNotification(loanUserId || currentUser?.id || '', 'Loan Approved', `Your loan request for ₦${formatAmount(loan.requested_amount)} has been approved.`, 'success');
+      addAuditLog('Loan approved', `Loan request ${loan.id} approved for ${member.name}`, member.branch_id, member.branch_name);
+      toast.success('Loan approved and payout recorded');
+    } else {
+      addNotification(loanUserId || currentUser?.id || '', 'Loan Rejected', `Your loan request has been rejected. ${comment || ''}`, 'warning');
+      addAuditLog('Loan rejected', `Loan request ${loan.id} rejected for ${member.name}`, member.branch_id, member.branch_name);
+      toast.success('Loan rejected');
+    }
+    setIsLoanReviewOpen(false);
+    setSelectedLoanRequest(null);
+  };
+
+  const handleApproveAmountChange = (requestId: string, approved: boolean) => {
+    const request = amountChangeRequests.find(r => r.id === requestId);
+    if (!request) return;
+    const member = members.find(m => m.id === request.member_id);
+    if (!member) return;
+    const updatedRequest = { ...request, status: approved ? 'Approved' : 'Rejected', approved_by: currentUser?.name, approved_at: new Date().toISOString() } as AmountChangeRequest;
+    setAmountChangeRequests(amountChangeRequests.map(r => r.id === requestId ? updatedRequest : r));
+    if (approved) {
+      setMembers(members.map(m => m.id === member.id ? { ...m, daily_amount: request.requested_amount } : m));
+      addNotification(users.find(u => u.member_id === member.id)?.id || member.user_id || '', 'Amount Change Approved', `Your daily contribution change to ₦${formatAmount(request.requested_amount)} has been approved.`, 'success');
+      addAuditLog('Amount change approved', `Amount change request approved for ${member.name}`, member.branch_id, member.branch_name);
+      toast.success('Amount change request approved');
+    } else {
+      addNotification(users.find(u => u.member_id === member.id)?.id || member.user_id || '', 'Amount Change Rejected', `Your amount change request was rejected.`, 'error');
+      addAuditLog('Amount change rejected', `Amount change request rejected for ${member.name}`, member.branch_id, member.branch_name);
+      toast.success('Amount change request rejected');
+    }
+  };
+
+  const handleLogout = () => { setCurrentUser(null); setIsAuthenticated(false); setActiveSection('dashboard'); saveStoredState(STORAGE_KEYS.currentUser, null); saveStoredState(STORAGE_KEYS.isAuthenticated, false); toast.success('Logged out successfully'); };
+
   const handleWhatsAppSend = () => {
     if (!whatsAppMessage.trim()) { toast.error('Please enter a message'); return; }
     const phone = settings.customer_care_whatsapp.replace(/\D/g, '');
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(whatsAppMessage)}`, '_blank');
     toast.success('Opening WhatsApp...'); setIsWhatsAppOpen(false); setWhatsAppMessage('');
+  };
+
+  const visibleMembers = useMemo(() => {
+    if (!currentUser) return [];
+    if (currentUser.role === 'Admin') return members;
+    if (currentUser.role === 'Staff') return members.filter(m => m.branch_id === currentUser.branch_id);
+    return members.filter(m => m.user_id === currentUser.member_id);
+  }, [currentUser, members]);
+
+  const visibleTransactions = useMemo(() => {
+    if (!currentUser) return [];
+    if (currentUser.role === 'Admin') return transactions;
+    if (currentUser.role === 'Staff') return transactions.filter(t => t.branch_id === currentUser.branch_id);
+    return transactions.filter(t => t.member_id === currentUser.member_id);
+  }, [currentUser, transactions]);
+
+  const visiblePayouts = useMemo(() => {
+    if (!currentUser) return payouts;
+    if (currentUser.role === 'Admin') return payouts;
+    if (currentUser.role === 'Staff') return payouts.filter(p => p.branch_id === currentUser.branch_id);
+    return payouts.filter(p => p.member_id === currentUser.member_id);
+  }, [currentUser, payouts]);
+
+  const visiblePendingTransfers = useMemo(() => {
+    if (!currentUser) return [];
+    if (currentUser.role === 'Admin') return pendingTransfers;
+    if (currentUser.role === 'Staff') return pendingTransfers.filter(t => t.branch_id === currentUser.branch_id);
+    return pendingTransfers.filter(t => t.member_id === currentUser.member_id);
+  }, [currentUser, pendingTransfers]);
+
+  const userNotifications = useMemo(() => {
+    if (!currentUser) return [];
+    return notifications.filter(n => n.user_id === currentUser.id).sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }, [currentUser, notifications]);
+
+  const unreadNotificationCount = useMemo(() => userNotifications.filter(n => !n.read).length, [userNotifications]);
+
+  const addNotification = (userId: string, title: string, message: string, type: 'success' | 'info' | 'warning' | 'error') => {
+    const notification: Notification = { id: `n${Date.now()}`, user_id: userId, title, message, type, created_at: new Date().toISOString(), read: false };
+    setNotifications(prev => [notification, ...prev]);
+  };
+
+  const addAuditLog = (action: string, description: string, branchId?: string, branchName?: string) => {
+    if (!currentUser) return;
+    const log: AuditLog = {
+      id: `a${Date.now()}`,
+      user_id: currentUser.id,
+      user_name: currentUser.name,
+      role: currentUser.role,
+      branch_id: branchId || currentUser.branch_id,
+      branch_name: branchName || currentUser.branch_name,
+      action,
+      description,
+      date: new Date().toISOString().split('T')[0],
+      time: new Date().toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' })
+    };
+    setAuditLogs(prev => [log, ...prev]);
   };
 
   const filteredMembers = useMemo(() => {
@@ -782,56 +969,59 @@ function App() {
       collectionRate: activeMembers.length > 0 ? (todayTransactions.length / activeMembers.length) * 100 : 0,
       pendingPayments: activeMembers.length - todayTransactions.length, overduePayments: 0,
       totalBranches: branches.length, totalStaff: staff.length, todayCustomersPaid: todayTransactions.length,
-      pendingTransfers: pendingTransfers.filter(t => t.status === 'Pending' || t.status === 'Under Review').length
+      pendingTransfers: pendingTransfers.filter(t => t.status === 'Pending' || t.status === 'Under Review').length,
+      pendingLoans: loanRequests.filter(l => l.status === 'Pending').length
     };
   }, [members, transactions, payouts, branches, staff, settings.yesterday_collection_record, pendingTransfers]);
 
   const todayTransactions = useMemo(() => { const today = new Date().toISOString().split('T')[0]; return transactions.filter(t => t.date === today); }, [transactions]);
 
   const branchStats = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
     return branches.map(branch => {
       const branchMembers = members.filter(m => m.branch_id === branch.id);
       const branchTransactions = transactions.filter(t => t.branch_id === branch.id);
-      const todayBranchTransactions = branchTransactions.filter(t => t.date === new Date().toISOString().split('T')[0]);
-      return { ...branch, memberCount: branchMembers.length, todayCollection: todayBranchTransactions.reduce((sum, t) => sum + t.amount, 0), totalCollection: branchTransactions.reduce((sum, t) => sum + t.amount, 0) };
+      return {
+        id: branch.id,
+        name: branch.name,
+        members: branchMembers.length,
+        todayCollections: branchTransactions.filter(t => t.date === today).reduce((s, t) => s + t.amount, 0),
+        totalCollections: branchTransactions.reduce((s, t) => s + t.amount, 0),
+      };
     });
   }, [branches, members, transactions]);
 
-  const monthlyData = useMemo(() => { const months: Record<string, number> = {}; transactions.forEach(t => { const month = t.date.slice(0, 7); months[month] = (months[month] || 0) + t.amount; }); return Object.entries(months).sort().slice(-6); }, [transactions]);
-
-  const getNavItems = () => {
-    if (currentUser?.role === 'Admin') return [
-      { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-      { id: 'members', label: 'All Customers', icon: Users },
-      { id: 'branches', label: 'Branches & Staff', icon: Building2 },
-      { id: 'transactions', label: 'Transactions', icon: Receipt },
-      { id: 'transfers', label: 'Transfer Review', icon: FileCheck },
-      { id: 'ordinary-payout', label: 'Payouts', icon: ArrowRightLeft },
-      { id: 'tracking-table', label: '32-Day Tracking', icon: Table2 },
-      { id: 'reports', label: 'Reports', icon: BarChart3 },
-      { id: 'settings', label: 'Settings', icon: Cog }
-    ];
-    else if (currentUser?.role === 'Staff') return [
-      { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-      { id: 'members', label: 'My Customers', icon: Users },
-      { id: 'transactions', label: 'Transactions', icon: Receipt },
-      { id: 'ordinary-payout', label: 'Payouts', icon: ArrowRightLeft },
-      { id: 'tracking-table', label: '32-Day Tracking', icon: Table2 }
-    ];
-    else return [
-      { id: 'dashboard', label: 'My Dashboard', icon: LayoutDashboard },
-      { id: 'tracking', label: '32-Day Tracking', icon: Calendar },
-      { id: 'history', label: 'My History', icon: History },
-      { id: 'support', label: 'Support', icon: HelpCircle },
-      { id: 'settings', label: 'Settings', icon: Settings }
-    ];
-  };
+  const monthlyData = useMemo(() => { const months: Record<string, number> = {}; transactions.forEach(t => { const month = t.date.slice(0, 7); months[month] = (months[month] || 0) + t.amount; }); return Object.entries(months).sort().slice(-6) as [string, number][]; }, [transactions]);
 
   const canChangeAmount = () => {
     const today = new Date();
     const dayOfMonth = today.getDate();
     return settings.allow_customers_change_amount && dayOfMonth >= 1 && dayOfMonth <= settings.allow_change_until_day;
   };
+
+  function getNavItems() {
+    const items: { id: string; label: string; icon: any }[] = [
+      { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { id: 'transactions', label: 'Transactions', icon: Wallet },
+      { id: 'transfers', label: 'Transfers', icon: ArrowRightLeft },
+      { id: 'members', label: 'Members', icon: Users },
+    ];
+    if (currentUser?.role === 'Admin') {
+      items.push({ id: 'branches', label: 'Branches', icon: Building2 });
+      items.push({ id: 'reports', label: 'Reports', icon: TrendingUp });
+      items.push({ id: 'settings', label: 'Settings', icon: Cog });
+    }
+    if (currentUser?.role === 'Staff') {
+      items.push({ id: 'ordinary-payout', label: 'Payouts', icon: DollarSign });
+    }
+    if (currentUser?.role === 'Customer') {
+      items.push({ id: 'tracking', label: 'Tracking', icon: Calendar });
+      items.push({ id: 'history', label: 'History', icon: History });
+      items.push({ id: 'support', label: 'Support', icon: Phone });
+      items.push({ id: 'settings', label: 'Settings', icon: Cog });
+    }
+    return items;
+  }
 
   if (showWelcome) return <WelcomeScreen onComplete={() => setShowWelcome(false)} />;
   if (!isAuthenticated) {
@@ -925,10 +1115,10 @@ function AdminDashboard({ stats, branchStats, monthlyData, transactions, onTotal
           <CardContent className="p-4"><div className="flex items-center justify-between"><div><p className="text-emerald-100 text-sm">Total Customers</p><p className="text-3xl font-bold">{stats.totalMembers}</p><p className="text-emerald-100 text-xs mt-1">{stats.activeMembers} active</p></div><Users className="w-10 h-10 text-emerald-200" /></div></CardContent>
         </Card>
         <Card className="bg-gradient-to-br from-blue-500 to-cyan-600 text-white cursor-pointer hover:shadow-lg transition-shadow" onClick={onTodayCollectionClick}>
-          <CardContent className="p-4"><div className="flex items-center justify-between"><div><p className="text-blue-100 text-sm">Today&apos;s Collection</p><p className="text-3xl font-bold">&#8358;{stats.todayCollections.toLocaleString()}</p><p className="text-blue-100 text-xs mt-1">{stats.todayCustomersPaid} customers paid</p></div><Wallet className="w-10 h-10 text-blue-200" /></div></CardContent>
+          <CardContent className="p-4"><div className="flex items-center justify-between"><div><p className="text-blue-100 text-sm">Today&apos;s Collection</p><p className="text-3xl font-bold">&#8358;{formatAmount(stats.todayCollections)}</p><p className="text-blue-100 text-xs mt-1">{stats.todayCustomersPaid} customers paid</p></div><Wallet className="w-10 h-10 text-blue-200" /></div></CardContent>
         </Card>
         <Card className="bg-gradient-to-br from-purple-500 to-violet-600 text-white cursor-pointer hover:shadow-lg transition-shadow" onClick={onTotalCollectionClick}>
-          <CardContent className="p-4"><div className="flex items-center justify-between"><div><p className="text-purple-100 text-sm">Total Collection</p><p className="text-3xl font-bold">&#8358;{stats.totalCollections.toLocaleString()}</p><p className="text-purple-100 text-xs mt-1">All time</p></div><TrendingUp className="w-10 h-10 text-purple-200" /></div></CardContent>
+          <CardContent className="p-4"><div className="flex items-center justify-between"><div><p className="text-purple-100 text-sm">Total Collection</p><p className="text-3xl font-bold">&#8358;{formatAmount(stats.totalCollections)}</p><p className="text-purple-100 text-xs mt-1">All time</p></div><TrendingUp className="w-10 h-10 text-purple-200" /></div></CardContent>
         </Card>
         <Card className="bg-gradient-to-br from-amber-500 to-orange-600 text-white">
           <CardContent className="p-4"><div className="flex items-center justify-between"><div><p className="text-amber-100 text-sm">Pending Transfers</p><p className="text-3xl font-bold">{stats.pendingTransfers}</p><p className="text-amber-100 text-xs mt-1">Awaiting review</p></div><Clock className="w-10 h-10 text-amber-200" /></div></CardContent>
@@ -939,14 +1129,14 @@ function AdminDashboard({ stats, branchStats, monthlyData, transactions, onTotal
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center"><History className="w-5 h-5 text-gray-600" /></div>
-              <div><p className="text-gray-600 text-sm">Yesterday&apos;s Collection</p><p className="text-xl font-bold text-gray-800">&#8358;{stats.yesterdayCollections.toLocaleString()}</p></div>
+              <div><p className="text-gray-600 text-sm">Yesterday&apos;s Collection</p><p className="text-xl font-bold text-gray-800">&#8358;{formatAmount(stats.yesterdayCollections)}</p></div>
             </div>
           </div>
         </CardContent>
       </Card>
       <Card>
         <CardHeader><CardTitle className="flex items-center gap-2"><Building2 className="w-5 h-5 text-emerald-600" />Branch Summary</CardTitle></CardHeader>
-        <CardContent><div className="grid grid-cols-1 md:grid-cols-3 gap-4">{branchStats.map(branch => (<div key={branch.id} className="bg-emerald-50 rounded-lg p-4"><h4 className="font-semibold text-emerald-900">{branch.name}</h4><div className="mt-2 space-y-1 text-sm"><p className="flex justify-between"><span className="text-gray-600">Customers:</span><span className="font-medium">{branch.memberCount}</span></p><p className="flex justify-between"><span className="text-gray-600">Today&apos;s:</span><span className="font-medium text-emerald-600">&#8358;{branch.todayCollection.toLocaleString()}</span></p><p className="flex justify-between"><span className="text-gray-600">Total:</span><span className="font-medium">&#8358;{branch.totalCollection.toLocaleString()}</span></p></div></div>))}</div></CardContent>
+        <CardContent><div className="grid grid-cols-1 md:grid-cols-3 gap-4">{branchStats.map(branch => (<div key={branch.id} className="bg-emerald-50 rounded-lg p-4"><h4 className="font-semibold text-emerald-900">{branch.name}</h4><div className="mt-2 space-y-1 text-sm"><p className="flex justify-between"><span className="text-gray-600">Customers:</span><span className="font-medium">{branch.memberCount}</span></p><p className="flex justify-between"><span className="text-gray-600">Today&apos;s:</span><span className="font-medium text-emerald-600">&#8358;{formatAmount(branch.todayCollection)}</span></p><p className="flex justify-between"><span className="text-gray-600">Total:</span><span className="font-medium">&#8358;{formatAmount(branch.totalCollection)}</span></p></div></div>))}</div></CardContent>
       </Card>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card><CardHeader><CardTitle>Monthly Collections</CardTitle></CardHeader><CardContent><Bar data={{ labels: monthlyData.map(([month]) => month), datasets: [{ label: 'Collections', data: monthlyData.map(([, amount]) => amount), backgroundColor: 'rgba(16, 185, 129, 0.8)', borderColor: 'rgba(16, 185, 129, 1)', borderWidth: 1 }] }} options={{ responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }} /></CardContent></Card>
@@ -1001,9 +1191,9 @@ function CustomerDashboard({ currentUser, members, transactions, payouts, onView
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white"><CardContent className="p-4"><div className="flex items-center justify-between"><div><p className="text-emerald-100 text-sm">Days Completed</p><p className="text-3xl font-bold">{daysPaid}/32</p></div><Calendar className="w-10 h-10 text-emerald-200" /></div></CardContent></Card>
-        <Card className="bg-gradient-to-br from-blue-500 to-cyan-600 text-white"><CardContent className="p-4"><div className="flex items-center justify-between"><div><p className="text-blue-100 text-sm">Total Contributed</p><p className="text-3xl font-bold">&#8358;{totalContributed.toLocaleString()}</p></div><Wallet className="w-10 h-10 text-blue-200" /></div></CardContent></Card>
-        <Card className="bg-gradient-to-br from-purple-500 to-violet-600 text-white"><CardContent className="p-4"><div className="flex items-center justify-between"><div><p className="text-purple-100 text-sm">Daily Amount</p><p className="text-3xl font-bold">&#8358;{myMember?.daily_amount.toLocaleString() || '0'}</p></div><DollarSign className="w-10 h-10 text-purple-200" /></div></CardContent></Card>
-        <Card className="bg-gradient-to-br from-amber-500 to-orange-600 text-white"><CardContent className="p-4"><div className="flex items-center justify-between"><div><p className="text-amber-100 text-sm">Expected Payout</p><p className="text-3xl font-bold">&#8358;{myMember ? ((daysPaid * myMember.daily_amount) - myMember.daily_amount).toLocaleString() : '0'}</p></div><PiggyBank className="w-10 h-10 text-amber-200" /></div></CardContent></Card>
+        <Card className="bg-gradient-to-br from-blue-500 to-cyan-600 text-white"><CardContent className="p-4"><div className="flex items-center justify-between"><div><p className="text-blue-100 text-sm">Total Contributed</p><p className="text-3xl font-bold">&#8358;{formatAmount(totalContributed)}</p></div><Wallet className="w-10 h-10 text-blue-200" /></div></CardContent></Card>
+        <Card className="bg-gradient-to-br from-purple-500 to-violet-600 text-white"><CardContent className="p-4"><div className="flex items-center justify-between"><div><p className="text-purple-100 text-sm">Daily Amount</p><p className="text-3xl font-bold">&#8358;{formatAmount(myMember?.daily_amount) || '0'}</p></div><DollarSign className="w-10 h-10 text-purple-200" /></div></CardContent></Card>
+        <Card className="bg-gradient-to-br from-amber-500 to-orange-600 text-white"><CardContent className="p-4"><div className="flex items-center justify-between"><div><p className="text-amber-100 text-sm">Expected Payout</p><p className="text-3xl font-bold">&#8358;{myMember ? formatAmount((daysPaid * myMember.daily_amount) - myMember.daily_amount) : '0'}</p></div><PiggyBank className="w-10 h-10 text-amber-200" /></div></CardContent></Card>
       </div>
 
       <Card><CardHeader><CardTitle className="flex items-center gap-2"><TrendingUp className="w-5 h-5 text-emerald-600" />Your Progress</CardTitle></CardHeader><CardContent>
@@ -1026,7 +1216,7 @@ function MembersSection({ members, branches, currentUser, memberSearch, setMembe
   return (
     <div className="space-y-4">
       <Card><CardContent className="p-4"><div className="flex flex-col md:flex-row gap-4"><div className="flex-1 relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" /><Input placeholder="Search customers by name or phone..." value={memberSearch} onChange={(e) => setMemberSearch(e.target.value)} className="pl-10" /></div><Select value={branchFilter} onValueChange={setBranchFilter}><SelectTrigger className="w-full md:w-48"><SelectValue placeholder="All Branches" /></SelectTrigger><SelectContent><SelectItem value="all">All Branches</SelectItem>{branches.map(b => (<SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>))}</SelectContent></Select>{currentUser?.role === 'Admin' && (<Button onClick={onAddMember} className="bg-emerald-600 hover:bg-emerald-700"><Plus className="w-4 h-4 mr-2" /> Add Customer</Button>)}</div></CardContent></Card>
-      <Card><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-emerald-50"><TableHead>Name</TableHead><TableHead>Phone</TableHead><TableHead>Branch</TableHead><TableHead>Daily Amount</TableHead><TableHead>Status</TableHead><TableHead>Progress</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader><TableBody>{members.length === 0 ? (<TableRow><TableCell colSpan={7} className="text-center py-12 text-gray-500"><Users className="w-12 h-12 mx-auto mb-3 text-gray-300" /><p>No customers found</p></TableCell></TableRow>) : (members.map(member => (<TableRow key={member.id}><TableCell className="font-medium">{member.name}</TableCell><TableCell>{member.phone}</TableCell><TableCell><Badge variant="outline" className="text-xs">{member.branch_name}</Badge></TableCell><TableCell>&#8358;{member.daily_amount.toLocaleString()}</TableCell><TableCell><Badge className={member.status === 'Active' ? 'bg-emerald-500' : 'bg-gray-500'}>{member.status}</Badge></TableCell><TableCell><div className="flex items-center gap-2"><div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden"><div className="h-full bg-emerald-500" style={{ width: `${(member.tracking.filter(t => t.paid).length / 32) * 100}%` }} /></div><span className="text-xs text-gray-600">{member.tracking.filter(t => t.paid).length}/32</span></div></TableCell><TableCell><div className="flex items-center justify-end gap-1"><button onClick={() => onViewTracking(member)} className="p-1 hover:bg-gray-100 rounded" title="View Tracking"><Eye className="w-4 h-4 text-blue-500" /></button><button onClick={() => onViewHistory(member)} className="p-1 hover:bg-gray-100 rounded" title="View History"><History className="w-4 h-4 text-purple-500" /></button><button onClick={() => onQuickPay(member)} className="p-1 hover:bg-gray-100 rounded" title="Quick Pay"><Plus className="w-4 h-4 text-emerald-500" /></button>{currentUser?.role === 'Admin' && (<><button onClick={() => onEditMember(member)} className="p-1 hover:bg-gray-100 rounded" title="Edit"><Edit2 className="w-4 h-4 text-amber-500" /></button><button onClick={() => onDeleteMember(member)} className="p-1 hover:bg-gray-100 rounded" title="Delete"><Trash2 className="w-4 h-4 text-red-500" /></button></>)}</div></TableCell></TableRow>)))}</TableBody></Table></div></CardContent></Card>
+      <Card><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-emerald-50"><TableHead>Name</TableHead><TableHead>Phone</TableHead><TableHead>Branch</TableHead><TableHead>Daily Amount</TableHead><TableHead>Status</TableHead><TableHead>Progress</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader><TableBody>{members.length === 0 ? (<TableRow><TableCell colSpan={7} className="text-center py-12 text-gray-500"><Users className="w-12 h-12 mx-auto mb-3 text-gray-300" /><p>No customers found</p></TableCell></TableRow>) : (members.map(member => (<TableRow key={member.id}><TableCell className="font-medium">{member.name}</TableCell><TableCell>{member.phone}</TableCell><TableCell><Badge variant="outline" className="text-xs">{member.branch_name}</Badge></TableCell><TableCell>&#8358;{formatAmount(member.daily_amount)}</TableCell><TableCell><Badge className={member.status === 'Active' ? 'bg-emerald-500' : 'bg-gray-500'}>{member.status}</Badge></TableCell><TableCell><div className="flex items-center gap-2"><div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden"><div className="h-full bg-emerald-500" style={{ width: `${(member.tracking.filter(t => t.paid).length / 32) * 100}%` }} /></div><span className="text-xs text-gray-600">{member.tracking.filter(t => t.paid).length}/32</span></div></TableCell><TableCell><div className="flex items-center justify-end gap-1"><button onClick={() => onViewTracking(member)} className="p-1 hover:bg-gray-100 rounded" title="View Tracking"><Eye className="w-4 h-4 text-blue-500" /></button><button onClick={() => onViewHistory(member)} className="p-1 hover:bg-gray-100 rounded" title="View History"><History className="w-4 h-4 text-purple-500" /></button><button onClick={() => onQuickPay(member)} className="p-1 hover:bg-gray-100 rounded" title="Quick Pay"><Plus className="w-4 h-4 text-emerald-500" /></button>{currentUser?.role === 'Admin' && (<><button onClick={() => onEditMember(member)} className="p-1 hover:bg-gray-100 rounded" title="Edit"><Edit2 className="w-4 h-4 text-amber-500" /></button><button onClick={() => onDeleteMember(member)} className="p-1 hover:bg-gray-100 rounded" title="Delete"><Trash2 className="w-4 h-4 text-red-500" /></button></>)}</div></TableCell></TableRow>)))}</TableBody></Table></div></CardContent></Card>
     </div>
   );
 }
@@ -1048,7 +1238,7 @@ function TransactionsSection({ transactions, members: _members, currentUser, onD
   return (
     <div className="space-y-4">
       <Card><CardContent className="p-4"><div className="flex flex-col md:flex-row gap-4"><div className="flex-1 relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" /><Input placeholder="Search transactions..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" /></div><Select value={methodFilter} onValueChange={setMethodFilter}><SelectTrigger className="w-full md:w-48"><SelectValue placeholder="All Methods" /></SelectTrigger><SelectContent><SelectItem value="all">All Methods</SelectItem><SelectItem value="Cash">Cash</SelectItem><SelectItem value="Bank Transfer">Bank Transfer</SelectItem><SelectItem value="Mobile Money">Mobile Money</SelectItem><SelectItem value="Bank App Transfer">Bank App Transfer</SelectItem></SelectContent></Select></div></CardContent></Card>
-      <Card><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-emerald-50"><TableHead>Date</TableHead><TableHead>Customer</TableHead><TableHead>Amount</TableHead><TableHead>Method</TableHead><TableHead>Days</TableHead><TableHead>Branch</TableHead>{currentUser?.role === 'Admin' && <TableHead className="text-right">Actions</TableHead>}</TableRow></TableHeader><TableBody>{filtered.length === 0 ? (<TableRow><TableCell colSpan={currentUser?.role === 'Admin' ? 7 : 6} className="text-center py-12 text-gray-500"><Receipt className="w-12 h-12 mx-auto mb-3 text-gray-300" /><p>No transactions found</p></TableCell></TableRow>) : (filtered.map(t => (<TableRow key={t.id}><TableCell>{t.date}</TableCell><TableCell className="font-medium">{t.member_name}</TableCell><TableCell>&#8358;{t.amount.toLocaleString()}</TableCell><TableCell><Badge variant="outline" className="flex items-center gap-1 w-fit">{t.payment_method === 'Cash' && <Banknote className="w-3 h-3" />}{t.payment_method === 'Bank Transfer' && <Landmark className="w-3 h-3" />}{t.payment_method === 'Mobile Money' && <Smartphone className="w-3 h-3" />}{t.payment_method === 'Bank App Transfer' && <Smartphone className="w-3 h-3" />}{t.payment_method}</Badge></TableCell><TableCell>{t.days_covered}</TableCell><TableCell>{t.branch_name}</TableCell>{currentUser?.role === 'Admin' && (<TableCell><button onClick={() => onDeleteTransaction(t)} className="p-1 hover:bg-gray-100 rounded"><Trash2 className="w-4 h-4 text-red-500" /></button></TableCell>)}</TableRow>)))}</TableBody></Table></div></CardContent></Card>
+      <Card><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-emerald-50"><TableHead>Date</TableHead><TableHead>Customer</TableHead><TableHead>Amount</TableHead><TableHead>Method</TableHead><TableHead>Days</TableHead><TableHead>Branch</TableHead>{currentUser?.role === 'Admin' && <TableHead className="text-right">Actions</TableHead>}</TableRow></TableHeader><TableBody>{filtered.length === 0 ? (<TableRow><TableCell colSpan={currentUser?.role === 'Admin' ? 7 : 6} className="text-center py-12 text-gray-500"><Receipt className="w-12 h-12 mx-auto mb-3 text-gray-300" /><p>No transactions found</p></TableCell></TableRow>) : (filtered.map(t => (<TableRow key={t.id}><TableCell>{t.date}</TableCell><TableCell className="font-medium">{t.member_name}</TableCell><TableCell>&#8358;{formatAmount(t.amount)}</TableCell><TableCell><Badge variant="outline" className="flex items-center gap-1 w-fit">{t.payment_method === 'Cash' && <Banknote className="w-3 h-3" />}{t.payment_method === 'Bank Transfer' && <Landmark className="w-3 h-3" />}{t.payment_method === 'Mobile Money' && <Smartphone className="w-3 h-3" />}{t.payment_method === 'Bank App Transfer' && <Smartphone className="w-3 h-3" />}{t.payment_method}</Badge></TableCell><TableCell>{t.days_covered}</TableCell><TableCell>{t.branch_name}</TableCell>{currentUser?.role === 'Admin' && (<TableCell><button onClick={() => onDeleteTransaction(t)} className="p-1 hover:bg-gray-100 rounded"><Trash2 className="w-4 h-4 text-red-500" /></button></TableCell>)}</TableRow>)))}</TableBody></Table></div></CardContent></Card>
     </div>
   );
 }
@@ -1073,8 +1263,8 @@ function TransferReviewSection({ pendingTransfers, onReview }: { pendingTransfer
                     <Badge className="bg-amber-500">{transfer.status}</Badge>
                   </div>
                   <div className="space-y-1 text-sm mb-3">
-                    <p className="flex justify-between"><span>Total Sent:</span><span className="font-medium">&#8358;{transfer.total_amount.toLocaleString()}</span></p>
-                    <p className="flex justify-between"><span>Contribution:</span><span className="font-medium text-emerald-600">&#8358;{transfer.amount.toLocaleString()}</span></p>
+                    <p className="flex justify-between"><span>Total Sent:</span><span className="font-medium">&#8358;{formatAmount(transfer.total_amount)}</span></p>
+                    <p className="flex justify-between"><span>Contribution:</span><span className="font-medium text-emerald-600">&#8358;{formatAmount(transfer.amount)}</span></p>
                     <p className="flex justify-between"><span>Days to Cover:</span><span className="font-medium text-purple-600">{transfer.days_to_cover}</span></p>
                     <p className="flex justify-between"><span>Date:</span><span>{new Date(transfer.created_at).toLocaleDateString()}</span></p>
                   </div>
@@ -1084,7 +1274,7 @@ function TransferReviewSection({ pendingTransfers, onReview }: { pendingTransfer
                   {transfer.receipt_name && transfer.receipt_amount && transfer.receipt_date && (
                     <div className="bg-gray-50 p-2 rounded text-xs space-y-1 mb-3">
                       <p><strong>Receipt Name:</strong> {transfer.receipt_name}</p>
-                      <p><strong>Receipt Amount:</strong> &#8358;{transfer.receipt_amount.toLocaleString()}</p>
+                      <p><strong>Receipt Amount:</strong> &#8358;{formatAmount(transfer.receipt_amount)}</p>
                       <p><strong>Receipt Date:</strong> {transfer.receipt_date}</p>
                     </div>
                   )}
@@ -1096,7 +1286,7 @@ function TransferReviewSection({ pendingTransfers, onReview }: { pendingTransfer
         )}
       </TabsContent>
       <TabsContent value="reviewed">
-        <Card><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-emerald-50"><TableHead>Customer</TableHead><TableHead>Amount</TableHead><TableHead>Status</TableHead><TableHead>Reviewed By</TableHead><TableHead>Date</TableHead></TableRow></TableHeader><TableBody>{reviewed.length === 0 ? (<TableRow><TableCell colSpan={5} className="text-center py-8 text-gray-500">No reviewed transfers</TableCell></TableRow>) : (reviewed.map(t => (<TableRow key={t.id}><TableCell className="font-medium">{t.member_name}</TableCell><TableCell>&#8358;{t.amount.toLocaleString()}</TableCell><TableCell><Badge className={t.status === 'Approved' ? 'bg-emerald-500' : 'bg-red-500'}>{t.status}</Badge></TableCell><TableCell>{t.reviewed_by}</TableCell><TableCell>{t.reviewed_at ? new Date(t.reviewed_at).toLocaleDateString() : '-'}</TableCell></TableRow>)))}</TableBody></Table></div></CardContent></Card>
+        <Card><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-emerald-50"><TableHead>Customer</TableHead><TableHead>Amount</TableHead><TableHead>Status</TableHead><TableHead>Reviewed By</TableHead><TableHead>Date</TableHead></TableRow></TableHeader><TableBody>{reviewed.length === 0 ? (<TableRow><TableCell colSpan={5} className="text-center py-8 text-gray-500">No reviewed transfers</TableCell></TableRow>) : (reviewed.map(t => (<TableRow key={t.id}><TableCell className="font-medium">{t.member_name}</TableCell><TableCell>&#8358;{formatAmount(t.amount)}</TableCell><TableCell><Badge className={t.status === 'Approved' ? 'bg-emerald-500' : 'bg-red-500'}>{t.status}</Badge></TableCell><TableCell>{t.reviewed_by}</TableCell><TableCell>{t.reviewed_at ? new Date(t.reviewed_at).toLocaleDateString() : '-'}</TableCell></TableRow>)))}</TableBody></Table></div></CardContent></Card>
       </TabsContent>
     </Tabs>
   );
@@ -1109,9 +1299,9 @@ function PayoutSection({ members, payouts, currentUser, staff, settings, onPayou
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
       <TabsList className="bg-emerald-100"><TabsTrigger value="eligible" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">Eligible</TabsTrigger><TabsTrigger value="pending" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">Pending ({pendingPayouts.length})</TabsTrigger><TabsTrigger value="completed" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">Completed</TabsTrigger></TabsList>
-      <TabsContent value="eligible" className="space-y-4"><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{members.map(member => { const daysPaid = member.tracking.filter(t => t.paid).length; const isEligible = daysPaid >= 32; const canProcess = currentUser?.role === 'Admin' || (currentUser?.role === 'Staff' && staff.find(s => s.user_id === currentUser.id)?.can_payout && !settings.require_admin_approval_for_all_payouts); return (<Card key={member.id} className={isEligible ? 'border-emerald-500 border-2' : ''}><CardContent className="p-4"><div className="flex items-center gap-3 mb-3"><div className={`w-12 h-12 rounded-full flex items-center justify-center ${isEligible ? 'bg-emerald-100' : 'bg-gray-100'}`}><UserIcon className={`w-6 h-6 ${isEligible ? 'text-emerald-600' : 'text-gray-500'}`} /></div><div><h4 className="font-semibold">{member.name}</h4><p className="text-sm text-gray-600">{member.branch_name}</p></div></div><div className="space-y-2 text-sm"><div className="flex justify-between"><span className="text-gray-600">Daily Amount:</span><span>&#8358;{member.daily_amount.toLocaleString()}</span></div><div className="flex justify-between"><span className="text-gray-600">Days Paid:</span><span className={isEligible ? 'text-emerald-600 font-medium' : ''}>{daysPaid}/32</span></div><div className="flex justify-between"><span className="text-gray-600">Total Contributed:</span><span>&#8358;{(daysPaid * member.daily_amount).toLocaleString()}</span></div><div className="flex justify-between"><span className="text-gray-600">Net Payout:</span><span className="font-medium text-emerald-600">&#8358;{(daysPaid * member.daily_amount - member.daily_amount).toLocaleString()}</span></div></div><div className="mt-4 flex gap-2"><Button onClick={() => onPayout(member)} disabled={!canProcess} className="flex-1 bg-emerald-600 hover:bg-emerald-700" size="sm">Payout {daysPaid < 32 && '(Partial)'}</Button><Button onClick={() => onBorrow(member)} disabled={daysPaid < 10 || !canProcess} variant="outline" className="flex-1" size="sm">Loan</Button></div>{!canProcess && currentUser?.role === 'Staff' && (<p className="text-xs text-amber-600 mt-2 text-center">Requires admin approval</p>)}</CardContent></Card>); })}</div></TabsContent>
-      <TabsContent value="pending"><Card><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-amber-50"><TableHead>Customer</TableHead><TableHead>Type</TableHead><TableHead>Days</TableHead><TableHead>Amount</TableHead><TableHead>Requested By</TableHead><TableHead>Date</TableHead>{currentUser?.role === 'Admin' && <TableHead className="text-right">Actions</TableHead>}</TableRow></TableHeader><TableBody>{pendingPayouts.map(p => (<TableRow key={p.id}><TableCell className="font-medium">{p.member_name} {p.is_partial && <Badge className="ml-1 bg-amber-500 text-xs">Partial</Badge>}</TableCell><TableCell><Badge className={p.type === 'Payout' ? 'bg-emerald-500' : 'bg-blue-500'}>{p.type}</Badge></TableCell><TableCell>{p.days_paid}/32</TableCell><TableCell>&#8358;{p.total_amount.toLocaleString()}</TableCell><TableCell>{p.staff_name}</TableCell><TableCell>{p.date}</TableCell>{currentUser?.role === 'Admin' && (<TableCell><Button onClick={() => onApprove(p)} size="sm" className="bg-emerald-600 hover:bg-emerald-700">Approve</Button></TableCell>)}</TableRow>))}{pendingPayouts.length === 0 && (<TableRow><TableCell colSpan={7} className="text-center py-8 text-gray-500">No pending payouts</TableCell></TableRow>)}</TableBody></Table></div></CardContent></Card></TabsContent>
-      <TabsContent value="completed"><Card><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-emerald-50"><TableHead>Customer</TableHead><TableHead>Type</TableHead><TableHead>Days</TableHead><TableHead>Net Payout</TableHead><TableHead>Date</TableHead><TableHead>Approved By</TableHead></TableRow></TableHeader><TableBody>{completedPayouts.map(p => (<TableRow key={p.id}><TableCell className="font-medium">{p.member_name} {p.is_partial && <Badge className="ml-1 bg-amber-500 text-xs">Partial</Badge>}</TableCell><TableCell><Badge className={p.type === 'Payout' ? 'bg-emerald-500' : 'bg-blue-500'}>{p.type}</Badge></TableCell><TableCell>{p.days_paid}/32</TableCell><TableCell className="text-emerald-600 font-medium">&#8358;{p.net_payout.toLocaleString()}</TableCell><TableCell>{p.date}</TableCell><TableCell>{p.approved_by}</TableCell></TableRow>))}{completedPayouts.length === 0 && (<TableRow><TableCell colSpan={6} className="text-center py-8 text-gray-500">No completed payouts</TableCell></TableRow>)}</TableBody></Table></div></CardContent></Card></TabsContent>
+      <TabsContent value="eligible" className="space-y-4"><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{members.map(member => { const daysPaid = member.tracking.filter(t => t.paid).length; const isEligible = daysPaid >= 32; const canProcess = currentUser?.role === 'Admin' || (currentUser?.role === 'Staff' && staff.find(s => s.user_id === currentUser.id)?.can_payout && !settings.require_admin_approval_for_all_payouts); return (<Card key={member.id} className={isEligible ? 'border-emerald-500 border-2' : ''}><CardContent className="p-4"><div className="flex items-center gap-3 mb-3"><div className={`w-12 h-12 rounded-full flex items-center justify-center ${isEligible ? 'bg-emerald-100' : 'bg-gray-100'}`}><UserIcon className={`w-6 h-6 ${isEligible ? 'text-emerald-600' : 'text-gray-500'}`} /></div><div><h4 className="font-semibold">{member.name}</h4><p className="text-sm text-gray-600">{member.branch_name}</p></div></div><div className="space-y-2 text-sm"><div className="flex justify-between"><span className="text-gray-600">Daily Amount:</span><span>&#8358;{formatAmount(member.daily_amount)}</span></div><div className="flex justify-between"><span className="text-gray-600">Days Paid:</span><span className={isEligible ? 'text-emerald-600 font-medium' : ''}>{daysPaid}/32</span></div><div className="flex justify-between"><span className="text-gray-600">Total Contributed:</span><span>&#8358;{formatAmount(daysPaid * member.daily_amount)}</span></div><div className="flex justify-between"><span className="text-gray-600">Net Payout:</span><span className="font-medium text-emerald-600">&#8358;{formatAmount(daysPaid * member.daily_amount - member.daily_amount)}</span></div></div><div className="mt-4 flex gap-2"><Button onClick={() => onPayout(member)} disabled={!canProcess} className="flex-1 bg-emerald-600 hover:bg-emerald-700" size="sm">Payout {daysPaid < 32 && '(Partial)'}</Button><Button onClick={() => onBorrow(member)} disabled={daysPaid < 10 || !canProcess} variant="outline" className="flex-1" size="sm">Loan</Button></div>{!canProcess && currentUser?.role === 'Staff' && (<p className="text-xs text-amber-600 mt-2 text-center">Requires admin approval</p>)}</CardContent></Card>); })}</div></TabsContent>
+      <TabsContent value="pending"><Card><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-amber-50"><TableHead>Customer</TableHead><TableHead>Type</TableHead><TableHead>Days</TableHead><TableHead>Amount</TableHead><TableHead>Requested By</TableHead><TableHead>Date</TableHead>{currentUser?.role === 'Admin' && <TableHead className="text-right">Actions</TableHead>}</TableRow></TableHeader><TableBody>{pendingPayouts.map(p => (<TableRow key={p.id}><TableCell className="font-medium">{p.member_name} {p.is_partial && <Badge className="ml-1 bg-amber-500 text-xs">Partial</Badge>}</TableCell><TableCell><Badge className={p.type === 'Payout' ? 'bg-emerald-500' : 'bg-blue-500'}>{p.type}</Badge></TableCell><TableCell>{p.days_paid}/32</TableCell><TableCell>&#8358;{formatAmount(p.total_amount)}</TableCell><TableCell>{p.staff_name}</TableCell><TableCell>{p.date}</TableCell>{currentUser?.role === 'Admin' && (<TableCell><Button onClick={() => onApprove(p)} size="sm" className="bg-emerald-600 hover:bg-emerald-700">Approve</Button></TableCell>)}</TableRow>))}{pendingPayouts.length === 0 && (<TableRow><TableCell colSpan={7} className="text-center py-8 text-gray-500">No pending payouts</TableCell></TableRow>)}</TableBody></Table></div></CardContent></Card></TabsContent>
+      <TabsContent value="completed"><Card><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-emerald-50"><TableHead>Customer</TableHead><TableHead>Type</TableHead><TableHead>Days</TableHead><TableHead>Net Payout</TableHead><TableHead>Date</TableHead><TableHead>Approved By</TableHead></TableRow></TableHeader><TableBody>{completedPayouts.map(p => (<TableRow key={p.id}><TableCell className="font-medium">{p.member_name} {p.is_partial && <Badge className="ml-1 bg-amber-500 text-xs">Partial</Badge>}</TableCell><TableCell><Badge className={p.type === 'Payout' ? 'bg-emerald-500' : 'bg-blue-500'}>{p.type}</Badge></TableCell><TableCell>{p.days_paid}/32</TableCell><TableCell className="text-emerald-600 font-medium">&#8358;{formatAmount(p.net_payout)}</TableCell><TableCell>{p.date}</TableCell><TableCell>{p.approved_by}</TableCell></TableRow>))}{completedPayouts.length === 0 && (<TableRow><TableCell colSpan={6} className="text-center py-8 text-gray-500">No completed payouts</TableCell></TableRow>)}</TableBody></Table></div></CardContent></Card></TabsContent>
     </Tabs>
   );
 }
@@ -1123,9 +1313,9 @@ function ReportsSection({ transactions, payouts, branches, monthFilter, setMonth
     <div className="space-y-6">
       <Card><CardContent className="p-4"><div className="flex items-center gap-4"><Label className="whitespace-nowrap">Select Month:</Label><Input type="month" value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)} className="w-48" /></div></CardContent></Card>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white"><CardContent className="p-4"><p className="text-emerald-100">Total Profit</p><p className="text-3xl font-bold">&#8358;{payouts.filter(p => p.type === 'Payout' && p.status === 'Completed').reduce((s, p) => s + p.company_profit, 0).toLocaleString()}</p></CardContent></Card>
-        <Card className="bg-gradient-to-br from-blue-500 to-cyan-600 text-white"><CardContent className="p-4"><p className="text-blue-100">Total Payouts</p><p className="text-3xl font-bold">&#8358;{payouts.filter(p => p.type === 'Payout' && p.status === 'Completed').reduce((s, p) => s + p.net_payout, 0).toLocaleString()}</p></CardContent></Card>
-        <Card className="bg-gradient-to-br from-purple-500 to-violet-600 text-white"><CardContent className="p-4"><p className="text-purple-100">Total Loans</p><p className="text-3xl font-bold">&#8358;{payouts.filter(p => p.type === 'Borrow' && p.status === 'Completed').reduce((s, p) => s + p.total_amount, 0).toLocaleString()}</p></CardContent></Card>
+        <Card className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white"><CardContent className="p-4"><p className="text-emerald-100">Total Profit</p><p className="text-3xl font-bold">&#8358;{formatAmount(payouts.filter(p => p.type === 'Payout' && p.status === 'Completed').reduce((s, p) => s + p.company_profit, 0))}</p></CardContent></Card>
+        <Card className="bg-gradient-to-br from-blue-500 to-cyan-600 text-white"><CardContent className="p-4"><p className="text-blue-100">Total Payouts</p><p className="text-3xl font-bold">&#8358;{formatAmount(payouts.filter(p => p.type === 'Payout' && p.status === 'Completed').reduce((s, p) => s + p.net_payout, 0))}</p></CardContent></Card>
+        <Card className="bg-gradient-to-br from-purple-500 to-violet-600 text-white"><CardContent className="p-4"><p className="text-purple-100">Total Loans</p><p className="text-3xl font-bold">&#8358;{formatAmount(payouts.filter(p => p.type === 'Borrow' && p.status === 'Completed').reduce((s, p) => s + p.total_amount, 0))}</p></CardContent></Card>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card><CardHeader><CardTitle>Monthly Collections</CardTitle></CardHeader><CardContent><Bar data={{ labels: monthlyData.map(([m]) => m), datasets: [{ label: 'Collections', data: monthlyData.map(([, amount]) => amount), backgroundColor: 'rgba(16, 185, 129, 0.8)' }] }} options={{ responsive: true, plugins: { legend: { display: false } } }} /></CardContent></Card>
@@ -1142,7 +1332,7 @@ function AdminTrackingTable({ members, branches }: { members: Member[]; branches
   return (
     <div className="space-y-4">
       <Card><CardContent className="p-4"><div className="flex flex-col md:flex-row gap-4"><div className="flex-1 relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" /><Input placeholder="Search customers..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" /></div><Select value={selectedBranch} onValueChange={setSelectedBranch}><SelectTrigger className="w-full md:w-56"><SelectValue placeholder="All Branches" /></SelectTrigger><SelectContent><SelectItem value="all">All Branches</SelectItem>{branches.map(b => (<SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>))}</SelectContent></Select></div></CardContent></Card>
-      <Card><CardHeader><CardTitle className="flex items-center gap-2"><Table2 className="w-5 h-5 text-emerald-600" />32-Day Tracking Table - All Customers</CardTitle></CardHeader><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-emerald-50"><TableHead className="sticky left-0 bg-emerald-50 z-10 min-w-[150px]">Customer</TableHead><TableHead>Branch</TableHead><TableHead>Daily</TableHead><TableHead>Progress</TableHead>{Array.from({ length: 32 }, (_, i) => (<TableHead key={i} className="text-center w-10 p-1 text-xs">{i + 1}</TableHead>))}</TableRow></TableHeader><TableBody>{filteredMembers.length === 0 ? (<TableRow><TableCell colSpan={37} className="text-center py-12 text-gray-500"><Users className="w-12 h-12 mx-auto mb-3 text-gray-300" /><p>No customers found</p></TableCell></TableRow>) : (filteredMembers.map(member => { const daysPaid = member.tracking.filter(t => t.paid).length; const progressPercent = Math.round((daysPaid / 32) * 100); return (<TableRow key={member.id}><TableCell className="sticky left-0 bg-white z-10 font-medium min-w-[150px]"><div><p>{member.name}</p><p className="text-xs text-gray-500">{member.phone}</p></div></TableCell><TableCell><Badge variant="outline" className="text-xs">{member.branch_name}</Badge></TableCell><TableCell className="text-sm">&#8358;{member.daily_amount.toLocaleString()}</TableCell><TableCell><div className="flex items-center gap-2"><div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden"><div className="h-full bg-emerald-500" style={{ width: `${progressPercent}%` }} /></div><span className="text-xs text-gray-600">{daysPaid}/32</span></div></TableCell>{member.tracking.map((day: any, idx: number) => (<TableCell key={idx} className="p-1 text-center"><div className={`w-7 h-7 rounded flex items-center justify-center text-xs ${day.paid ? 'bg-emerald-500 text-white' : 'bg-gray-100 text-gray-400'}`}>{day.paid ? <CheckCheck className="w-3 h-3" /> : '-'}</div></TableCell>))}</TableRow>); }))}</TableBody></Table></div></CardContent></Card>
+      <Card><CardHeader><CardTitle className="flex items-center gap-2"><Table2 className="w-5 h-5 text-emerald-600" />32-Day Tracking Table - All Customers</CardTitle></CardHeader><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-emerald-50"><TableHead className="sticky left-0 bg-emerald-50 z-10 min-w-[150px]">Customer</TableHead><TableHead>Branch</TableHead><TableHead>Daily</TableHead><TableHead>Progress</TableHead>{Array.from({ length: 32 }, (_, i) => (<TableHead key={i} className="text-center w-10 p-1 text-xs">{i + 1}</TableHead>))}</TableRow></TableHeader><TableBody>{filteredMembers.length === 0 ? (<TableRow><TableCell colSpan={37} className="text-center py-12 text-gray-500"><Users className="w-12 h-12 mx-auto mb-3 text-gray-300" /><p>No customers found</p></TableCell></TableRow>) : (filteredMembers.map(member => { const daysPaid = member.tracking.filter(t => t.paid).length; const progressPercent = Math.round((daysPaid / 32) * 100); return (<TableRow key={member.id}><TableCell className="sticky left-0 bg-white z-10 font-medium min-w-[150px]"><div><p>{member.name}</p><p className="text-xs text-gray-500">{member.phone}</p></div></TableCell><TableCell><Badge variant="outline" className="text-xs">{member.branch_name}</Badge></TableCell><TableCell className="text-sm">&#8358;{formatAmount(member.daily_amount)}</TableCell><TableCell><div className="flex items-center gap-2"><div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden"><div className="h-full bg-emerald-500" style={{ width: `${progressPercent}%` }} /></div><span className="text-xs text-gray-600">{daysPaid}/32</span></div></TableCell>{member.tracking.map((day: any, idx: number) => (<TableCell key={idx} className="p-1 text-center"><div className={`w-7 h-7 rounded flex items-center justify-center text-xs ${day.paid ? 'bg-emerald-500 text-white' : 'bg-gray-100 text-gray-400'}`}>{day.paid ? <CheckCheck className="w-3 h-3" /> : '-'}</div></TableCell>))}</TableRow>); }))}</TableBody></Table></div></CardContent></Card>
       <div className="flex justify-between items-center text-sm text-gray-500"><p>Showing {filteredMembers.length} customer{filteredMembers.length !== 1 ? 's' : ''}</p><div className="flex items-center gap-4"><div className="flex items-center gap-2"><div className="w-4 h-4 bg-emerald-500 rounded" /><span>Paid</span></div><div className="flex items-center gap-2"><div className="w-4 h-4 bg-gray-100 rounded" /><span>Pending</span></div></div></div>
     </div>
   );
@@ -1156,7 +1346,7 @@ function CustomerTracking({ currentUser, members }: { currentUser: User | null; 
   return (
     <div className="space-y-6">
       <Card><CardHeader><CardTitle className="flex items-center gap-2"><Calendar className="w-5 h-5 text-emerald-600" />32-Day Tracking Calendar</CardTitle></CardHeader><CardContent><div className="mb-6 bg-emerald-50 rounded-xl p-4"><div className="flex items-center justify-between mb-2"><span className="text-emerald-800 font-medium">Cycle Progress</span><span className="text-emerald-800 font-bold">{daysPaid}/32 days</span></div><div className="w-full h-3 bg-emerald-200 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500" style={{ width: `${progressPercent}%` }} /></div><p className="text-sm text-emerald-600 mt-2">{32 - daysPaid} days remaining until payout eligibility</p></div><div className="grid grid-cols-8 gap-2">{myMember.tracking.map((day: any, idx: number) => (<div key={idx} className={`aspect-square rounded-lg flex flex-col items-center justify-center text-sm ${day.paid ? 'bg-emerald-500 text-white shadow-md' : 'bg-gray-100 text-gray-500 border-2 border-dashed border-gray-300'}`}><span className="text-xs opacity-75">{day.day}</span>{day.paid ? (<CheckCheck className="w-4 h-4" />) : (<span className="text-xs">-</span>)}</div>))}</div><div className="flex items-center justify-center gap-6 mt-6"><div className="flex items-center gap-2"><div className="w-6 h-6 bg-emerald-500 rounded" /><span className="text-sm text-gray-600">Paid</span></div><div className="flex items-center gap-2"><div className="w-6 h-6 bg-gray-100 border-2 border-dashed border-gray-300 rounded" /><span className="text-sm text-gray-600">Pending</span></div></div></CardContent></Card>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4"><Card className="bg-emerald-50"><CardContent className="p-4 text-center"><p className="text-3xl font-bold text-emerald-600">{daysPaid}</p><p className="text-sm text-gray-600">Days Paid</p></CardContent></Card><Card className="bg-blue-50"><CardContent className="p-4 text-center"><p className="text-3xl font-bold text-blue-600">{32 - daysPaid}</p><p className="text-sm text-gray-600">Days Remaining</p></CardContent></Card><Card className="bg-purple-50"><CardContent className="p-4 text-center"><p className="text-3xl font-bold text-purple-600">&#8358;{(daysPaid * myMember.daily_amount).toLocaleString()}</p><p className="text-sm text-gray-600">Total Contributed</p></CardContent></Card></div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4"><Card className="bg-emerald-50"><CardContent className="p-4 text-center"><p className="text-3xl font-bold text-emerald-600">{daysPaid}</p><p className="text-sm text-gray-600">Days Paid</p></CardContent></Card><Card className="bg-blue-50"><CardContent className="p-4 text-center"><p className="text-3xl font-bold text-blue-600">{32 - daysPaid}</p><p className="text-sm text-gray-600">Days Remaining</p></CardContent></Card><Card className="bg-purple-50"><CardContent className="p-4 text-center"><p className="text-3xl font-bold text-purple-600">&#8358;{formatAmount(daysPaid * myMember.daily_amount)}</p><p className="text-sm text-gray-600">Total Contributed</p></CardContent></Card></div>
     </div>
   );
 }
@@ -1169,8 +1359,8 @@ function CustomerHistory({ currentUser, members, transactions }: { currentUser: 
   return (
     <div className="space-y-4">
       <Card><CardContent className="p-4"><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" /><Input placeholder="Search by date or payment method..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" /></div></CardContent></Card>
-      <Card><CardHeader><CardTitle className="flex items-center gap-2"><History className="w-5 h-5 text-emerald-600" />Your Transaction History</CardTitle></CardHeader><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-emerald-50"><TableHead>Date</TableHead><TableHead>Amount</TableHead><TableHead>Payment Method</TableHead><TableHead>Days Covered</TableHead><TableHead>Status</TableHead></TableRow></TableHeader><TableBody>{filtered.length === 0 ? (<TableRow><TableCell colSpan={5} className="text-center py-12 text-gray-500"><History className="w-12 h-12 mx-auto mb-3 text-gray-300" /><p>No transactions found</p></TableCell></TableRow>) : (filtered.map(t => (<TableRow key={t.id}><TableCell>{t.date}</TableCell><TableCell className="font-medium">&#8358;{t.amount.toLocaleString()}</TableCell><TableCell><Badge variant="outline" className="flex items-center gap-1 w-fit">{t.payment_method === 'Cash' && <Banknote className="w-3 h-3" />}{t.payment_method === 'Bank Transfer' && <Landmark className="w-3 h-3" />}{t.payment_method === 'Mobile Money' && <Smartphone className="w-3 h-3" />}{t.payment_method === 'Bank App Transfer' && <Smartphone className="w-3 h-3" />}{t.payment_method}</Badge></TableCell><TableCell>{t.days_covered}</TableCell><TableCell><Badge className="bg-emerald-500">{t.status}</Badge></TableCell></TableRow>)))}</TableBody></Table></div></CardContent></Card>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4"><Card className="bg-emerald-50"><CardContent className="p-4"><p className="text-sm text-gray-600">Total Contributed</p><p className="text-2xl font-bold text-emerald-700">&#8358;{myTransactions.reduce((s, t) => s + t.amount, 0).toLocaleString()}</p></CardContent></Card><Card className="bg-blue-50"><CardContent className="p-4"><p className="text-sm text-gray-600">Total Transactions</p><p className="text-2xl font-bold text-blue-700">{myTransactions.length}</p></CardContent></Card></div>
+      <Card><CardHeader><CardTitle className="flex items-center gap-2"><History className="w-5 h-5 text-emerald-600" />Your Transaction History</CardTitle></CardHeader><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-emerald-50"><TableHead>Date</TableHead><TableHead>Amount</TableHead><TableHead>Payment Method</TableHead><TableHead>Days Covered</TableHead><TableHead>Status</TableHead></TableRow></TableHeader><TableBody>{filtered.length === 0 ? (<TableRow><TableCell colSpan={5} className="text-center py-12 text-gray-500"><History className="w-12 h-12 mx-auto mb-3 text-gray-300" /><p>No transactions found</p></TableCell></TableRow>) : (filtered.map(t => (<TableRow key={t.id}><TableCell>{t.date}</TableCell><TableCell className="font-medium">&#8358;{formatAmount(t.amount)}</TableCell><TableCell><Badge variant="outline" className="flex items-center gap-1 w-fit">{t.payment_method === 'Cash' && <Banknote className="w-3 h-3" />}{t.payment_method === 'Bank Transfer' && <Landmark className="w-3 h-3" />}{t.payment_method === 'Mobile Money' && <Smartphone className="w-3 h-3" />}{t.payment_method === 'Bank App Transfer' && <Smartphone className="w-3 h-3" />}{t.payment_method}</Badge></TableCell><TableCell>{t.days_covered}</TableCell><TableCell><Badge className="bg-emerald-500">{t.status}</Badge></TableCell></TableRow>)))}</TableBody></Table></div></CardContent></Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4"><Card className="bg-emerald-50"><CardContent className="p-4"><p className="text-sm text-gray-600">Total Contributed</p><p className="text-2xl font-bold text-emerald-700">&#8358;{formatAmount(myTransactions.reduce((s, t) => s + t.amount, 0))}</p></CardContent></Card><Card className="bg-blue-50"><CardContent className="p-4"><p className="text-sm text-gray-600">Total Transactions</p><p className="text-2xl font-bold text-blue-700">{myTransactions.length}</p></CardContent></Card></div>
     </div>
   );
 }
@@ -1223,7 +1413,7 @@ function CustomerSettings({ currentUser, members, canChangeAmount, onUpdateProfi
           <CardContent>
             <p className="text-sm text-amber-700 mb-4">You can change your daily contribution amount once per month (1st - 3rd of every month).</p>
             <div className="flex items-center justify-between">
-              <div><p className="text-sm text-gray-600">Current Amount</p><p className="text-xl font-bold text-amber-800">&#8358;{myMember.daily_amount.toLocaleString()}</p></div>
+              <div><p className="text-sm text-gray-600">Current Amount</p><p className="text-xl font-bold text-amber-800">&#8358;{formatAmount(myMember.daily_amount)}</p></div>
               <Button onClick={onRequestAmountChange} className="bg-amber-600 hover:bg-amber-700">Request Change</Button>
             </div>
           </CardContent>
@@ -1231,7 +1421,7 @@ function CustomerSettings({ currentUser, members, canChangeAmount, onUpdateProfi
       )}
       <Card><CardHeader><CardTitle className="flex items-center justify-between"><span className="flex items-center gap-2"><UserIcon className="w-5 h-5 text-emerald-600" />Profile Information</span><Button variant="outline" size="sm" onClick={() => setIsEditing(!isEditing)}>{isEditing ? 'Cancel' : <><Edit2 className="w-4 h-4 mr-1" /> Edit</>}</Button></CardTitle></CardHeader><CardContent className="space-y-4">{isEditing ? (<><div><Label>Full Name</Label><Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} /></div><div><Label>Email</Label><Input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} /></div><div><Label>Phone</Label><Input value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} /></div><div><Label>Address</Label><Input value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} /></div><Button onClick={handleSave} className="bg-emerald-600 hover:bg-emerald-700">Save Changes</Button></>) : (<div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div className="bg-gray-50 p-3 rounded-lg"><p className="text-sm text-gray-600">Full Name</p><p className="font-medium">{currentUser?.name}</p></div><div className="bg-gray-50 p-3 rounded-lg"><p className="text-sm text-gray-600">Email</p><p className="font-medium">{currentUser?.email}</p></div><div className="bg-gray-50 p-3 rounded-lg"><p className="text-sm text-gray-600">Phone</p><p className="font-medium">{currentUser?.phone}</p></div><div className="bg-gray-50 p-3 rounded-lg"><p className="text-sm text-gray-600">Branch</p><p className="font-medium">{currentUser?.branch_name}</p></div><div className="bg-gray-50 p-3 rounded-lg md:col-span-2"><p className="text-sm text-gray-600">Address</p><p className="font-medium">{myMember?.address || 'Not set'}</p></div></div>)}</CardContent></Card>
       <Card><CardHeader><CardTitle className="flex items-center gap-2"><Lock className="w-5 h-5 text-emerald-600" />Change Password</CardTitle></CardHeader><CardContent className="space-y-4"><div><Label>Current Password</Label><Input type="password" value={formData.currentPassword} onChange={(e) => setFormData({ ...formData, currentPassword: e.target.value })} placeholder="Enter current password" /></div><div><Label>New Password</Label><Input type="password" value={formData.newPassword} onChange={(e) => setFormData({ ...formData, newPassword: e.target.value })} placeholder="Enter new password" /></div><div><Label>Confirm New Password</Label><Input type="password" value={formData.confirmPassword} onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })} placeholder="Confirm new password" /></div><Button onClick={handleChangePassword} variant="outline">Change Password</Button></CardContent></Card>
-      <Card><CardHeader><CardTitle className="flex items-center gap-2"><Building2 className="w-5 h-5 text-emerald-600" />Account Information</CardTitle></CardHeader><CardContent><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div className="bg-gray-50 p-3 rounded-lg"><p className="text-sm text-gray-600">Member ID</p><p className="font-medium">{myMember?.id}</p></div><div className="bg-gray-50 p-3 rounded-lg"><p className="text-sm text-gray-600">Daily Amount</p><p className="font-medium">&#8358;{myMember?.daily_amount.toLocaleString()}</p></div><div className="bg-gray-50 p-3 rounded-lg"><p className="text-sm text-gray-600">Start Date</p><p className="font-medium">{myMember?.start_date}</p></div><div className="bg-gray-50 p-3 rounded-lg"><p className="text-sm text-gray-600">Status</p><Badge className={myMember?.status === 'Active' ? 'bg-emerald-500' : 'bg-gray-500'}>{myMember?.status}</Badge></div></div></CardContent></Card>
+      <Card><CardHeader><CardTitle className="flex items-center gap-2"><Building2 className="w-5 h-5 text-emerald-600" />Account Information</CardTitle></CardHeader><CardContent><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div className="bg-gray-50 p-3 rounded-lg"><p className="text-sm text-gray-600">Member ID</p><p className="font-medium">{myMember?.id}</p></div><div className="bg-gray-50 p-3 rounded-lg"><p className="text-sm text-gray-600">Daily Amount</p><p className="font-medium">&#8358;{formatAmount(myMember?.daily_amount)}</p></div><div className="bg-gray-50 p-3 rounded-lg"><p className="text-sm text-gray-600">Start Date</p><p className="font-medium">{myMember?.start_date}</p></div><div className="bg-gray-50 p-3 rounded-lg"><p className="text-sm text-gray-600">Status</p><Badge className={myMember?.status === 'Active' ? 'bg-emerald-500' : 'bg-gray-500'}>{myMember?.status}</Badge></div></div></CardContent></Card>
     </div>
   );
 }
@@ -1271,7 +1461,7 @@ function AdminSettings({ settings, onSave, amountChangeRequests, onApproveAmount
             <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"><div><p className="font-medium">Allow Changes After Grace Period</p><p className="text-sm text-gray-500">Allow changes after grace period (requires admin approval)</p></div><Switch checked={localSettings.allow_change_after_grace_period} onCheckedChange={(checked) => setLocalSettings({ ...localSettings, allow_change_after_grace_period: checked })} /></div>
             <Button onClick={() => onSave(localSettings)} className="bg-emerald-600 hover:bg-emerald-700">Save Amount Settings</Button>
           </CardContent></Card>
-          <Card><CardHeader><CardTitle className="flex items-center gap-2"><Bell className="w-5 h-5 text-amber-600" />Pending Amount Change Requests</CardTitle></CardHeader><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-amber-50"><TableHead>Customer</TableHead><TableHead>Current</TableHead><TableHead>Requested</TableHead><TableHead>Date</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader><TableBody>{pendingRequests.length === 0 ? (<TableRow><TableCell colSpan={5} className="text-center py-8 text-gray-500">No pending requests</TableCell></TableRow>) : (pendingRequests.map(req => (<TableRow key={req.id}><TableCell className="font-medium">{req.member_name}</TableCell><TableCell>&#8358;{req.current_amount.toLocaleString()}</TableCell><TableCell className="text-emerald-600 font-medium">&#8358;{req.requested_amount.toLocaleString()}</TableCell><TableCell>{new Date(req.requested_at).toLocaleDateString()}</TableCell><TableCell className="text-right"><div className="flex justify-end gap-2"><Button size="sm" onClick={() => onApproveAmountChange(req.id, true)} className="bg-emerald-600 hover:bg-emerald-700">Approve</Button><Button size="sm" variant="outline" onClick={() => onApproveAmountChange(req.id, false)} className="text-red-600 border-red-300 hover:bg-red-50">Reject</Button></div></TableCell></TableRow>)))}</TableBody></Table></div></CardContent></Card>
+          <Card><CardHeader><CardTitle className="flex items-center gap-2"><Bell className="w-5 h-5 text-amber-600" />Pending Amount Change Requests</CardTitle></CardHeader><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-amber-50"><TableHead>Customer</TableHead><TableHead>Current</TableHead><TableHead>Requested</TableHead><TableHead>Date</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader><TableBody>{pendingRequests.length === 0 ? (<TableRow><TableCell colSpan={5} className="text-center py-8 text-gray-500">No pending requests</TableCell></TableRow>) : (pendingRequests.map(req => (<TableRow key={req.id}><TableCell className="font-medium">{req.member_name}</TableCell><TableCell>&#8358;{formatAmount(req.current_amount)}</TableCell><TableCell className="text-emerald-600 font-medium">&#8358;{formatAmount(req.requested_amount)}</TableCell><TableCell>{new Date(req.requested_at).toLocaleDateString()}</TableCell><TableCell className="text-right"><div className="flex justify-end gap-2"><Button size="sm" onClick={() => onApproveAmountChange(req.id, true)} className="bg-emerald-600 hover:bg-emerald-700">Approve</Button><Button size="sm" variant="outline" onClick={() => onApproveAmountChange(req.id, false)} className="text-red-600 border-red-300 hover:bg-red-50">Reject</Button></div></TableCell></TableRow>)))}</TableBody></Table></div></CardContent></Card>
         </TabsContent>
         <TabsContent value="bank" className="space-y-4">
           <Card><CardHeader><CardTitle className="flex items-center gap-2"><Landmark className="w-5 h-5 text-emerald-600" />Bank Transfer Settings</CardTitle></CardHeader><CardContent className="space-y-4">
@@ -1371,7 +1561,7 @@ function PayoutDialog({ isOpen, onClose, selectedCustomer, onConfirm }: { isOpen
       <DialogContent className="max-w-md"><DialogHeader><DialogTitle>Process Payout {isPartial && <Badge className="ml-2 bg-amber-500">Partial</Badge>}</DialogTitle></DialogHeader>
         <div className="space-y-4">
           <div className="bg-emerald-50 p-4 rounded-lg"><p className="font-medium text-emerald-900">{selectedCustomer.name}</p><p className="text-sm text-emerald-600">Daily: &#8358;{selectedCustomer.daily_amount}</p><p className="text-sm text-emerald-600">Days Paid: {daysPaid}/32 {isPartial && <span className="text-amber-600">(Incomplete)</span>}</p></div>
-          <div className="space-y-2"><div className="flex justify-between"><span>Total Contributed:</span><span className="font-medium">&#8358;{totalContributed.toLocaleString()}</span></div><div className="flex justify-between text-amber-600"><span>Company Profit (1 day):</span><span className="font-medium">-&#8358;{selectedCustomer.daily_amount.toLocaleString()}</span></div><div className="flex justify-between text-lg font-bold border-t pt-2"><span>Net Payout:</span><span className="text-emerald-600">&#8358;{netPayout.toLocaleString()}</span></div></div>
+          <div className="space-y-2"><div className="flex justify-between"><span>Total Contributed:</span><span className="font-medium">&#8358;{formatAmount(totalContributed)}</span></div><div className="flex justify-between text-amber-600"><span>Company Profit (1 day):</span><span className="font-medium">-&#8358;{formatAmount(selectedCustomer.daily_amount)}</span></div><div className="flex justify-between text-lg font-bold border-t pt-2"><span>Net Payout:</span><span className="text-emerald-600">&#8358;{formatAmount(netPayout)}</span></div></div>
           {isPartial && <div className="bg-amber-50 p-3 rounded-lg"><p className="text-xs text-amber-700"><AlertCircle className="w-4 h-4 inline mr-1" />This is a partial payout. Customer has only completed {daysPaid} out of 32 days.</p></div>}
           <Button onClick={onConfirm} className="w-full bg-emerald-600 hover:bg-emerald-700">Confirm Payout</Button>
         </div>
@@ -1390,7 +1580,7 @@ function BorrowDialog({ isOpen, onClose, selectedCustomer, onConfirm }: { isOpen
         <div className="space-y-4">
           <div className="bg-blue-50 p-4 rounded-lg"><p className="font-medium text-blue-900">{selectedCustomer.name}</p><p className="text-sm text-blue-600">Daily: &#8358;{selectedCustomer.daily_amount}</p><p className="text-sm text-blue-600">Days Paid: {daysPaid}/32</p></div>
           <div className="bg-amber-50 p-3 rounded-lg"><p className="text-sm text-amber-800"><AlertCircle className="w-4 h-4 inline mr-1" />Loan Eligibility: Up to 30 days of contribution</p></div>
-          <div className="space-y-2"><div className="flex justify-between"><span>Maximum Loan Amount:</span><span className="font-medium">&#8358;{maxLoan.toLocaleString()}</span></div></div>
+          <div className="space-y-2"><div className="flex justify-between"><span>Maximum Loan Amount:</span><span className="font-medium">&#8358;{formatAmount(maxLoan)}</span></div></div>
           <Button onClick={onConfirm} className="w-full bg-blue-600 hover:bg-blue-700">Process Loan</Button>
         </div>
       </DialogContent>
@@ -1419,7 +1609,7 @@ function TotalCustomerDialog({ isOpen, onClose, members, stats, transactions }: 
         <div className="space-y-4">
           <div className="flex gap-4"><div className="flex-1"><Label>Select Date</Label><Input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} /></div><div className="flex-1"><Label>Select Month</Label><Input type="month" value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)} /></div></div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4"><Card className="bg-emerald-50"><CardContent className="p-4"><p className="text-sm text-gray-600">Total Customers</p><p className="text-2xl font-bold text-emerald-700">{stats.totalMembers}</p></CardContent></Card><Card className="bg-blue-50"><CardContent className="p-4"><p className="text-sm text-gray-600">Active</p><p className="text-2xl font-bold text-blue-700">{stats.activeMembers}</p></CardContent></Card><Card className="bg-gray-50"><CardContent className="p-4"><p className="text-sm text-gray-600">Inactive</p><p className="text-2xl font-bold text-gray-700">{stats.inactiveMembers}</p></CardContent></Card></div>
-          <div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-emerald-50"><TableHead>Name</TableHead><TableHead>Phone</TableHead><TableHead>Branch</TableHead><TableHead>Daily Amount</TableHead><TableHead>Status</TableHead><TableHead>Days Paid</TableHead><TableHead>Transactions</TableHead></TableRow></TableHeader><TableBody>{members.length === 0 ? (<TableRow><TableCell colSpan={7} className="text-center py-8 text-gray-500">No customers found</TableCell></TableRow>) : (members.map(member => (<TableRow key={member.id}><TableCell className="font-medium">{member.name}</TableCell><TableCell>{member.phone}</TableCell><TableCell>{member.branch_name}</TableCell><TableCell>&#8358;{member.daily_amount.toLocaleString()}</TableCell><TableCell><Badge className={member.status === 'Active' ? 'bg-emerald-500' : 'bg-gray-500'}>{member.status}</Badge></TableCell><TableCell>{member.tracking.filter(t => t.paid).length}/32</TableCell><TableCell>{getMemberTransactionCount(member.id)}</TableCell></TableRow>)))}</TableBody></Table></div>
+          <div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-emerald-50"><TableHead>Name</TableHead><TableHead>Phone</TableHead><TableHead>Branch</TableHead><TableHead>Daily Amount</TableHead><TableHead>Status</TableHead><TableHead>Days Paid</TableHead><TableHead>Transactions</TableHead></TableRow></TableHeader><TableBody>{members.length === 0 ? (<TableRow><TableCell colSpan={7} className="text-center py-8 text-gray-500">No customers found</TableCell></TableRow>) : (members.map(member => (<TableRow key={member.id}><TableCell className="font-medium">{member.name}</TableCell><TableCell>{member.phone}</TableCell><TableCell>{member.branch_name}</TableCell><TableCell>&#8358;{formatAmount(member.daily_amount)}</TableCell><TableCell><Badge className={member.status === 'Active' ? 'bg-emerald-500' : 'bg-gray-500'}>{member.status}</Badge></TableCell><TableCell>{member.tracking.filter(t => t.paid).length}/32</TableCell><TableCell>{getMemberTransactionCount(member.id)}</TableCell></TableRow>)))}</TableBody></Table></div>
         </div>
       </DialogContent>
     </Dialog>
@@ -1431,10 +1621,10 @@ function TodayCollectionDialog({ isOpen, onClose, branchStats, todayTransactions
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>Today&apos;s Collection Details</DialogTitle></DialogHeader>
         <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4"><Card className="bg-gradient-to-br from-emerald-50 to-teal-50"><CardContent className="p-4"><p className="text-sm text-gray-600">Today&apos;s Total</p><p className="text-2xl font-bold text-emerald-700">&#8358;{stats.todayCollections.toLocaleString()}</p><p className="text-xs text-gray-500">{stats.todayCustomersPaid} customers paid</p></CardContent></Card><Card className="bg-gradient-to-br from-gray-50 to-slate-50"><CardContent className="p-4"><p className="text-sm text-gray-600">Yesterday&apos;s Record</p><p className="text-2xl font-bold text-gray-700">&#8358;{stats.yesterdayCollections.toLocaleString()}</p></CardContent></Card></div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">{branchStats.map(branch => (<Card key={branch.id} className="bg-gradient-to-br from-emerald-50 to-teal-50"><CardContent className="p-4"><p className="text-sm text-gray-600">{branch.name}</p><p className="text-2xl font-bold text-emerald-700">&#8358;{branch.todayCollection.toLocaleString()}</p><p className="text-xs text-gray-500">{todayTransactions.filter(t => t.branch_id === branch.id).length} transactions</p></CardContent></Card>))}</div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4"><Card className="bg-gradient-to-br from-emerald-50 to-teal-50"><CardContent className="p-4"><p className="text-sm text-gray-600">Today&apos;s Total</p><p className="text-2xl font-bold text-emerald-700">&#8358;{formatAmount(stats.todayCollections)}</p><p className="text-xs text-gray-500">{stats.todayCustomersPaid} customers paid</p></CardContent></Card><Card className="bg-gradient-to-br from-gray-50 to-slate-50"><CardContent className="p-4"><p className="text-sm text-gray-600">Yesterday&apos;s Record</p><p className="text-2xl font-bold text-gray-700">&#8358;{formatAmount(stats.yesterdayCollections)}</p></CardContent></Card></div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">{branchStats.map(branch => (<Card key={branch.id} className="bg-gradient-to-br from-emerald-50 to-teal-50"><CardContent className="p-4"><p className="text-sm text-gray-600">{branch.name}</p><p className="text-2xl font-bold text-emerald-700">&#8358;{formatAmount(branch.todayCollection)}</p><p className="text-xs text-gray-500">{todayTransactions.filter(t => t.branch_id === branch.id).length} transactions</p></CardContent></Card>))}</div>
           <h4 className="font-semibold text-emerald-800 mt-4">Today&apos;s Transactions</h4>
-          <div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-emerald-50"><TableHead>Customer</TableHead><TableHead>Amount</TableHead><TableHead>Method</TableHead><TableHead>Branch</TableHead><TableHead>Time</TableHead></TableRow></TableHeader><TableBody>{todayTransactions.length === 0 ? (<TableRow><TableCell colSpan={5} className="text-center py-8 text-gray-500">No transactions today</TableCell></TableRow>) : (todayTransactions.map(t => (<TableRow key={t.id}><TableCell className="font-medium">{t.member_name}</TableCell><TableCell>&#8358;{t.amount.toLocaleString()}</TableCell><TableCell><Badge variant="outline" className="flex items-center gap-1 w-fit">{t.payment_method === 'Cash' && <Banknote className="w-3 h-3" />}{t.payment_method === 'Bank Transfer' && <Landmark className="w-3 h-3" />}{t.payment_method === 'Mobile Money' && <Smartphone className="w-3 h-3" />}{t.payment_method}</Badge></TableCell><TableCell>{t.branch_name}</TableCell><TableCell>{new Date(t.created_at).toLocaleTimeString()}</TableCell></TableRow>)))}</TableBody></Table></div>
+          <div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-emerald-50"><TableHead>Customer</TableHead><TableHead>Amount</TableHead><TableHead>Method</TableHead><TableHead>Branch</TableHead><TableHead>Time</TableHead></TableRow></TableHeader><TableBody>{todayTransactions.length === 0 ? (<TableRow><TableCell colSpan={5} className="text-center py-8 text-gray-500">No transactions today</TableCell></TableRow>) : (todayTransactions.map(t => (<TableRow key={t.id}><TableCell className="font-medium">{t.member_name}</TableCell><TableCell>&#8358;{formatAmount(t.amount)}</TableCell><TableCell><Badge variant="outline" className="flex items-center gap-1 w-fit">{t.payment_method === 'Cash' && <Banknote className="w-3 h-3" />}{t.payment_method === 'Bank Transfer' && <Landmark className="w-3 h-3" />}{t.payment_method === 'Mobile Money' && <Smartphone className="w-3 h-3" />}{t.payment_method}</Badge></TableCell><TableCell>{t.branch_name}</TableCell><TableCell>{new Date(t.created_at).toLocaleTimeString()}</TableCell></TableRow>)))}</TableBody></Table></div>
         </div>
       </DialogContent>
     </Dialog>
@@ -1450,8 +1640,8 @@ function TotalCollectionDialog({ isOpen, onClose, transactions, stats }: { isOpe
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>Total Collection Records</DialogTitle></DialogHeader>
         <div className="space-y-4">
           <div className="flex gap-4"><div className="flex-1"><Label>Filter by Date</Label><Input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} /></div><div className="flex-1"><Label>Filter by Month</Label><Input type="month" value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)} /></div></div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4"><Card className="bg-emerald-50"><CardContent className="p-4"><p className="text-sm text-gray-600">Total Collection</p><p className="text-xl font-bold text-emerald-700">&#8358;{stats.totalCollections.toLocaleString()}</p></CardContent></Card><Card className="bg-blue-50"><CardContent className="p-4"><p className="text-sm text-gray-600">Cash</p><p className="text-xl font-bold text-blue-700">&#8358;{transactions.filter(t => t.payment_method === 'Cash').reduce((s, t) => s + t.amount, 0).toLocaleString()}</p></CardContent></Card><Card className="bg-purple-50"><CardContent className="p-4"><p className="text-sm text-gray-600">Bank Transfer</p><p className="text-xl font-bold text-purple-700">&#8358;{transactions.filter(t => t.payment_method === 'Bank Transfer').reduce((s, t) => s + t.amount, 0).toLocaleString()}</p></CardContent></Card><Card className="bg-amber-50"><CardContent className="p-4"><p className="text-sm text-gray-600">Mobile Money</p><p className="text-xl font-bold text-amber-700">&#8358;{transactions.filter(t => t.payment_method === 'Mobile Money').reduce((s, t) => s + t.amount, 0).toLocaleString()}</p></CardContent></Card></div>
-          <div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-emerald-50"><TableHead>Date</TableHead><TableHead>Customer</TableHead><TableHead>Amount</TableHead><TableHead>Method</TableHead><TableHead>Branch</TableHead></TableRow></TableHeader><TableBody>{filteredTransactions.length === 0 ? (<TableRow><TableCell colSpan={5} className="text-center py-8 text-gray-500">No transactions found</TableCell></TableRow>) : (filteredTransactions.slice(0, 100).map(t => (<TableRow key={t.id}><TableCell>{t.date}</TableCell><TableCell className="font-medium">{t.member_name}</TableCell><TableCell>&#8358;{t.amount.toLocaleString()}</TableCell><TableCell>{t.payment_method}</TableCell><TableCell>{t.branch_name}</TableCell></TableRow>)))}</TableBody></Table></div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4"><Card className="bg-emerald-50"><CardContent className="p-4"><p className="text-sm text-gray-600">Total Collection</p><p className="text-xl font-bold text-emerald-700">&#8358;{formatAmount(stats.totalCollections)}</p></CardContent></Card><Card className="bg-blue-50"><CardContent className="p-4"><p className="text-sm text-gray-600">Cash</p><p className="text-xl font-bold text-blue-700">&#8358;{formatAmount(transactions.filter(t => t.payment_method === 'Cash').reduce((s, t) => s + t.amount, 0))}</p></CardContent></Card><Card className="bg-purple-50"><CardContent className="p-4"><p className="text-sm text-gray-600">Bank Transfer</p><p className="text-xl font-bold text-purple-700">&#8358;{formatAmount(transactions.filter(t => t.payment_method === 'Bank Transfer').reduce((s, t) => s + t.amount, 0))}</p></CardContent></Card><Card className="bg-amber-50"><CardContent className="p-4"><p className="text-sm text-gray-600">Mobile Money</p><p className="text-xl font-bold text-amber-700">&#8358;{formatAmount(transactions.filter(t => t.payment_method === 'Mobile Money').reduce((s, t) => s + t.amount, 0))}</p></CardContent></Card></div>
+          <div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-emerald-50"><TableHead>Date</TableHead><TableHead>Customer</TableHead><TableHead>Amount</TableHead><TableHead>Method</TableHead><TableHead>Branch</TableHead></TableRow></TableHeader><TableBody>{filteredTransactions.length === 0 ? (<TableRow><TableCell colSpan={5} className="text-center py-8 text-gray-500">No transactions found</TableCell></TableRow>) : (filteredTransactions.slice(0, 100).map(t => (<TableRow key={t.id}><TableCell>{t.date}</TableCell><TableCell className="font-medium">{t.member_name}</TableCell><TableCell>&#8358;{formatAmount(t.amount)}</TableCell><TableCell>{t.payment_method}</TableCell><TableCell>{t.branch_name}</TableCell></TableRow>)))}</TableBody></Table></div>
         </div>
       </DialogContent>
     </Dialog>
@@ -1467,8 +1657,8 @@ function CustomerDetailDialog({ isOpen, onClose, selectedCustomer, transactions 
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>Customer Details</DialogTitle></DialogHeader>
         <div className="space-y-6">
           <div className="flex items-center gap-4"><div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center"><UserIcon className="w-8 h-8 text-emerald-600" /></div><div><h3 className="text-xl font-bold">{selectedCustomer.name}</h3><p className="text-gray-600">{selectedCustomer.phone}</p><Badge className={selectedCustomer.status === 'Active' ? 'bg-emerald-500' : 'bg-gray-500'}>{selectedCustomer.status}</Badge></div></div>
-          <div className="grid grid-cols-2 gap-4"><div className="bg-gray-50 p-3 rounded-lg"><p className="text-sm text-gray-600">Email</p><p className="font-medium">{selectedCustomer.email || 'N/A'}</p></div><div className="bg-gray-50 p-3 rounded-lg"><p className="text-sm text-gray-600">Address</p><p className="font-medium">{selectedCustomer.address || 'N/A'}</p></div><div className="bg-gray-50 p-3 rounded-lg"><p className="text-sm text-gray-600">Branch</p><p className="font-medium">{selectedCustomer.branch_name}</p></div><div className="bg-gray-50 p-3 rounded-lg"><p className="text-sm text-gray-600">Daily Amount</p><p className="font-medium">&#8358;{selectedCustomer.daily_amount.toLocaleString()}</p></div><div className="bg-gray-50 p-3 rounded-lg"><p className="text-sm text-gray-600">Days Paid</p><p className="font-medium">{daysPaid}/32</p></div><div className="bg-gray-50 p-3 rounded-lg"><p className="text-sm text-gray-600">Total Contributed</p><p className="font-medium">&#8358;{(daysPaid * selectedCustomer.daily_amount).toLocaleString()}</p></div></div>
-          <div><h4 className="font-semibold mb-3">Transaction History</h4>{customerTransactions.length === 0 ? (<p className="text-gray-500 text-center py-4">No transactions found</p>) : (<div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-emerald-50"><TableHead>Date</TableHead><TableHead>Amount</TableHead><TableHead>Method</TableHead><TableHead>Days</TableHead></TableRow></TableHeader><TableBody>{customerTransactions.map(t => (<TableRow key={t.id}><TableCell>{t.date}</TableCell><TableCell>&#8358;{t.amount.toLocaleString()}</TableCell><TableCell>{t.payment_method}</TableCell><TableCell>{t.days_covered}</TableCell></TableRow>))}</TableBody></Table></div>)}</div>
+          <div className="grid grid-cols-2 gap-4"><div className="bg-gray-50 p-3 rounded-lg"><p className="text-sm text-gray-600">Email</p><p className="font-medium">{selectedCustomer.email || 'N/A'}</p></div><div className="bg-gray-50 p-3 rounded-lg"><p className="text-sm text-gray-600">Address</p><p className="font-medium">{selectedCustomer.address || 'N/A'}</p></div><div className="bg-gray-50 p-3 rounded-lg"><p className="text-sm text-gray-600">Branch</p><p className="font-medium">{selectedCustomer.branch_name}</p></div><div className="bg-gray-50 p-3 rounded-lg"><p className="text-sm text-gray-600">Daily Amount</p><p className="font-medium">&#8358;{formatAmount(selectedCustomer.daily_amount)}</p></div><div className="bg-gray-50 p-3 rounded-lg"><p className="text-sm text-gray-600">Days Paid</p><p className="font-medium">{daysPaid}/32</p></div><div className="bg-gray-50 p-3 rounded-lg"><p className="text-sm text-gray-600">Total Contributed</p><p className="font-medium">&#8358;{formatAmount(daysPaid * selectedCustomer.daily_amount)}</p></div></div>
+          <div><h4 className="font-semibold mb-3">Transaction History</h4>{customerTransactions.length === 0 ? (<p className="text-gray-500 text-center py-4">No transactions found</p>) : (<div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-emerald-50"><TableHead>Date</TableHead><TableHead>Amount</TableHead><TableHead>Method</TableHead><TableHead>Days</TableHead></TableRow></TableHeader><TableBody>{customerTransactions.map(t => (<TableRow key={t.id}><TableCell>{t.date}</TableCell><TableCell>&#8358;{formatAmount(t.amount)}</TableCell><TableCell>{t.payment_method}</TableCell><TableCell>{t.days_covered}</TableCell></TableRow>))}</TableBody></Table></div>)}</div>
         </div>
       </DialogContent>
     </Dialog>
@@ -1481,7 +1671,7 @@ function PayoutApprovalDialog({ isOpen, onClose, selectedPayout, onApprove }: { 
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-md"><DialogHeader><DialogTitle>Approve Payout {selectedPayout.is_partial && <Badge className="ml-2 bg-amber-500">Partial</Badge>}</DialogTitle></DialogHeader>
         <div className="space-y-4">
-          <div className="bg-amber-50 p-4 rounded-lg"><p className="font-medium text-amber-900">{selectedPayout.member_name}</p><p className="text-sm text-amber-700">Type: {selectedPayout.type}</p><p className="text-sm text-amber-700">Days Paid: {selectedPayout.days_paid}/32</p><p className="text-sm text-amber-700">Amount: &#8358;{selectedPayout.total_amount.toLocaleString()}</p><p className="text-sm text-amber-700">Net Payout: &#8358;{selectedPayout.net_payout.toLocaleString()}</p><p className="text-sm text-amber-700">Requested by: {selectedPayout.staff_name}</p></div>
+          <div className="bg-amber-50 p-4 rounded-lg"><p className="font-medium text-amber-900">{selectedPayout.member_name}</p><p className="text-sm text-amber-700">Type: {selectedPayout.type}</p><p className="text-sm text-amber-700">Days Paid: {selectedPayout.days_paid}/32</p><p className="text-sm text-amber-700">Amount: &#8358;{formatAmount(selectedPayout.total_amount)}</p><p className="text-sm text-amber-700">Net Payout: &#8358;{formatAmount(selectedPayout.net_payout)}</p><p className="text-sm text-amber-700">Requested by: {selectedPayout.staff_name}</p></div>
           <div className="flex gap-2"><Button onClick={onApprove} className="flex-1 bg-emerald-600 hover:bg-emerald-700"><CheckCircle2 className="w-4 h-4 mr-2" /> Approve</Button><Button variant="outline" onClick={onClose} className="flex-1">Cancel</Button></div>
         </div>
       </DialogContent>
@@ -1502,7 +1692,7 @@ function AmountChangeDialog({ isOpen, onClose, currentUser, members, settings, o
         <div className="space-y-4">
           {withinGracePeriod ? (
             <>
-              <div className="bg-emerald-50 p-4 rounded-lg"><p className="text-sm text-emerald-800">Current Amount: <strong>&#8358;{myMember?.daily_amount.toLocaleString()}</strong></p><p className="text-xs text-emerald-600 mt-1">Available until the {settings.allow_change_until_day}rd of this month</p></div>
+              <div className="bg-emerald-50 p-4 rounded-lg"><p className="text-sm text-emerald-800">Current Amount: <strong>&#8358;{formatAmount(myMember?.daily_amount)}</strong></p><p className="text-xs text-emerald-600 mt-1">Available until the {settings.allow_change_until_day}rd of this month</p></div>
               <div><Label>New Daily Amount (&#8358;)</Label><Input type="number" value={newAmount} onChange={(e) => setNewAmount(e.target.value)} placeholder="Enter new amount (min &#8358;500)" min="500" /></div>
               <Button onClick={handleSubmit} className="w-full bg-emerald-600 hover:bg-emerald-700">Save Change</Button>
             </>
@@ -1582,12 +1772,12 @@ function AddFundDialog({ isOpen, onClose, members, currentUser, settings, onSubm
             </div>
             <div className="bg-amber-50 p-3 rounded-lg"><p className="text-sm text-amber-800"><AlertCircle className="w-4 h-4 inline mr-1" />Add &#8358;{bankCharges} for bank charges to your contribution</p></div>
             <div><Label>Select Your Bank</Label><Select value={selectedBank} onValueChange={setSelectedBank}><SelectTrigger className="mt-1"><SelectValue placeholder="Select your bank" /></SelectTrigger><SelectContent>{settings.supported_banks.map(bank => (<SelectItem key={bank.id} value={bank.name}>{bank.name}</SelectItem>))}</SelectContent></Select></div>
-            <div><Label>Amount to Pay (&#8358;)</Label><div className="relative mt-1"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" /><Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="pl-10" placeholder={`e.g., ${dailyAmount + bankCharges}`} min={dailyAmount + bankCharges} /></div><p className="text-xs text-gray-500 mt-1">Daily amount: &#8358;{dailyAmount.toLocaleString()}</p></div>
+            <div><Label>Amount to Pay (&#8358;)</Label><div className="relative mt-1"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" /><Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="pl-10" placeholder={`e.g., ${dailyAmount + bankCharges}`} min={dailyAmount + bankCharges} /></div><p className="text-xs text-gray-500 mt-1">Daily amount: &#8358;{formatAmount(dailyAmount)}</p></div>
             {amount && parseInt(amount) > 0 && (
               <div className="bg-gray-50 p-3 rounded-lg space-y-1 text-sm">
-                <div className="flex justify-between"><span className="text-gray-600">Total Amount:</span><span className="font-medium">&#8358;{parseInt(amount || '0').toLocaleString()}</span></div>
-                <div className="flex justify-between text-amber-600"><span>Bank Charges:</span><span>-&#8358;{bankCharges.toLocaleString()}</span></div>
-                <div className="flex justify-between text-emerald-600 font-medium border-t pt-1"><span>Contribution:</span><span>&#8358;{contributionAmount.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span className="text-gray-600">Total Amount:</span><span className="font-medium">&#8358;{formatAmount(parseInt(amount || '0'))}</span></div>
+                <div className="flex justify-between text-amber-600"><span>Bank Charges:</span><span>-&#8358;{formatAmount(bankCharges)}</span></div>
+                <div className="flex justify-between text-emerald-600 font-medium border-t pt-1"><span>Contribution:</span><span>&#8358;{formatAmount(contributionAmount)}</span></div>
                 <div className="flex justify-between text-purple-600 font-medium"><span>Days to Cover:</span><span>{daysToCover} day{daysToCover !== 1 ? 's' : ''}</span></div>
               </div>
             )}
@@ -1631,7 +1821,7 @@ function TransferReviewDialog({ isOpen, onClose, transfer, settings, onReview }:
         <div className="space-y-4">
           <div className="bg-emerald-50 p-4 rounded-lg space-y-2 text-sm">
             <h4 className="font-semibold text-emerald-800">Transfer Details</h4>
-            <div className="grid grid-cols-2 gap-1"><span className="text-gray-600">Customer:</span><span className="font-medium">{transfer.member_name}</span><span className="text-gray-600">Bank:</span><span>{transfer.bank_name}</span><span className="text-gray-600">Amount Sent:</span><span className="font-medium">&#8358;{transfer.total_amount.toLocaleString()}</span><span className="text-gray-600">Bank Charges:</span><span>&#8358;{transfer.bank_charges.toLocaleString()}</span><span className="text-gray-600">Contribution:</span><span className="font-medium text-emerald-600">&#8358;{transfer.amount.toLocaleString()}</span><span className="text-gray-600">Days:</span><span className="font-medium text-purple-600">{transfer.days_to_cover}</span></div>
+            <div className="grid grid-cols-2 gap-1"><span className="text-gray-600">Customer:</span><span className="font-medium">{transfer.member_name}</span><span className="text-gray-600">Bank:</span><span>{transfer.bank_name}</span><span className="text-gray-600">Amount Sent:</span><span className="font-medium">&#8358;{formatAmount(transfer.total_amount)}</span><span className="text-gray-600">Bank Charges:</span><span>&#8358;{formatAmount(transfer.bank_charges)}</span><span className="text-gray-600">Contribution:</span><span className="font-medium text-emerald-600">&#8358;{formatAmount(transfer.amount)}</span><span className="text-gray-600">Days:</span><span className="font-medium text-purple-600">{transfer.days_to_cover}</span></div>
           </div>
 
           {transfer.receipt_image && (
@@ -1642,7 +1832,7 @@ function TransferReviewDialog({ isOpen, onClose, transfer, settings, onReview }:
             <h4 className="font-semibold">Receipt Validation</h4>
             <div className="flex items-center justify-between"><span className="text-gray-600">Name on Receipt:</span><div className="flex items-center gap-2"><span>{transfer.receipt_name}</span>{isNameMatch ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <XCircle className="w-4 h-4 text-red-500" />}</div></div>
             <div className="flex items-center justify-between"><span className="text-gray-600">Receipt Date:</span><div className="flex items-center gap-2"><span>{transfer.receipt_date}</span>{isDateValid ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <XCircle className="w-4 h-4 text-red-500" />}</div></div>
-            <div className="flex items-center justify-between"><span className="text-gray-600">Receipt Amount:</span><div className="flex items-center gap-2"><span>&#8358;{transfer.receipt_amount?.toLocaleString()}</span>{isAmountValid ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <XCircle className="w-4 h-4 text-red-500" />}</div></div>
+            <div className="flex items-center justify-between"><span className="text-gray-600">Receipt Amount:</span><div className="flex items-center gap-2"><span>&#8358;{formatAmount(transfer.receipt_amount)}</span>{isAmountValid ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <XCircle className="w-4 h-4 text-red-500" />}</div></div>
             <div className="flex items-center justify-between"><span className="text-gray-600">Account Name:</span><span>{settings.account_name}</span></div>
             <div className="flex items-center justify-between"><span className="text-gray-600">Account Number:</span><span>{settings.account_number}</span></div>
           </div>
