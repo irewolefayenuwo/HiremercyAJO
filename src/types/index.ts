@@ -46,6 +46,7 @@ export interface Member {
   phone: string;
   email?: string;
   address?: string;
+  next_of_kin?: string;
   daily_amount: number;
   start_date: string;
   status: 'Active' | 'Inactive';
@@ -57,6 +58,7 @@ export interface Member {
   password?: string;
   profile_image?: string;
   wallet_balance?: number;
+  last_amount_change_date?: string;
   tracking: DayTracking[];
 }
 
@@ -185,6 +187,9 @@ export interface AppSettings {
   allow_customers_change_amount: boolean;
   allow_change_until_day: number;
   allow_change_after_grace_period: boolean;
+  minimum_contribution_amount: number;
+  maximum_contribution_amount: number;
+  default_contribution_amount: number;
   bank_name: string;
   account_number: string;
   account_name: string;
@@ -193,6 +198,24 @@ export interface AppSettings {
   last_collection_reset_date: string;
   yesterday_collection_record: number;
   yesterday_customers_paid: number;
+}
+
+export interface WithdrawalRequest {
+  id: string;
+  member_id: string;
+  member_name: string;
+  branch_id: string;
+  branch_name: string;
+  amount: number;
+  bank_name: string;
+  account_number: string;
+  account_holder_name: string;
+  note?: string;
+  status: 'Pending' | 'Approved' | 'Rejected';
+  requested_at: string;
+  reviewed_by?: string;
+  reviewed_at?: string;
+  rejected_reason?: string;
 }
 
 export interface NigerianBank {
