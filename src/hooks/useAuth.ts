@@ -1,5 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { 
+  signInUser, 
+  signUpUser, 
+  signOutUser, 
+  getCurrentUser, 
+  getUserProfile,
+  onAuthStateChange 
+} from '@/lib/authService';
 import type { User } from '@/types';
 import type { Session } from '@supabase/supabase-js';
 
@@ -58,7 +65,6 @@ export function useAuth() {
         id: data.id,
         name: data.name || '',
         email: data.email || '',
-        password: data.password || '',
         phone: data.phone || undefined,
         role: (data.role as 'Admin' | 'Staff' | 'Customer') || 'Customer',
         branch_id: data.branch_id || undefined,
@@ -159,23 +165,27 @@ export function useAuth() {
         if (!profile) {
           return { success: false, error: 'Profile not found. Please contact support.' };
         }
+
         if (!profile.is_active) {
-          await supabase.auth.signOut();
+          await signOutUser();
           return { success: false, error: 'Your account has been deactivated. Please contact admin.' };
         }
+
+        saveProfileCache(profile);
         setState({
-          session: data.session,
+          session: result.user as any,
           user: profile,
           isLoading: false,
           isAuthenticated: true,
           isAdmin: profile.role === 'Admin',
         });
+
         return { success: true };
       }
 
       return { success: false, error: 'Login failed. Please try again.' };
-    } catch (err: unknown) {
-      return { success: false, error: err instanceof Error? err.message: "An unexpected error occurred." };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'An unexpected error occurred.' };
     }
   }, [fetchProfile]);
 
@@ -212,55 +222,49 @@ export function useAuth() {
           .update({
             name: formData.name,
             phone: formData.phone,
+            email: formData.email,
             role: 'Admin',
-          })
-          .eq('id', data.user.id);
+            is_active: true,
+            created_at: new Date().toISOString(),
+          }
+        );
 
-        if (updateError) {
-          console.error('Error updating admin profile:', updateError);
+        if (!result.user) {
+          return { success: false, error: 'Registration failed' };
         }
 
+        // Auto sign in after registration
         return await signIn(formData.email, formData.password);
       }
 
       return { success: false, error: 'Registration failed. Please try again.' };
-    } catch (err: unknown) {
-      return { success: false, error: err instanceof Error? err.message: "An unexpected error occurred." };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'An unexpected error occurred.' };
     }
   }, [checkAdminExists, signIn]);
 
-  const signUpCustomer = useCallback(async (formData: {
-    name: string;
-    email: string;
-    phone: string;
-    password: string;
-    address: string;
-    branch_id: string;
-    daily_amount: number;
-  }): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const { data: existingUsers } = await supabase
-        .from('profiles')
-        .select('email')
-        .eq('email', formData.email.trim().toLowerCase())
-        .maybeSingle();
-
-      if (existingUsers) {
-        return { success: false, error: 'An account with this email already exists.' };
-      }
-
-      const { data: branch } = await supabase
-        .from('branches')
-        .select('name')
-        .eq('id', formData.branch_id)
-        .single();
-
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: formData.email.trim().toLowerCase(),
-        password: formData.password,
-        options: {
-          data: {
+  /**
+   * Sign up a new customer account
+   */
+  const signUpCustomer = useCallback(
+    async (formData: {
+      name: string;
+      email: string;
+      phone: string;
+      password: string;
+      address: string;
+      branch_id: string;
+      branch_name: string;
+      daily_amount: number;
+    }): Promise<{ success: boolean; error?: string }> => {
+      try {
+        const result = await signUpUser(
+          formData.email,
+          formData.password,
+          {
             name: formData.name,
+            email: formData.email,
+            phone: formData.phone,
             role: 'Customer',
           },
         },
@@ -318,13 +322,16 @@ export function useAuth() {
       await supabase.from('day_tracking').insert(dayTrackingData);
 
       return await signIn(formData.email, formData.password);
-    } catch (err: unknown) {
-      return { success: false, error: err instanceof Error? err.message: "An unexpected error occurred." };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'An unexpected error occurred.' };
     }
   }, [signIn]);
 
+  /**
+   * Sign out the current user
+   */
   const signOut = useCallback(async (): Promise<void> => {
-    await supabase.auth.signOut();
+    await signOutUser();
     saveProfileCache(null);
     setState({
       session: null,
@@ -335,9 +342,78 @@ export function useAuth() {
     });
   }, []);
 
+  /**
+   * Initialize auth state on mount and listen for changes
+   */
+  useEffect(() => {
+    let mounted = true;
+
+    const initializeAuth = async () => {
+      try {
+        const currentUser = await getCurrentUser();
+        if (!mounted) return;
+
+        if (currentUser) {
+          const profile = await getUserProfile(currentUser.id);
+          setState({
+            session: currentUser as any,
+            user: profile,
+            isLoading: false,
+            isAuthenticated: !!profile,
+            isAdmin: profile?.role === 'Admin' || false,
+          });
+          if (profile) {
+            saveProfileCache(profile);
+          }
+        } else {
+          setState((prev) => ({ ...prev, isLoading: false, isAuthenticated: false }));
+        }
+      } catch (error) {
+        console.error('Error initializing auth:', error);
+        if (mounted) {
+          setState((prev) => ({ ...prev, isLoading: false }));
+        }
+      }
+    };
+
+    initializeAuth();
+
+    // Subscribe to auth state changes
+    const subscription = onAuthStateChange(async (user) => {
+      if (!mounted) return;
+
+      if (user) {
+        const profile = await getUserProfile(user.id);
+        setState({
+          session: user as any,
+          user: profile,
+          isLoading: false,
+          isAuthenticated: !!profile,
+          isAdmin: profile?.role === 'Admin' || false,
+        });
+        if (profile) {
+          saveProfileCache(profile);
+        }
+      } else {
+        saveProfileCache(null);
+        setState({
+          session: null,
+          user: null,
+          isLoading: false,
+          isAuthenticated: false,
+          isAdmin: false,
+        });
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription?.unsubscribe();
+    };
+  }, []);
+
   return {
     ...state,
-    checkAdminExists,
     signIn,
     signUpAdmin,
     signUpCustomer,
