@@ -58,6 +58,7 @@ export function useAuth() {
         id: data.id,
         name: data.name || '',
         email: data.email || '',
+        password: data.password || '',
         phone: data.phone || undefined,
         role: (data.role as 'Admin' | 'Staff' | 'Customer') || 'Customer',
         branch_id: data.branch_id || undefined,
@@ -173,8 +174,8 @@ export function useAuth() {
       }
 
       return { success: false, error: 'Login failed. Please try again.' };
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'An unexpected error occurred.' };
+    } catch (err: unknown) {
+      return { success: false, error: err instanceof Error? err.message: "An unexpected error occurred." };
     }
   }, [fetchProfile]);
 
@@ -223,8 +224,8 @@ export function useAuth() {
       }
 
       return { success: false, error: 'Registration failed. Please try again.' };
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'An unexpected error occurred.' };
+    } catch (err: unknown) {
+      return { success: false, error: err instanceof Error? err.message: "An unexpected error occurred." };
     }
   }, [checkAdminExists, signIn]);
 
@@ -317,8 +318,8 @@ export function useAuth() {
       await supabase.from('day_tracking').insert(dayTrackingData);
 
       return await signIn(formData.email, formData.password);
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'An unexpected error occurred.' };
+    } catch (err: unknown) {
+      return { success: false, error: err instanceof Error? err.message: "An unexpected error occurred." };
     }
   }, [signIn]);
 
