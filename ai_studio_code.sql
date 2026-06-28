@@ -1,0 +1,1 @@
+COALESCE(new.raw_user_meta_data->>'role', 'Customer')
