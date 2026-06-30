@@ -19,6 +19,8 @@ export interface Profile {
   daily_amount: number;
   is_active: boolean;
   created_at?: string;
+  last_amount_change_at?: string;
+  allow_anytime_change?: boolean;
 }
 
 export interface Branch {
@@ -40,6 +42,7 @@ export interface Transaction {
   start_day: number;
   end_day: number;
   branch_id?: string;
+  status?: 'Pending' | 'Successful';
 }
 
 export interface MarkedDay {
@@ -53,6 +56,9 @@ export interface SupportSettings {
   support_phone: string;
   support_whatsapp: string;
   support_email: string;
+  admin_bank_name?: string;
+  admin_account_number?: string;
+  admin_account_name?: string;
 }
 
 export interface Notification {
@@ -473,7 +479,7 @@ function Grid32({ trackingDays, dailyAmount }: { trackingDays: MarkedDay[], dail
       </div>
 
       <div className="pt-2 border-t border-emerald-50">
-        <div className="flex justify-between items-center text-xs font-bold text-slate-505 mb-1">
+        <div className="flex justify-between items-center text-xs font-bold text-slate-555 mb-1">
           <span>Completion Rate</span>
           <span className="text-emerald-800">{Math.round((trackingDays.length / daysTotal) * 100)}%</span>
         </div>
@@ -533,10 +539,10 @@ function SupportWidget({ details }: { details: SupportSettings }) {
 
 function AdminDashboard({ 
   profiles, branches, transactions, markedDays, supportDetails, payoutRequests, onApprovePayout, onCreateBranch, onUpdateBranch, onDeleteBranch, onCreateStaff, onUpdateStaff, onDeleteStaff, onRegisterCustomer,
-  onDeleteTransaction, onAddTransaction, onUpdateSupport, onDeleteCustomer, onUpdateCustomer, onToggleCustomerActive, onTriggerManualPayout
+  onDeleteTransaction, onAddTransaction, onUpdateSupport, onDeleteCustomer, onUpdateCustomer, onToggleCustomerActive, onTriggerManualPayout, onApproveTransaction
 }: { 
-  profiles: Profile[], branches: Branch[], transactions: Transaction[], markedDays: Record<string, MarkedDay[]>, supportDetails: SupportSettings, payoutRequests: PayoutRequest[], onDeleteTransaction: (id: string) => void, onAddTransaction: (cId: string, amt: number, method: any, sId: string) => void, onUpdateSupport: (phone: string, whatsapp: string, email: string) => void, onApprovePayout: (reqId: string) => void, onCreateBranch: (name: string, address: string) => void, onUpdateBranch: (id: string, name: string, address: string) => void, onDeleteBranch: (id: string) => void, onCreateStaff: (name: string, phone: string, email: string, branchId: string, password: string) => void, onUpdateStaff: (id: string, name: string, phone: string, email: string, branchId: string) => void, onDeleteStaff: (id: string) => void, onRegisterCustomer: (data: any) => void,
-  onDeleteCustomer: (id: string) => void, onUpdateCustomer: (id: string, name: string, phone: string, email: string, dailyAmount: number, branchId: string) => void, onToggleCustomerActive: (id: string, is_active: boolean) => void, onTriggerManualPayout: (customerId: string, bank: string, acctNum: string, acctName: string) => void
+  profiles: Profile[], branches: Branch[], transactions: Transaction[], markedDays: Record<string, MarkedDay[]>, supportDetails: SupportSettings, payoutRequests: PayoutRequest[], onDeleteTransaction: (id: string) => void, onAddTransaction: (cId: string, amt: number, method: any, sId: string) => void, onUpdateSupport: (phone: string, whatsapp: string, email: string, bankName: string, acctNum: string, acctName: string) => void, onApprovePayout: (reqId: string) => void, onCreateBranch: (name: string, address: string) => void, onUpdateBranch: (id: string, name: string, address: string) => void, onDeleteBranch: (id: string) => void, onCreateStaff: (name: string, phone: string, email: string, branchId: string, password: string) => void, onUpdateStaff: (id: string, name: string, phone: string, email: string, branchId: string) => void, onDeleteStaff: (id: string) => void, onRegisterCustomer: (data: any) => void,
+  onDeleteCustomer: (id: string) => void, onUpdateCustomer: (id: string, name: string, phone: string, email: string, dailyAmount: number, branchId: string, allowAnytimeChange: boolean) => void, onToggleCustomerActive: (id: string, is_active: boolean) => void, onTriggerManualPayout: (customerId: string, bank: string, acctNum: string, acctName: string) => void, onApproveTransaction: (id: string) => void
 }) {
   const [activeTab, setActiveTab] = useState<'overview' | 'customers' | 'branches' | 'staff' | 'payouts' | 'records' | 'transactions' | 'settings'>('overview');
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
@@ -585,11 +591,17 @@ function AdminDashboard({
   const [supportPhone, setSupportPhone] = useState(supportDetails.support_phone);
   const [supportWhatsapp, setSupportWhatsapp] = useState(supportDetails.support_whatsapp);
   const [supportEmail, setSupportEmail] = useState(supportDetails.support_email);
+  const [adminBankName, setAdminBankName] = useState(supportDetails.admin_bank_name || 'Access Bank');
+  const [adminAccountNumber, setAdminAccountNumber] = useState(supportDetails.admin_account_number || '0123456789');
+  const [adminAccountName, setAdminAccountName] = useState(supportDetails.admin_account_name || 'HireMercy Thrift Enterprises');
 
   useEffect(() => {
     setSupportPhone(supportDetails.support_phone);
     setSupportWhatsapp(supportDetails.support_whatsapp);
     setSupportEmail(supportDetails.support_email);
+    setAdminBankName(supportDetails.admin_bank_name || 'Access Bank');
+    setAdminAccountNumber(supportDetails.admin_account_number || '0123456789');
+    setAdminAccountName(supportDetails.admin_account_name || 'HireMercy Thrift Enterprises');
   }, [supportDetails]);
 
   const customers = profiles.filter(p => p.role === 'Customer');
@@ -693,7 +705,7 @@ function AdminDashboard({
 
   const handleSupportSave = (e: React.FormEvent) => {
     e.preventDefault();
-    onUpdateSupport(supportPhone, supportWhatsapp, supportEmail);
+    onUpdateSupport(supportPhone, supportWhatsapp, supportEmail, adminBankName, adminAccountNumber, adminAccountName);
   };
 
   const handleAddBranch = (e: React.FormEvent) => {
@@ -756,7 +768,8 @@ function AdminDashboard({
       editingCustomer.phone,
       editingCustomer.email || '',
       editingCustomer.daily_amount,
-      editingCustomer.branch_id || ''
+      editingCustomer.branch_id || '',
+      editingCustomer.allow_anytime_change || false
     );
     setEditingCustomer(null);
   };
@@ -785,6 +798,14 @@ function AdminDashboard({
       target
     };
   }, [manualPayoutCustomerId, markedDays, customers]);
+
+  const pendingTransactions = useMemo(() => {
+    return transactions.filter(t => t.status === 'Pending');
+  }, [transactions]);
+
+  const successfulTransactions = useMemo(() => {
+    return transactions.filter(t => t.status === 'Successful');
+  }, [transactions]);
 
   return (
     <div className="space-y-6">
@@ -908,7 +929,7 @@ function AdminDashboard({
                 <div className="grid grid-cols-3 gap-2">
                   {Object.keys(monthlyDrilldownData.methodTotals).map(method => (
                     <div key={method} className="p-3 bg-amber-50/50 border border-amber-100 rounded-xl text-center">
-                      <p className="text-[10px] text-slate-505 font-bold">{method}</p>
+                      <p className="text-[10px] text-slate-555 font-bold">{method}</p>
                       <p className="font-black text-slate-900 mt-1">₦{monthlyDrilldownData.methodTotals[method].toLocaleString()}</p>
                     </div>
                   ))}
@@ -917,7 +938,7 @@ function AdminDashboard({
             </div>
 
             <div className="border-t border-emerald-50 pt-4 flex justify-between items-center">
-              <span className="text-xs text-slate-505 font-bold">Total Collection Current Month:</span>
+              <span className="text-xs text-slate-555 font-bold">Total Collection Current Month:</span>
               <span className="text-lg font-black text-emerald-800">₦{stats.monthlyCollection.toLocaleString()}</span>
             </div>
           </div>
@@ -1037,25 +1058,46 @@ function AdminDashboard({
           </div>
 
           <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm lg:col-span-2 space-y-4">
-            <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider">Dynamic 32-Day Saver Previews</h3>
-            <div className="space-y-6 max-h-[500px] overflow-y-auto pr-2">
-              {customers.map(cust => (
-                <div key={cust.id} className="p-4 bg-emerald-50/20 border border-emerald-100 rounded-2xl space-y-3">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <h4 className="font-bold text-emerald-955">{cust.name}</h4>
-                      <p className="text-[10px] text-slate-505">Contact: {cust.phone} | Pace: ₦{cust.daily_amount.toLocaleString()}/day</p>
+            <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider">Dynamic 32-Day Saver Preview</h3>
+            
+            {selectedCustomerId ? (
+              (() => {
+                const cust = customers.find(c => c.id === selectedCustomerId);
+                if (!cust) return <p className="text-xs text-slate-400">Select a customer to view their tracking grid.</p>;
+                return (
+                  <div className="p-6 bg-emerald-50/20 border-2 border-emerald-200 rounded-2xl space-y-4 animate-fade-in">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <h4 className="font-bold text-emerald-955 text-base">{cust.name}</h4>
+                        <p className="text-[11px] text-slate-550">Contact: {cust.phone} | Target Plan: ₦{cust.daily_amount.toLocaleString()}/day</p>
+                      </div>
+                      <div>
+                        <span className="text-xs bg-amber-500 text-emerald-955 font-black px-3 py-1 rounded-full uppercase tracking-wider">
+                          {(markedDays[cust.id] || []).length} / 32 Days Marked
+                        </span>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <span className="text-[10px] bg-amber-500 text-emerald-955 font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                        {(markedDays[cust.id] || []).length} / 32 Days Marked
-                      </span>
-                    </div>
+                    <Grid32 trackingDays={markedDays[cust.id] || []} dailyAmount={cust.daily_amount} />
                   </div>
-                  <Grid32 trackingDays={markedDays[cust.id] || []} dailyAmount={cust.daily_amount} />
+                );
+              })()
+            ) : (
+              <div className="text-center py-12 bg-emerald-50/10 border border-dashed border-emerald-200 rounded-2xl">
+                <p className="text-xs text-slate-400 px-4">Please select a customer in the dropdown or click one below to preview their 32-day tracking grid:</p>
+                <div className="mt-4 flex flex-wrap gap-2 justify-center max-h-40 overflow-y-auto p-2">
+                  {customers.map(c => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setSelectedCustomerId(c.id)}
+                      className="px-3 py-1.5 bg-white hover:bg-emerald-50 text-emerald-900 border border-emerald-100 rounded-xl text-xs font-bold transition shadow-sm"
+                    >
+                      {c.name}
+                    </button>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1311,6 +1353,18 @@ function AdminDashboard({
                     <option key={b.id} value={b.id}>{b.name}</option>
                   ))}
                 </select>
+              </div>
+              <div className="flex items-center gap-2 py-2">
+                <input 
+                  type="checkbox"
+                  id="allowAnytime"
+                  checked={editingCustomer.allow_anytime_change || false}
+                  onChange={(e) => setEditingCustomer({ ...editingCustomer, allow_anytime_change: e.target.checked })}
+                  className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-505 border-emerald-300"
+                />
+                <label htmlFor="allowAnytime" className="text-xs font-bold text-emerald-900 select-none">
+                  Grant Client Permission to Change Amount Anytime
+                </label>
               </div>
             </div>
 
@@ -1820,50 +1874,116 @@ function AdminDashboard({
         </div>
       )}
 
+      {/* Transaction tab with approvals queue */}
       {activeTab === 'transactions' && (
-        <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
-          <h3 className="text-md font-black text-emerald-955 mb-2 uppercase tracking-wider">Transactional Ledger</h3>
-          <p className="text-xs text-slate-505 mb-4">Deleting a log reverses status allocation, automatically unmarking days on the tracking table [Cascade Delete].</p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-emerald-50/50 text-emerald-900 font-extrabold border-b border-emerald-200">
-                  <th className="p-3">Transaction Date</th>
-                  <th className="p-3">Customer</th>
-                  <th className="p-3">Payment Method</th>
-                  <th className="p-3">Posted Amount</th>
-                  <th className="p-3">Auto-split metrics</th>
-                  <th className="p-3 text-right">Reverse</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-emerald-50">
-                {transactions.map(tx => (
-                  <tr key={tx.id} className="hover:bg-emerald-50/20 transition">
-                    <td className="p-3 text-slate-505">{tx.date}</td>
-                    <td className="p-3 font-bold text-slate-800">
-                      {profiles.find(p => p.id === tx.customer_id)?.name || tx.customer_name || 'System User'}
-                    </td>
-                    <td className="p-3 font-medium text-slate-600">{tx.payment_method}</td>
-                    <td className="p-3 font-bold text-emerald-800">₦{tx.amount.toLocaleString()}</td>
-                    <td className="p-3">
-                      <span className="bg-amber-100 text-amber-955 font-black px-2.5 py-0.5 rounded">
-                        Days {tx.start_day} - {tx.end_day} ({tx.days_covered} days marked)
-                      </span>
-                    </td>
-                    <td className="p-3 text-right">
-                      <button 
-                        type="button"
-                        onClick={() => onDeleteTransaction(tx.id)}
-                        className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition duration-150"
-                        title="Delete and reverse auto-split"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
+        <div className="space-y-6">
+          {/* Pending Deposits Queue */}
+          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm animate-fade-in">
+            <h3 className="text-md font-black text-amber-800 mb-2 uppercase tracking-wider flex items-center gap-1.5">
+              <Clock className="w-5 h-5" />
+              Pending Contributions Approval Queue ({pendingTransactions.length})
+            </h3>
+            <p className="text-xs text-slate-505 mb-4">Customers submitted these manual deposits. Click Approve to split metrics and mark their tracking cards.</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-amber-50/50 text-amber-900 font-extrabold border-b border-amber-200">
+                    <th className="p-3">Submission Date</th>
+                    <th className="p-3">Customer Name</th>
+                    <th className="p-3">Channel</th>
+                    <th className="p-3">Submitted Amount</th>
+                    <th className="p-3 text-right">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-amber-100 bg-amber-50/10">
+                  {pendingTransactions.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="p-4 text-center text-slate-400">No pending submissions awaiting approval.</td>
+                    </tr>
+                  ) : (
+                    pendingTransactions.map(tx => (
+                      <tr key={tx.id} className="hover:bg-amber-50/30 transition">
+                        <td className="p-3 text-slate-505">{tx.date}</td>
+                        <td className="p-3 font-bold text-slate-800">
+                          {profiles.find(p => p.id === tx.customer_id)?.name || tx.customer_name || 'System User'}
+                        </td>
+                        <td className="p-3 font-medium text-slate-600">{tx.payment_method}</td>
+                        <td className="p-3 font-black text-emerald-800">₦{tx.amount.toLocaleString()}</td>
+                        <td className="p-3 text-right flex justify-end gap-1.5">
+                          <button 
+                            type="button"
+                            onClick={() => onApproveTransaction(tx.id)}
+                            className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-1 px-3 rounded-lg transition text-[10px]"
+                          >
+                            Approve & Confirm
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => onDeleteTransaction(tx.id)}
+                            className="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded-lg transition text-[10px]"
+                          >
+                            Decline
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Ledger of completed transactions */}
+          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
+            <h3 className="text-md font-black text-emerald-955 mb-2 uppercase tracking-wider">Completed Transaction Ledger</h3>
+            <p className="text-xs text-slate-505 mb-4">Deleting a confirmed log reverses split allocations, unmarking days directly on tracking grids.</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-emerald-50/50 text-emerald-900 font-extrabold border-b border-emerald-200">
+                    <th className="p-3">Transaction Date</th>
+                    <th className="p-3">Customer</th>
+                    <th className="p-3">Payment Method</th>
+                    <th className="p-3">Posted Amount</th>
+                    <th className="p-3">Auto-split metrics</th>
+                    <th className="p-3 text-right">Reverse</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-emerald-50">
+                  {successfulTransactions.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="p-4 text-center text-slate-400">No completed contributions posted yet.</td>
+                    </tr>
+                  ) : (
+                    successfulTransactions.map(tx => (
+                      <tr key={tx.id} className="hover:bg-emerald-50/20 transition">
+                        <td className="p-3 text-slate-505">{tx.date}</td>
+                        <td className="p-3 font-bold text-slate-800">
+                          {profiles.find(p => p.id === tx.customer_id)?.name || tx.customer_name || 'System User'}
+                        </td>
+                        <td className="p-3 font-medium text-slate-600">{tx.payment_method}</td>
+                        <td className="p-3 font-bold text-emerald-800">₦{tx.amount.toLocaleString()}</td>
+                        <td className="p-3">
+                          <span className="bg-amber-100 text-amber-955 font-black px-2.5 py-0.5 rounded">
+                            Days {tx.start_day} - {tx.end_day} ({tx.days_covered} days marked)
+                          </span>
+                        </td>
+                        <td className="p-3 text-right">
+                          <button 
+                            type="button"
+                            onClick={() => onDeleteTransaction(tx.id)}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition duration-150"
+                            title="Delete and reverse auto-split"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -1875,7 +1995,7 @@ function AdminDashboard({
               <Settings className="w-5 h-5 text-emerald-700" />
               Support Settings Control Panel
             </h3>
-            <p className="text-xs text-slate-505 mb-4">Edit the direct support shortcuts displayed to customers and staff members.</p>
+            <p className="text-xs text-slate-505 mb-4">Edit the support shortcuts and banking details displayed to customers.</p>
             
             <form onSubmit={handleSupportSave} className="space-y-4">
               <div>
@@ -1914,11 +2034,50 @@ function AdminDashboard({
                 />
               </div>
 
+              <div className="border-t border-emerald-100 pt-4 space-y-4">
+                <h4 className="text-xs font-black text-emerald-955 uppercase tracking-wider">Company Bank Account Settings (For Deposits)</h4>
+                <div>
+                  <label className="block text-xs font-bold text-emerald-800 mb-1">Bank Name</label>
+                  <select
+                    value={adminBankName}
+                    onChange={(e) => setAdminBankName(e.target.value)}
+                    className="w-full px-3 py-2 border border-emerald-200 rounded-xl bg-white text-xs"
+                  >
+                    {nigerianBanks.map(b => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-emerald-800 mb-1">Account Number</label>
+                  <input 
+                    type="text" 
+                    required
+                    placeholder="10-digit number"
+                    maxLength={10}
+                    value={adminAccountNumber}
+                    onChange={(e) => setAdminAccountNumber(e.target.value.replace(/\D/g, ''))}
+                    className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-emerald-800 mb-1">Account Name</label>
+                  <input 
+                    type="text" 
+                    required
+                    placeholder="e.g. HireMercy Ajo Enterprise"
+                    value={adminAccountName}
+                    onChange={(e) => setAdminAccountName(e.target.value)}
+                    className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-sm"
+                  />
+                </div>
+              </div>
+
               <button 
                 type="submit" 
                 className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl transition duration-150 text-sm shadow-md"
               >
-                Save Changes
+                Save Settings & Bank Details
               </button>
             </form>
           </div>
@@ -1931,7 +2090,7 @@ function AdminDashboard({
               </h3>
               <p className="text-xs text-slate-505 mb-6">This is how your clients see their support widget.</p>
               
-              <div className="p-4 bg-emerald-50/30 rounded-2xl border border-emerald-100 space-y-3">
+              <div className="p-4 bg-emerald-50/30 rounded-2xl border border-emerald-100 space-y-3 mb-6">
                 <div className="flex items-center gap-2.5 text-xs text-slate-700">
                   <Phone className="w-4 h-4 text-emerald-600" />
                   <span>Call: <strong className="text-slate-900">{supportPhone}</strong></span>
@@ -1944,6 +2103,13 @@ function AdminDashboard({
                   <Mail className="w-4 h-4 text-emerald-600" />
                   <span>Email: <strong className="text-slate-900">{supportEmail}</strong></span>
                 </div>
+              </div>
+
+              <h4 className="text-xs font-black text-emerald-955 uppercase tracking-wider mb-2">Customer Deposit Banking coordinates preview:</h4>
+              <div className="p-4 bg-amber-50/30 border border-amber-200 rounded-2xl space-y-1.5 text-xs text-slate-800">
+                <p>Bank: <strong className="text-slate-900">{adminBankName}</strong></p>
+                <p>Account Number: <strong className="text-slate-900">{adminAccountNumber}</strong></p>
+                <p>Account Name: <strong className="text-slate-900">{adminAccountName}</strong></p>
               </div>
             </div>
 
@@ -2159,10 +2325,13 @@ function StaffDashboard({
 // =========================================================================
 
 function CustomerDashboard({ 
-  customer, transactions, markedDays, supportDetails, onAddPayoutRequest, payoutRequests
+  customer, transactions, markedDays, supportDetails, onAddPayoutRequest, payoutRequests, onAddCustomerPendingTransaction, onUpdateCustomerSettings
 }: { 
-  customer: Profile, transactions: Transaction[], markedDays: MarkedDay[], supportDetails: SupportSettings, payoutRequests: PayoutRequest[], onAddPayoutRequest: (bank: string, acctNum: string, acctName: string) => void
+  customer: Profile, transactions: Transaction[], markedDays: MarkedDay[], supportDetails: SupportSettings, payoutRequests: PayoutRequest[], onAddPayoutRequest: (bank: string, acctNum: string, acctName: string) => void,
+  onAddCustomerPendingTransaction: (amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => void, onUpdateCustomerSettings: (phone: string, dailyAmount: number) => void
 }) {
+  const [customerTab, setCustomerTab] = useState<'tracker' | 'transactions' | 'deposit' | 'settings'>('tracker');
+
   const myTransactions = transactions.filter(t => t.customer_id === customer.id);
   const totalSaved = markedDays.reduce((sum, item) => sum + item.amount, 0);
 
@@ -2171,6 +2340,14 @@ function CustomerDashboard({
   const [bankName, setBankName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [accountName, setAccountName] = useState('');
+
+  // Add Funds form states
+  const [depositAmountInput, setDepositAmountInput] = useState('');
+  const [depositPaymentMethod, setDepositPaymentMethod] = useState<'Cash' | 'Bank Transfer' | 'Mobile Money'>('Bank Transfer');
+
+  // Personal Settings states
+  const [custSettingsPhone, setCustSettingsPhone] = useState(customer.phone);
+  const [custSettingsDailyAmount, setCustSettingsDailyAmount] = useState(customer.daily_amount);
 
   const payoutHistory = useMemo(() => {
     return payoutRequests.filter(p => p.customer_id === customer.id);
@@ -2181,6 +2358,14 @@ function CustomerDashboard({
     if (totalDays <= 1) return 0;
     return (totalDays - 1) * customer.daily_amount; // Deducts exactly 1-day profit fee [3]
   }, [markedDays, customer.daily_amount]);
+
+  const canChangeAmount = useMemo(() => {
+    if (customer.allow_anytime_change) return true;
+    if (!customer.last_amount_change_at) return true;
+    const lastChange = new Date(customer.last_amount_change_at);
+    const now = new Date();
+    return !(lastChange.getMonth() === now.getMonth() && lastChange.getFullYear() === now.getFullYear());
+  }, [customer]);
 
   const handleWithdrawSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -2196,145 +2381,351 @@ function CustomerDashboard({
     setShowWithdrawModal(false);
   };
 
+  const handleAddFundsSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const amt = Number(depositAmountInput);
+    if (!depositAmountInput || isNaN(amt) || amt <= 0) return;
+    onAddCustomerPendingTransaction(amt, depositPaymentMethod);
+    setDepositAmountInput('');
+  };
+
+  const handleSettingsSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onUpdateCustomerSettings(custSettingsPhone, Number(custSettingsDailyAmount));
+  };
+
   return (
     <div className="space-y-6">
+      {/* Dynamic Header */}
       <div className="bg-gradient-to-r from-emerald-800 via-emerald-700 to-emerald-955 text-white p-6 sm:p-8 rounded-3xl border-b-4 border-amber-505 shadow-lg relative overflow-hidden">
         <div className="absolute top-0 right-0 w-32 h-32 bg-amber-505 opacity-10 rounded-full transform translate-x-12 -translate-y-12"></div>
-        <div className="relative z-10 space-y-2">
-          <span className="bg-amber-505 text-emerald-955 text-[10px] font-black uppercase px-2.5 py-1 rounded-full tracking-widest">
-            Personal Saver Deck
-          </span>
-          <h2 className="text-2xl sm:text-3xl font-black">Welcome, {customer.name}!</h2>
-          <p className="text-emerald-100 text-xs max-w-xl">
-            Watch your contribution metrics climb across your continuous 32-day savings campaign.
-          </p>
+        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="space-y-2">
+            <span className="bg-amber-505 text-emerald-955 text-[10px] font-black uppercase px-2.5 py-1 rounded-full tracking-widest">
+              Personal Saver Deck
+            </span>
+            <h2 className="text-2xl sm:text-3xl font-black">Welcome, {customer.name}!</h2>
+            <p className="text-emerald-100 text-xs max-w-xl">
+              Watch your contribution metrics climb across your continuous 32-day savings campaign.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(['tracker', 'transactions', 'deposit', 'settings'] as const).map(tab => (
+              <button
+                key={tab}
+                onClick={() => setCustomerTab(tab)}
+                className={`px-4 py-2 rounded-xl text-xs font-black tracking-wide uppercase transition ${
+                  customerTab === tab 
+                    ? 'bg-amber-505 text-emerald-955 shadow-md' 
+                    : 'bg-emerald-900/60 text-emerald-100 hover:bg-emerald-900'
+                }`}
+              >
+                {tab === 'tracker' && 'My Tracker'}
+                {tab === 'transactions' && 'Statement History'}
+                {tab === 'deposit' && 'Deposit Funds'}
+                {tab === 'settings' && 'Plan Settings'}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="space-y-6 lg:col-span-1">
-          {/* Contribution values card */}
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4">
-            <div>
-              <p className="text-[10px] text-slate-505 uppercase font-black tracking-wider">Total Cycle Contributions</p>
-              <p className="text-3xl font-black text-emerald-800 mt-1">₦{totalSaved.toLocaleString()}</p>
-            </div>
-            
-            <div className="pt-4 border-t border-emerald-50 flex justify-between text-xs">
+      {customerTab === 'tracker' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="space-y-6 lg:col-span-1">
+            {/* Balance Card */}
+            <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4">
               <div>
-                <span className="text-slate-400 block">Daily Target Plan</span>
-                <span className="font-bold text-slate-800">₦{customer.daily_amount.toLocaleString()} / Day</span>
+                <p className="text-[10px] text-slate-555 uppercase font-black tracking-wider">Total Cycle Contributions</p>
+                <p className="text-3xl font-black text-emerald-800 mt-1">₦{totalSaved.toLocaleString()}</p>
               </div>
-              <div className="text-right">
-                <span className="text-slate-400 block">Current Cycle</span>
-                <span className="font-bold text-amber-600">32-Day Thrift</span>
+              
+              <div className="pt-4 border-t border-emerald-50 flex justify-between text-xs">
+                <div>
+                  <span className="text-slate-400 block">Daily Target Plan</span>
+                  <span className="font-bold text-slate-800">₦{customer.daily_amount.toLocaleString()} / Day</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-slate-400 block">Current Cycle</span>
+                  <span className="font-bold text-amber-600">32-Day Thrift</span>
+                </div>
               </div>
-            </div>
 
-            {/* Payout request button [3] */}
-            {totalSaved > 0 ? (
-              <button 
-                type="button"
-                onClick={() => setShowWithdrawModal(true)}
-                className="w-full bg-amber-505 hover:bg-amber-606 text-emerald-955 font-black py-2.5 rounded-xl text-xs transition duration-150 shadow-md flex items-center justify-center gap-1.5"
-              >
-                <Coins className="w-4 h-4" />
-                Request Payout / Withdrawal
-              </button>
-            ) : (
-              <p className="text-[10px] text-center text-slate-400 font-semibold bg-slate-50 p-2 rounded-xl">
-                Complete first contribution to unlock payouts.
-              </p>
-            )}
-          </div>
-
-          {/* Quick statement details */}
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
-            <h3 className="text-xs font-black text-emerald-955 mb-3 uppercase tracking-wider">Statement Details</h3>
-            <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1">
-              {myTransactions.length === 0 ? (
-                <p className="text-xs text-slate-400 text-center py-4">No deposits processed yet.</p>
+              {totalSaved > 0 ? (
+                <button 
+                  type="button"
+                  onClick={() => setShowWithdrawModal(true)}
+                  className="w-full bg-amber-505 hover:bg-amber-606 text-emerald-955 font-black py-2.5 rounded-xl text-xs transition duration-150 shadow-md flex items-center justify-center gap-1.5"
+                >
+                  <Coins className="w-4 h-4" />
+                  Request Payout / Withdrawal
+                </button>
               ) : (
-                myTransactions.map(t => (
-                  <div key={t.id} className="p-3 bg-emerald-50/20 rounded-xl border border-emerald-100 flex justify-between items-center text-xs">
-                    <div>
-                      <p className="font-bold text-slate-800">₦{t.amount.toLocaleString()}</p>
-                      <p className="text-[10px] text-slate-400">{t.date} • {t.payment_method}</p>
-                    </div>
-                    <span className="text-[10px] bg-amber-100 text-amber-955 font-black px-2 py-0.5 rounded-full">
-                      +{t.days_covered} Days
-                    </span>
-                  </div>
-                ))
+                <p className="text-[10px] text-center text-slate-400 font-semibold bg-slate-50 p-2 rounded-xl">
+                  Complete first contribution to unlock payouts.
+                </p>
               )}
             </div>
+
+            <SupportWidget details={supportDetails} />
           </div>
 
-          <SupportWidget details={supportDetails} />
-        </div>
-
-        <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4">
-            <div>
-              <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider">My 32-Day Contribution Grid</h3>
-              <p className="text-xs text-slate-505 mt-0.5">Stars indicate marked split allocations corresponding to completed payments.</p>
+          <div className="lg:col-span-2 space-y-6">
+            <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4">
+              <div>
+                <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider">My 32-Day Contribution Grid</h3>
+                <p className="text-xs text-slate-505 mt-0.5 font-bold">Stars indicate approved/marked allocations corresponding to confirmed payments.</p>
+              </div>
+              <Grid32 trackingDays={markedDays} dailyAmount={customer.daily_amount} />
             </div>
-            <Grid32 trackingDays={markedDays} dailyAmount={customer.daily_amount} />
-          </div>
 
-          {/* Withdrawal History Table [3] */}
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4">
+            {/* Payout records table */}
+            <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4">
+              <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider flex items-center gap-1.5">
+                <FileText className="w-5 h-5 text-emerald-700" />
+                My Payout & Reset History
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-emerald-50/50 text-emerald-900 font-extrabold border-b border-emerald-200">
+                      <th className="p-3">Requested At</th>
+                      <th className="p-3">Recipient Account</th>
+                      <th className="p-3">Cleared Period</th>
+                      <th className="p-3">Accrued Sum</th>
+                      <th className="p-3 text-emerald-800">Payout (Accrued - 1 Day)</th>
+                      <th className="p-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-emerald-50 bg-white">
+                    {payoutHistory.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="p-4 text-center text-slate-400">No previous payout logs.</td>
+                      </tr>
+                    ) : (
+                      payoutHistory.map(h => (
+                        <tr key={h.id}>
+                          <td className="p-3 text-slate-550">
+                            {new Date(h.created_at).toLocaleDateString()}
+                          </td>
+                          <td className="p-3 text-slate-700">
+                            <strong className="block">{h.account_name}</strong>
+                            {h.bank_name} • {h.account_number}
+                          </td>
+                          <td className="p-3 font-bold text-amber-800">{h.month_paid || 'N/A'}</td>
+                          <td className="p-3">₦{h.amount.toLocaleString()}</td>
+                          <td className="p-3 font-bold text-emerald-800">₦{h.payout_amount.toLocaleString()}</td>
+                          <td className="p-3">
+                            <span className={`px-2.5 py-0.5 rounded-full font-black uppercase text-[9px] ${
+                              h.status === 'Pending' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                            }`}>
+                              {h.status === 'Successful' ? 'Successful' : h.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Statement History Tab */}
+      {customerTab === 'transactions' && (
+        <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm animate-fade-in space-y-4">
+          <div>
             <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider flex items-center gap-1.5">
               <FileText className="w-5 h-5 text-emerald-700" />
-              My Payout & Reset History
+              Statement History Ledger
             </h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-emerald-50/50 text-emerald-900 font-extrabold border-b border-emerald-200">
-                    <th className="p-3">Requested At</th>
-                    <th className="p-3">Recipient Account</th>
-                    <th className="p-3">Cleared Period</th>
-                    <th className="p-3">Accrued Sum</th>
-                    <th className="p-3 text-emerald-800">Paid Amount (Accrued - 1 Day)</th>
-                    <th className="p-3">Status</th>
+            <p className="text-xs text-slate-505">Review your past contribution deposits, including both pending approvals and confirmed payouts.</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-emerald-50/50 text-emerald-900 font-extrabold border-b border-emerald-200">
+                  <th className="p-3">Date</th>
+                  <th className="p-3">Payment Channel</th>
+                  <th className="p-3">Amount Deposited</th>
+                  <th className="p-3">Days Marked</th>
+                  <th className="p-3 text-right">Approval Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-emerald-50 bg-white">
+                {myTransactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="p-4 text-center text-slate-400">No previous deposit receipts found.</td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-emerald-50 bg-white">
-                  {payoutHistory.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="p-4 text-center text-slate-400">No previous payout logs.</td>
-                    </tr>
-                  ) : (
-                    payoutHistory.map(h => (
-                      <tr key={h.id}>
-                        <td className="p-3 text-slate-505">
-                          {new Date(h.created_at).toLocaleDateString()}
-                          <span className="block text-[9px] text-slate-400">{new Date(h.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                        </td>
-                        <td className="p-3 text-slate-700">
-                          <strong className="block">{h.account_name}</strong>
-                          {h.bank_name} • {h.account_number}
-                        </td>
-                        <td className="p-3 font-bold text-amber-800">{h.month_paid || 'N/A'}</td>
-                        <td className="p-3">₦{h.amount.toLocaleString()}</td>
-                        <td className="p-3 font-bold text-emerald-800">₦{h.payout_amount.toLocaleString()}</td>
-                        <td className="p-3">
-                          <span className={`px-2.5 py-0.5 rounded-full font-black uppercase text-[9px] ${
-                            h.status === 'Pending' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
-                          }`}>
-                            {h.status === 'Successful' ? 'Successful' : h.status}
+                ) : (
+                  myTransactions.map(t => (
+                    <tr key={t.id} className="hover:bg-emerald-50/20 transition">
+                      <td className="p-3 text-slate-555">{t.date}</td>
+                      <td className="p-3 font-semibold text-slate-700">{t.payment_method}</td>
+                      <td className="p-3 font-bold text-emerald-800">₦{t.amount.toLocaleString()}</td>
+                      <td className="p-3">
+                        {t.status === 'Successful' ? (
+                          <span className="bg-amber-100 text-amber-955 font-black px-2 py-0.5 rounded">
+                            Days {t.start_day} - {t.end_day} ({t.days_covered} Days)
                           </span>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                        ) : (
+                          <span className="text-slate-400 italic">Processing approval...</span>
+                        )}
+                      </td>
+                      <td className="p-3 text-right">
+                        <span className={`px-2.5 py-0.5 rounded-full font-black text-[9px] uppercase ${
+                          t.status === 'Pending' ? 'bg-amber-100 text-amber-800 animate-pulse' : 'bg-emerald-100 text-emerald-800'
+                        }`}>
+                          {t.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Deposit Funds / Add Funds Tab */}
+      {customerTab === 'deposit' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in">
+          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4">
+            <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider flex items-center gap-1.5">
+              <Coins className="w-5 h-5 text-emerald-700" />
+              Add Savings Contribution
+            </h3>
+            <p className="text-xs text-slate-505">Follow the steps below to fund your 32-day plan: </p>
+            
+            <div className="space-y-3 text-xs bg-emerald-50/30 p-4 rounded-2xl border border-emerald-100 leading-relaxed font-semibold">
+              <p className="text-emerald-900 font-extrabold text-sm">Instructions:</p>
+              <p>1. Copy the company bank account parameters shown in the adjacent widget.</p>
+              <p>2. Complete the bank transfer using your bank's mobile application.</p>
+              <p>3. Enter the exact transferred sum below and click "Transaction Complete".</p>
+              <p>4. Your balance remains <strong className="text-amber-700">Pending</strong> until Admin verifies receipt of funds.</p>
+            </div>
+
+            <form onSubmit={handleAddFundsSubmit} className="space-y-4 pt-2">
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1">Transferred Amount (₦) *</label>
+                <input 
+                  type="number" 
+                  required
+                  placeholder="e.g. 10000"
+                  value={depositAmountInput}
+                  onChange={(e) => setDepositAmountInput(e.target.value)}
+                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1">Payment Method / Channel *</label>
+                <select
+                  value={depositPaymentMethod}
+                  onChange={(e) => setDepositPaymentMethod(e.target.value as any)}
+                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl bg-white text-sm"
+                >
+                  <option value="Bank Transfer">Bank Transfer</option>
+                  <option value="Mobile Money">Mobile Money</option>
+                  <option value="Cash">Cash Handover</option>
+                </select>
+              </div>
+
+              <button 
+                type="submit"
+                className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl transition duration-150 text-sm shadow-md"
+              >
+                Transaction Complete (Awaiting Admin Confirm)
+              </button>
+            </form>
+          </div>
+
+          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm flex flex-col justify-between">
+            <div className="space-y-4">
+              <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider flex items-center gap-1.5">
+                <Landmark className="w-5 h-5 text-emerald-700" />
+                Company Banking Coordinates
+              </h3>
+              <p className="text-xs text-slate-505">Transfer exact targets strictly to this verified account only:</p>
+              
+              <div className="p-5 bg-amber-50/50 border border-amber-200 rounded-3xl space-y-3 text-xs leading-loose text-slate-800 shadow-inner">
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase font-bold">Receiver Bank:</span>
+                  <strong className="text-slate-900 text-sm">{supportDetails.admin_bank_name || 'Access Bank'}</strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase font-bold">Account Number:</span>
+                  <strong className="text-slate-900 text-lg tracking-widest block py-0.5">{supportDetails.admin_account_number || '0123456789'}</strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase font-bold">Account Name:</span>
+                  <strong className="text-slate-900 text-sm">{supportDetails.admin_account_name || 'HireMercy Thrift Enterprises'}</strong>
+                </div>
+              </div>
+            </div>
+            
+            <div className="text-[10px] text-slate-400 font-semibold bg-slate-50 p-3 rounded-xl border border-slate-100 mt-4 leading-relaxed">
+              ⚠️ Warning: Do not transfer funds to any other account coordinates. Contact support instantly if you experience technical issues.
             </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Plan Settings Tab */}
+      {customerTab === 'settings' && (
+        <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm max-w-md mx-auto animate-fade-in space-y-4">
+          <div>
+            <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider">Plan Settings Dashboard</h3>
+            <p className="text-xs text-slate-505 mt-0.5">Keep your account details up to date and configure target pace constraints.</p>
+          </div>
+
+          <form onSubmit={handleSettingsSubmit} className="space-y-4 text-xs">
+            <div>
+              <label className="block text-xs font-bold text-emerald-800 mb-1">Phone Number Line *</label>
+              <input 
+                type="text" 
+                required
+                value={custSettingsPhone}
+                onChange={(e) => setCustSettingsPhone(e.target.value)}
+                className="w-full px-3 py-2 border border-emerald-200 rounded-xl"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-emerald-800 mb-1">Daily Contribution Target (₦) *</label>
+              <select
+                disabled={!canChangeAmount}
+                value={custSettingsDailyAmount.toString()}
+                onChange={(e) => setCustSettingsDailyAmount(Number(e.target.value))}
+                className="w-full px-3 py-2 border border-emerald-200 rounded-xl bg-white disabled:bg-slate-100 disabled:text-slate-400"
+              >
+                <option value="500">₦500 / Day</option>
+                <option value="1000">₦1,000 / Day</option>
+                <option value="2000">₦2,000 / Day</option>
+                <option value="5000">₦5,000 / Day</option>
+              </select>
+
+              {!canChangeAmount ? (
+                <span className="text-[10px] text-amber-700 bg-amber-50 p-2.5 rounded-lg border border-amber-200 block mt-2 font-medium leading-relaxed">
+                  🔒 You can only modify your contribution plan once a calendar month. If you need to make urgent updates, please request Admin to grant permission.
+                </span>
+              ) : (
+                <span className="text-[10px] text-slate-400 block mt-1">Note: Modifying this changes the cost per split slot on your tracking card going forward.</span>
+              )}
+            </div>
+
+            <button 
+              type="submit"
+              className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl transition shadow-md"
+            >
+              Update Settings & Targets
+            </button>
+          </form>
+        </div>
+      )}
 
       {/* Withdrawal Form Modal [3] */}
       {showWithdrawModal && (
@@ -2787,14 +3178,17 @@ export default function App() {
     }
   };
 
-  const handleUpdateSupportDetails = async (phone: string, whatsapp: string, email: string) => {
+  const handleUpdateSupportDetails = async (phone: string, whatsapp: string, email: string, bankName: string, acctNum: string, acctName: string) => {
     setIsLoading(true);
     const { error } = await supabase
       .from('system_settings')
       .update({
         support_phone: phone,
         support_whatsapp: whatsapp,
-        support_email: email
+        support_email: email,
+        admin_bank_name: bankName,
+        admin_account_number: acctNum,
+        admin_account_name: acctName
       })
       .eq('id', 1);
 
@@ -2802,7 +3196,7 @@ export default function App() {
     if (error) {
       triggerToast(`Update failed: ${error.message}`, 'error');
     } else {
-      triggerToast('Support details updated successfully!', 'success');
+      triggerToast('Support & Banking details updated successfully!', 'success');
       fetchGlobalConfiguration();
     }
   };
@@ -2816,7 +3210,8 @@ export default function App() {
           customer_id: customerId,
           amount: amount,
           payment_method: paymentMethod,
-          staff_id: staffId === 'admin-id' ? null : staffId
+          staff_id: staffId === 'admin-id' ? null : staffId,
+          status: 'Successful'
         }
       ]);
 
@@ -2930,19 +3325,26 @@ export default function App() {
     }
   };
 
-  const handleUpdateCustomer = async (id: string, name: string, phone: string, email: string, dailyAmount: number, branchId: string) => {
+  const handleUpdateCustomer = async (id: string, name: string, phone: string, email: string, dailyAmount: number, branchId: string, allowAnytimeChange: boolean) => {
     setIsLoading(true);
     const formattedPhone = formatNigerianPhone(phone);
     const { error } = await supabase
       .from('profiles')
-      .update({ name, phone: formattedPhone, email, daily_amount: dailyAmount, branch_id: branchId })
+      .update({ 
+        name, 
+        phone: formattedPhone, 
+        email, 
+        daily_amount: dailyAmount, 
+        branch_id: branchId,
+        allow_anytime_change: allowAnytimeChange
+      })
       .eq('id', id);
 
     setIsLoading(false);
     if (error) {
       triggerToast(`Update failed: ${error.message}`, 'error');
     } else {
-      triggerToast('Customer details updated successfully!', 'success');
+      triggerToast('Customer updated successfully!', 'success');
       fetchGlobalConfiguration();
     }
   };
@@ -2956,9 +3358,9 @@ export default function App() {
 
     setIsLoading(false);
     if (error) {
-      triggerToast(`Status update failed: ${error.message}`, 'error');
+      triggerToast(`Status change failed: ${error.message}`, 'error');
     } else {
-      triggerToast(is_active ? 'Customer activated successfully!' : 'Customer suspended successfully!', 'success');
+      triggerToast(is_active ? 'Customer activated.' : 'Customer suspended.', 'success');
       fetchGlobalConfiguration();
     }
   };
@@ -3000,16 +3402,86 @@ export default function App() {
       return;
     }
 
-    // Reset customer balance to 0 on approval
+    // Clear customer's past cycle transactions and marked days to reset their balance to 0
     await supabase.from('marked_days').delete().eq('customer_id', customerId);
     await supabase.from('transactions').delete().eq('customer_id', customerId);
 
     setIsLoading(false);
-    triggerToast(`Manual payout of ₦${payoutAmount.toLocaleString()} recorded and balance reset to 0.`, 'success');
+    triggerToast(`Manual payout triggered! ₦${payoutAmount.toLocaleString()} logged and tracker reset.`, 'success');
     
     if (currentUser) {
       syncAllOperationalData(currentUser);
       fetchPayoutRequests(currentUser);
+    }
+  };
+
+  const handleAddCustomerPendingTransaction = async (amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => {
+    if (!currentUser) return;
+    setIsLoading(true);
+    const { error } = await supabase
+      .from('transactions')
+      .insert([
+        {
+          customer_id: currentUser.id,
+          amount: amount,
+          payment_method: method,
+          status: 'Pending',
+          date: new Date().toISOString().split('T')[0]
+        }
+      ]);
+
+    setIsLoading(false);
+    if (error) {
+      triggerToast(`Deposit submission failed: ${error.message}`, 'error');
+    } else {
+      triggerToast('Deposit details submitted! Awaiting Admin confirmation.', 'success');
+      syncAllOperationalData(currentUser);
+    }
+  };
+
+  const handleUpdateCustomerSettings = async (phone: string, dailyAmount: number) => {
+    if (!currentUser) return;
+    setIsLoading(true);
+    const formattedPhone = formatNigerianPhone(phone);
+    
+    const updateData: any = { phone: formattedPhone };
+    
+    if (dailyAmount !== currentUser.daily_amount) {
+      updateData.daily_amount = dailyAmount;
+      updateData.last_amount_change_at = new Date().toISOString();
+      updateData.allow_anytime_change = false; // consume anytime permission
+    }
+
+    const { error } = await supabase
+      .from('profiles')
+      .update(updateData)
+      .eq('id', currentUser.id);
+
+    setIsLoading(false);
+    if (error) {
+      triggerToast(`Settings update failed: ${error.message}`, 'error');
+    } else {
+      triggerToast('Your profile settings have been updated!', 'success');
+      fetchCurrentUserProfile(currentUser.id);
+    }
+  };
+
+  const handleApproveTransaction = async (txId: string) => {
+    setIsLoading(true);
+    const { error } = await supabase
+      .from('transactions')
+      .update({ status: 'Successful', date: new Date().toISOString().split('T')[0] })
+      .eq('id', txId);
+
+    setIsLoading(false);
+    if (error) {
+      triggerToast(`Confirmation failed: ${error.message}`, 'error');
+    } else {
+      triggerToast('Deposit confirmed! Days marked on tracking card.', 'success');
+      if (currentUser) {
+        syncAllOperationalData(currentUser);
+        fetchNotifications(currentUser);
+      }
     }
   };
 
@@ -3179,6 +3651,7 @@ export default function App() {
                 onUpdateCustomer={handleUpdateCustomer}
                 onToggleCustomerActive={handleToggleCustomerActive}
                 onTriggerManualPayout={handleTriggerManualPayout}
+                onApproveTransaction={handleApproveTransaction}
               />
             )}
             {currentUser.role === 'Staff' && (
@@ -3201,6 +3674,8 @@ export default function App() {
                 supportDetails={supportDetails}
                 payoutRequests={payoutRequests}
                 onAddPayoutRequest={handleCreatePayoutRequest}
+                onAddCustomerPendingTransaction={handleAddCustomerPendingTransaction}
+                onUpdateCustomerSettings={handleUpdateCustomerSettings}
               />
             )}
           </div>
