@@ -4160,8 +4160,8 @@ export default function App() {
       <header className="bg-gradient-to-r from-emerald-800 to-emerald-955 text-white shadow-md py-4 px-6 border-b-4 border-amber-505 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-amber-505 rounded-xl shadow-inner">
-              <PiggyBank className="w-8 h-8 text-emerald-955" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-3xl bg-gradient-to-br from-amber-400 via-amber-300 to-emerald-900 shadow-2xl border border-emerald-700">
+              <span className="text-lg font-extrabold uppercase tracking-[0.35em] text-white">HI</span>
             </div>
             <div>
               <h1 className="text-2xl font-black tracking-wider">

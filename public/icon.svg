@@ -1,6 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="64" fill="#064e3b" />
-  <path d="M160 144h192v224H160z" fill="#10b981" opacity="0.95" />
-  <path d="M176 176h160v160H176z" fill="#ecfccb" />
-  <path d="M256 208l40 40h-32v64h-16v-64h-32z" fill="#064e3b" />
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f766e" />
+      <stop offset="100%" stop-color="#f59e0b" />
+    </linearGradient>
+    <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000" flood-opacity="0.18" />
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bgGrad)" />
+  <rect x="96" y="128" width="72" height="256" rx="36" fill="#ffffff" filter="url(#shadow)" />
+  <rect x="196" y="240" width="120" height="72" rx="36" fill="#ffffff" filter="url(#shadow)" />
+  <rect x="196" y="128" width="72" height="256" rx="36" fill="#ffffff" filter="url(#shadow)" />
+  <rect x="348" y="128" width="72" height="176" rx="36" fill="#ffffff" filter="url(#shadow)" />
+  <circle cx="384" cy="336" r="36" fill="#ffffff" filter="url(#shadow)" />
 </svg>
