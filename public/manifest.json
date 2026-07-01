@@ -1,0 +1,18 @@
+{
+  "short_name": "HireMercyAJO",
+  "name": "HireMercy Ajo Thrift Tracker",
+  "description": "Installable thrift tracker for AJO contributions.",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    }
+  ],
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#064e3b",
+  "theme_color": "#064e3b",
+  "orientation": "portrait"
+}

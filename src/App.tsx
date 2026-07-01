@@ -3140,6 +3140,10 @@ export default function App() {
   const [notification, setNotification] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
   const [hasCheckedAdmin, setHasCheckedAdmin] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
+  const [showAlarmBanner, setShowAlarmBanner] = useState(false);
+  const [alarmMessage, setAlarmMessage] = useState<string>('');
 
   const hasAdmin = useMemo(() => {
     return profiles.some(p => p.role === 'Admin');
@@ -3218,9 +3222,115 @@ export default function App() {
     fetchGlobalConfiguration();
   }, []);
 
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setDeferredPrompt(event);
+      setShowInstallBanner(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt as EventListener);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => null);
+    }
+
+    const firedToday: Record<string, string> = {};
+
+    const getTodayKey = (hour: number) => {
+      return `${new Date().toISOString().slice(0, 10)}-${hour}`;
+    };
+
+    const hasTransactionToday = () => {
+      const today = new Date().toISOString().slice(0, 10);
+      return transactions.some(tx => tx.date.startsWith(today));
+    };
+
+    const playAlarmSound = () => {
+      try {
+        const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
+        if (!AudioContext) return;
+        const context = new AudioContext();
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        oscillator.type = 'sine';
+        oscillator.frequency.value = 880;
+        gain.gain.value = 0.1;
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+        oscillator.start();
+        oscillator.stop(context.currentTime + 1.2);
+      } catch (err) {
+        console.warn('Alarm sound failed:', err);
+      }
+    };
+
+    const showReminder = () => {
+      const text = "Don't forget to contribute your AJO with HireMercyAJO thank you";
+      setAlarmMessage(text);
+      setShowAlarmBanner(true);
+      triggerToast(text, 'success');
+      playAlarmSound();
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        new Notification('HireMercyAJO Reminder', { body: text });
+      }
+    };
+
+    const checkAlarms = () => {
+      const now = new Date();
+      const hour = now.getHours();
+      const minute = now.getMinutes();
+      const rounded = hour * 60 + minute;
+      const schedule = [600, 720, 840, 1080];
+      const shouldAlarm = (timeKey: string) => {
+        if (firedToday[timeKey] === timeKey) return false;
+        firedToday[timeKey] = timeKey;
+        return true;
+      };
+
+      schedule.forEach((target) => {
+        if (rounded === target) {
+          const hourKey = target / 60;
+          const timeKey = getTodayKey(hourKey);
+          if (target === 840 || target === 1080) {
+            if (!hasTransactionToday() && shouldAlarm(timeKey)) {
+              showReminder();
+            }
+          } else if (shouldAlarm(timeKey)) {
+            showReminder();
+          }
+        }
+      });
+    };
+
+    const timer = setInterval(checkAlarms, 30 * 1000);
+    checkAlarms();
+
+    return () => clearInterval(timer);
+  }, [transactions]);
+
   const triggerToast = (text: string, type: 'success' | 'error' = 'success') => {
     setNotification({ type, text });
     setTimeout(() => setNotification(null), 3500);
+  };
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const choiceResult = await deferredPrompt.userChoice;
+    if (choiceResult.outcome === 'accepted') {
+      triggerToast('Installation started. Welcome to HireMercyAJO!', 'success');
+    } else {
+      triggerToast('Install prompt dismissed.', 'error');
+    }
+    setDeferredPrompt(null);
+    setShowInstallBanner(false);
   };
 
   const fetchGlobalConfiguration = async () => {
@@ -3991,6 +4101,49 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-emerald-50/40 text-slate-800 antialiased font-sans">
+      {showInstallBanner && deferredPrompt && (
+        <div className="fixed bottom-4 left-4 right-4 z-50 bg-emerald-900 text-white p-4 rounded-2xl shadow-2xl border border-emerald-700 animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h4 className="text-xs font-black uppercase tracking-wider text-amber-400">Install HireMercy AJO</h4>
+              <p className="text-[11px] text-emerald-100 mt-1">Add this app to your home screen for faster access and offline support.</p>
+            </div>
+            <div className="flex gap-2 items-center">
+              <button
+                type="button"
+                onClick={handleInstallClick}
+                className="bg-amber-500 hover:bg-amber-600 text-emerald-950 font-black px-3.5 py-1.5 rounded-xl text-xs whitespace-nowrap transition"
+              >
+                Install Now
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowInstallBanner(false)}
+                className="text-emerald-300 hover:text-white px-2 text-xs"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showAlarmBanner && (
+        <div className="fixed bottom-24 left-4 right-4 z-50 bg-amber-500 text-emerald-950 p-4 rounded-2xl shadow-2xl border border-amber-400 animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-wider">HireMercyAJO Reminder</p>
+              <p className="text-[12px] mt-1">{alarmMessage}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAlarmBanner(false)}
+              className="text-emerald-950 bg-white/90 px-3 py-1 rounded-full text-[11px] font-bold shadow-sm"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
       {/* Toast Alert System */}
       {notification && (
         <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 p-4 rounded-xl shadow-lg border text-sm font-semibold animate-bounce ${
@@ -4037,6 +4190,15 @@ export default function App() {
                     </span>
                   )}
                 </button>
+                {deferredPrompt && (
+                  <button
+                    type="button"
+                    onClick={handleInstallClick}
+                    className="ml-3 px-3 py-2 rounded-xl bg-amber-500 text-emerald-950 font-bold text-xs uppercase tracking-[0.08em] hover:bg-amber-600 transition"
+                  >
+                    Install App
+                  </button>
+                )}
 
                 {showNotifications && (
                   <div className="absolute right-0 mt-3 w-80 bg-white rounded-2xl shadow-xl border border-emerald-100 py-3 text-slate-800 z-50 animate-fade-in-down">
