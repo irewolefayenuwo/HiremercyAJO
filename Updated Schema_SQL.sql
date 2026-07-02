@@ -8,6 +8,7 @@ DROP TABLE IF EXISTS public.system_settings CASCADE;
 DROP TABLE IF EXISTS public.notifications CASCADE;
 DROP TABLE IF EXISTS public.marked_days CASCADE;
 DROP TABLE IF EXISTS public.transactions CASCADE;
+DROP TABLE IF EXISTS public.payout_requests CASCADE;
 DROP TABLE IF EXISTS public.profiles CASCADE;
 DROP TABLE IF EXISTS public.branches CASCADE;
 
@@ -39,7 +40,7 @@ CREATE TABLE public.branches (
 CREATE TABLE public.profiles (
     id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
     name TEXT NOT NULL,
-    email TEXT NOT NULL UNIQUE,
+    email TEXT UNIQUE,
     phone TEXT,
     role TEXT NOT NULL CHECK (role IN ('Admin', 'Staff', 'Customer')),
     branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL,
@@ -54,6 +55,13 @@ CREATE TABLE public.system_settings (
     support_phone TEXT NOT NULL DEFAULT '+234 803 461 2345',
     support_whatsapp TEXT NOT NULL DEFAULT '+234 803 461 2345',
     support_email TEXT NOT NULL DEFAULT 'support@hiremercy.com',
+    admin_bank_name TEXT DEFAULT 'Access Bank',
+    admin_account_number TEXT DEFAULT '0123456789',
+    admin_account_name TEXT DEFAULT 'HireMercy Thrift Enterprises',
+    advert_title TEXT DEFAULT 'Cartoon characters safely collecting small daily contributions from customers and returning them back to you in bulk!',
+    advert_description TEXT DEFAULT 'Join the smart daily savings circle with HireMercyAJO.',
+    advert_image_url TEXT DEFAULT 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80',
+    advert_enabled BOOLEAN NOT NULL DEFAULT true,
     CONSTRAINT single_row CHECK (id = 1)
 );
 
@@ -66,8 +74,8 @@ CREATE TABLE public.transactions (
     customer_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
     amount NUMERIC NOT NULL CHECK (amount > 0),
     date DATE NOT NULL DEFAULT CURRENT_DATE,
-    payment_method TEXT NOT NULL CHECK (payment_method IN ('Cash', 'Bank Transfer', 'Mobile Money')),
-    status TEXT NOT NULL DEFAULT 'Paid' CHECK (status IN ('Paid', 'Pending', 'Failed')),
+    payment_method TEXT NOT NULL CHECK (payment_method IN ('Cash', 'Bank Transfer', 'Mobile Money', 'Bank App Transfer')),
+    status TEXT NOT NULL DEFAULT 'Paid' CHECK (status IN ('Paid', 'Pending', 'Failed', 'Successful')),
     branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL,
     staff_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
     days_covered INTEGER DEFAULT 0,
@@ -87,6 +95,21 @@ CREATE TABLE public.marked_days (
     date DATE NOT NULL DEFAULT CURRENT_DATE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     CONSTRAINT unique_customer_marked_day UNIQUE (customer_id, day_number)
+);
+
+-- Payout Requests Table (Customer withdrawals and admin approvals)
+CREATE TABLE public.payout_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    customer_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+    account_name TEXT NOT NULL,
+    account_number TEXT NOT NULL,
+    bank_name TEXT NOT NULL,
+    amount NUMERIC NOT NULL DEFAULT 0,
+    payout_amount NUMERIC NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'Successful', 'Rejected')),
+    month_paid TEXT,
+    processed_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
 -- Notifications Table (System-wide alerts)
@@ -253,6 +276,7 @@ ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.marked_days ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.payout_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
 -- Branches Policies
@@ -307,6 +331,23 @@ CREATE POLICY "View marked days for self or supervisors" ON public.marked_days
     FOR SELECT USING (
         customer_id = auth.uid() OR 
         public.get_user_role(auth.uid()) IN ('Admin', 'Staff')
+    );
+
+-- Payout Requests Policies
+CREATE POLICY "Payout requests visible to self or supervisors" ON public.payout_requests
+    FOR SELECT USING (
+        customer_id = auth.uid() OR
+        public.get_user_role(auth.uid()) IN ('Admin', 'Staff')
+    );
+
+CREATE POLICY "Customers can request payouts" ON public.payout_requests
+    FOR INSERT WITH CHECK (
+        customer_id = auth.uid()
+    );
+
+CREATE POLICY "Admins can approve payout requests" ON public.payout_requests
+    FOR UPDATE USING (
+        public.get_user_role(auth.uid()) = 'Admin'
     );
 
 -- Notifications Policies
