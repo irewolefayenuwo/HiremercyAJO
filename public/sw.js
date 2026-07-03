@@ -1,12 +1,10 @@
 // public/sw.js
-const CACHE_NAME = 'hiremercy-cache-v2'; // Changed version to clear previous cache
+const CACHE_NAME = 'hiremercy-cache-v3'; // Incremented to v3 to completely bust the broken v2 cache
 
-// Install event - force the new service worker to activate immediately
 self.addEventListener('install', (event) => {
   self.skipWaiting(); 
 });
 
-// Activate event - delete old caches immediately
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
@@ -22,8 +20,12 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Network-First for HTML/JS, Cache-First for static assets (images/icons)
 self.addEventListener('fetch', (event) => {
+  // 1. CRITICAL: Never intercept or cache Supabase database API calls!
+  if (event.request.url.includes('supabase.co') || event.request.url.includes('/rest/v1/')) {
+    return; // Bypasses the service worker completely for live DB requests
+  }
+
   const destination = event.request.destination;
 
   // For HTML pages, JS scripts, and CSS styles, always try the internet first
