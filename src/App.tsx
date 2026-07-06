@@ -98,6 +98,35 @@ export interface PayoutRequest {
   status: 'Pending' | 'Successful' | 'Rejected';
   created_at: string;
   month_paid?: string;
+  contribution_ids?: string[];
+}
+
+// --- 32-DAY SAVED MONTH (CONTRIBUTIONS LEDGER) & PAYOUT ARCHIVE TYPES ---
+export interface SavedMonth {
+  id: string;
+  customer_id: string;
+  customer_name?: string;
+  month_label: string;
+  period_key: string;
+  total_days: number;
+  total_amount: number;
+  status: 'Saved' | 'Requested' | 'Paid';
+  created_at: string;
+}
+
+export interface PayoutHistoryRecord {
+  id: string;
+  customer_id: string;
+  customer_name?: string;
+  contribution_id?: string;
+  payout_request_id?: string;
+  month_label: string;
+  total_amount: number;
+  payout_amount: number;
+  bank_name: string;
+  account_number: string;
+  account_name: string;
+  approved_at: string;
 }
 
 // --- GLOBAL NIGERIAN PHONE FORMATTING HELPER ---
@@ -116,6 +145,133 @@ const getNigerianMonthName = () => {
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
   return `${months[new Date().getMonth()]} Collected`;
+};
+
+// Unique key (YYYY-MM) identifying the calendar month a 32-day cycle was frozen/saved in
+const getCurrentPeriodKey = () => new Date().toISOString().slice(0, 7);
+
+// --- FEATURE 1: 32-Day Tracking History (Running / Uncollected / Collected) ---
+export interface TrackingHistoryEntry {
+  key: string;
+  period_key: string;
+  month_label: string;
+  total_days: number;
+  total_amount: number;
+  status: 'Running' | 'Uncollected' | 'Collected';
+}
+
+// Combines the three data sources into one normalized timeline for a single
+// customer: whatever's still open in marked_days (Running), whatever's been
+// frozen into contributions but not yet paid out (Uncollected), and whatever
+// has been archived to cycle_archives once admin approves payout (Collected).
+const buildTrackingHistory = (
+  markedDaysForCustomer: MarkedDay[],
+  savedMonthsForCustomer: SavedMonth[],
+  cycleArchiveRowsForCustomer: any[]
+): TrackingHistoryEntry[] => {
+  const rows: TrackingHistoryEntry[] = [];
+
+  // Running: group whatever's currently open in marked_days by period_key.
+  // Anything still sitting in marked_days is by definition not yet frozen,
+  // so it's always the active/ongoing cycle.
+  const runningGroups: Record<string, MarkedDay[]> = {};
+  markedDaysForCustomer.forEach(d => {
+    const pk = (d as any).period_key || getCurrentPeriodKey();
+    if (!runningGroups[pk]) runningGroups[pk] = [];
+    runningGroups[pk].push(d);
+  });
+  Object.entries(runningGroups).forEach(([pk, days]) => {
+    rows.push({
+      key: `running-${pk}`,
+      period_key: pk,
+      month_label: periodLabelFromKey(pk),
+      total_days: days.length,
+      total_amount: sumCurrencyValues(days.map(d => Number(d.amount || 0))),
+      status: 'Running'
+    });
+  });
+
+  // Uncollected: frozen 32-day (or expired) cycles awaiting payout
+  savedMonthsForCustomer
+    .filter(m => m.status === 'Saved' || m.status === 'Requested')
+    .forEach(m => {
+      rows.push({
+        key: `uncollected-${m.id}`,
+        period_key: m.period_key,
+        month_label: m.month_label || periodLabelFromKey(m.period_key),
+        total_days: m.total_days,
+        total_amount: m.total_amount,
+        status: 'Uncollected'
+      });
+    });
+
+  // Collected: approved payouts, sourced from cycle_archives (pre-existing table)
+  cycleArchiveRowsForCustomer.forEach((row, idx) => {
+    const periodKey = pickField(row, ['period_key', 'month_key', 'period']) || '';
+    rows.push({
+      key: `collected-${pickField(row, ['id']) || idx}`,
+      period_key: periodKey,
+      month_label: pickField(row, ['month_label', 'month', 'period_label', 'label']) || periodLabelFromKey(periodKey) || 'Archived month',
+      total_days: Number(pickField(row, ['total_days', 'days_completed', 'days']) || 32),
+      total_amount: Number(pickField(row, ['total_amount', 'amount', 'payout_amount', 'amount_paid']) || 0),
+      status: 'Collected'
+    });
+  });
+
+  return rows.sort((a, b) => (b.period_key || '').localeCompare(a.period_key || ''));
+};
+
+// Badge styling exactly per spec: Running = amber, Uncollected = neutral slate
+// (deliberately no green), Collected = emerald with a checkmark.
+const TrackingStatusBadge = ({ status }: { status: TrackingHistoryEntry['status'] }) => {
+  if (status === 'Running') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-amber-700">
+        Running
+      </span>
+    );
+  }
+  if (status === 'Collected') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-emerald-700">
+        <CheckCircle2 className="w-3 h-3" /> Collected
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-slate-700">
+      Uncollected
+    </span>
+  );
+};
+
+const TrackingHistoryCard = ({ entry }: { entry: TrackingHistoryEntry }) => (
+  <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white p-3.5 shadow-sm">
+    <div>
+      <p className="text-xs font-black text-slate-800">{entry.month_label}</p>
+      <p className="text-[11px] font-semibold text-slate-500">
+        {entry.total_days}/32 days • ₦{entry.total_amount.toLocaleString()}
+      </p>
+    </div>
+    <TrackingStatusBadge status={entry.status} />
+  </div>
+);
+const periodLabelFromKey = (periodKey?: string) => {
+  if (!periodKey) return 'Unknown period';
+  const [y, m] = periodKey.split('-').map(Number);
+  if (!y || !m) return periodKey;
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  return `${months[m - 1] || ''} ${y}`.trim();
+};
+
+// Reads the first present key from a list of candidate field names - used when
+// pulling from tables (like `cycle_archives`) whose exact column names we're
+// normalizing defensively rather than assuming.
+const pickField = (row: any, keys: string[]) => {
+  for (const k of keys) {
+    if (row && row[k] !== undefined && row[k] !== null) return row[k];
+  }
+  return undefined;
 };
 
 const nigerianBanks = [
@@ -764,13 +920,33 @@ function AdvertisementBanner({ details }: { details: SupportSettings }) {
 // =========================================================================
 
 function AdminDashboard({ 
-  profiles, branches, transactions, markedDays, supportDetails, payoutRequests, withdrawalRequests, onApprovePayout, onCreateBranch, onUpdateBranch, onDeleteBranch, onCreateStaff, onUpdateStaff, onDeleteStaff, onRegisterCustomer,
+  profiles, branches, transactions, markedDays, supportDetails, payoutRequests, savedMonths, payoutHistory, withdrawalRequests, onApprovePayout, onCreateBranch, onUpdateBranch, onDeleteBranch, onCreateStaff, onUpdateStaff, onDeleteStaff, onRegisterCustomer,
   onDeleteTransaction, onAddTransaction, onUpdateSupport, onDeleteCustomer, onUpdateCustomer, onToggleCustomerActive, onTriggerManualPayout, onApproveTransaction, onApproveWithdrawal, routeTarget, onRouteHandled, onRejectPayout
 }: { 
-  profiles: Profile[], branches: Branch[], transactions: Transaction[], markedDays: Record<string, MarkedDay[]>, supportDetails: SupportSettings, payoutRequests: PayoutRequest[], withdrawalRequests: WithdrawalRequest[], onDeleteTransaction: (id: string) => void, onAddTransaction: (cId: string, amt: number, method: any, sId: string) => void, onUpdateSupport: (phone: string, whatsapp: string, email: string, bankName: string, acctNum: string, acctName: string, advertTitle: string, advertDescription: string, advertImageUrl: string, advertEnabled: boolean) => void, onApprovePayout: (reqId: string) => void, onCreateBranch: (name: string, address: string) => void, onUpdateBranch: (id: string, name: string, address: string) => void, onDeleteBranch: (id: string) => void, onCreateStaff: (name: string, phone: string, email: string, branchId: string, password: string) => void, onUpdateStaff: (id: string, name: string, phone: string, email: string, branchId: string) => void, onDeleteStaff: (id: string) => void, onRegisterCustomer: (data: any) => void,
+  profiles: Profile[], branches: Branch[], transactions: Transaction[], markedDays: Record<string, MarkedDay[]>, supportDetails: SupportSettings, payoutRequests: PayoutRequest[], savedMonths: Record<string, SavedMonth[]>, payoutHistory: PayoutHistoryRecord[], withdrawalRequests: WithdrawalRequest[], onDeleteTransaction: (id: string) => void, onAddTransaction: (cId: string, amt: number, method: any, sId: string) => void, onUpdateSupport: (phone: string, whatsapp: string, email: string, bankName: string, acctNum: string, acctName: string, advertTitle: string, advertDescription: string, advertImageUrl: string, advertEnabled: boolean) => void, onApprovePayout: (reqId: string) => void, onCreateBranch: (name: string, address: string) => void, onUpdateBranch: (id: string, name: string, address: string) => void, onDeleteBranch: (id: string) => void, onCreateStaff: (name: string, phone: string, email: string, branchId: string, password: string) => void, onUpdateStaff: (id: string, name: string, phone: string, email: string, branchId: string) => void, onDeleteStaff: (id: string) => void, onRegisterCustomer: (data: any) => void,
   onDeleteCustomer: (id: string) => void, onUpdateCustomer: (id: string, name: string, phone: string, email: string, dailyAmount: number, branchId: string, allowAnytimeChange: boolean) => void, onToggleCustomerActive: (id: string, is_active: boolean) => void, onTriggerManualPayout: (customerId: string, bank: string, acctNum: string, acctName: string) => void, onApproveTransaction: (id: string) => void, onApproveWithdrawal: (id: string, bankName: string, accountNumber: string, accountName: string) => void, routeTarget?: AdminTab | null, onRouteHandled?: () => void, onRejectPayout?: (reqId: string) => void
 }) {
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
+  const [expandedOutstandingCustomerId, setExpandedOutstandingCustomerId] = useState<string | null>(null);
+
+  // FEATURE 1 (Admin): customers who have at least one fully-frozen, still
+  // uncollected 32-day cycle - anyone with zero uncollected months is
+  // omitted entirely, per spec.
+  const outstandingPayoutCustomers = useMemo(() => {
+    return Object.entries(savedMonths)
+      .map(([customerId, months]) => {
+        const uncollected = months.filter(m => m.status === 'Saved' || m.status === 'Requested');
+        const customerProfile = profiles.find(p => p.id === customerId);
+        return {
+          customerId,
+          customerName: customerProfile?.name || uncollected[0]?.customer_name || 'Customer',
+          uncollectedMonths: uncollected,
+          totalOutstanding: sumCurrencyValues(uncollected.map(m => m.total_amount))
+        };
+      })
+      .filter(row => row.uncollectedMonths.length > 0)
+      .sort((a, b) => b.totalOutstanding - a.totalOutstanding);
+  }, [savedMonths, profiles]);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [depositAmount, setDepositAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Bank Transfer' | 'Mobile Money'>('Cash');
@@ -1123,6 +1299,31 @@ function AdminDashboard({
     });
     return Array.from(groups.entries()).sort(([a], [b]) => new Date(b).getTime() - new Date(a).getTime());
   }, [successfulTransactions]);
+
+  // FEATURE 2: Per-day-group metrics for the ledger header - itemized
+  // Transfer / Cash / Total breakdown of both count and monetary volume,
+  // computed once per date group rather than re-deriving it inline in JSX.
+  const getDayGroupMetrics = (entries: Transaction[]) => {
+    let transferAmount = 0, transferCount = 0, cashAmount = 0, cashCount = 0;
+    entries.forEach(tx => {
+      const amt = Number(tx.amount || 0);
+      if (isTransferMethod(tx.payment_method)) {
+        transferAmount += amt;
+        transferCount += 1;
+      } else {
+        cashAmount += amt;
+        cashCount += 1;
+      }
+    });
+    return {
+      transferAmount,
+      transferCount,
+      cashAmount,
+      cashCount,
+      totalAmount: transferAmount + cashAmount,
+      totalCount: transferCount + cashCount
+    };
+  };
 
   const branchBreakdown = useMemo(() => {
     const branchMetrics = branches.reduce((acc, branch) => {
@@ -2056,6 +2257,49 @@ function AdminDashboard({
       {/* Payouts Control with Manual Triggers */}
       {activeTab === 'payouts' && (
         <div className="space-y-6 animate-fade-in text-slate-800 font-bold">
+          {/* FEATURE 1 (Admin): Outstanding Payout Ledger */}
+          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
+            <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider mb-1 font-bold">Outstanding Payout Ledger</h3>
+            <p className="text-xs text-slate-505 mb-4 font-medium">Customers with at least one fully-frozen, uncollected 32-day cycle. Click a name to see exactly which months.</p>
+            {outstandingPayoutCustomers.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-emerald-200 p-4 text-center text-slate-400">No customers currently have an uncollected saved month.</div>
+            ) : (
+              <div className="space-y-2">
+                {outstandingPayoutCustomers.map(row => {
+                  const isOpen = expandedOutstandingCustomerId === row.customerId;
+                  return (
+                    <div key={row.customerId} className="rounded-2xl border border-slate-100 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedOutstandingCustomerId(isOpen ? null : row.customerId)}
+                        className="w-full flex items-center justify-between gap-3 p-3.5 bg-slate-50/60 hover:bg-slate-100/60 transition text-left"
+                      >
+                        <span className="text-xs font-black text-slate-800">{row.customerName}</span>
+                        <span className="flex items-center gap-2 text-[11px]">
+                          <span className="rounded-full bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-0.5 font-black">
+                            {row.uncollectedMonths.length} uncollected
+                          </span>
+                          <span className="font-black text-emerald-800">₦{row.totalOutstanding.toLocaleString()}</span>
+                          {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        </span>
+                      </button>
+                      {isOpen && (
+                        <div className="divide-y divide-slate-50 bg-white">
+                          {row.uncollectedMonths.map(m => (
+                            <div key={m.id} className="flex items-center justify-between p-3 text-xs">
+                              <span className="font-bold text-slate-700">{m.month_label}</span>
+                              <span className="font-black text-emerald-800">₦{m.total_amount.toLocaleString()}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Trigger manual payout form */}
             <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm lg:col-span-1 h-fit">
@@ -2137,15 +2381,52 @@ function AdminDashboard({
               </form>
             </div>
 
+            {/* Pending payout requests - awaiting admin approval */}
+            <div className="bg-white p-6 rounded-3xl border border-amber-200 shadow-sm lg:col-span-2">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider font-bold">Pending Payout Requests</h3>
+                <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">
+                  {payoutRequests.filter(p => p.status === 'Pending').length} awaiting approval
+                </span>
+              </div>
+              {payoutRequests.filter(p => p.status === 'Pending').length === 0 ? (
+                <p className="text-xs text-slate-400 font-medium p-2">No payout requests are currently pending.</p>
+              ) : (
+                <div className="space-y-2">
+                  {payoutRequests.filter(p => p.status === 'Pending').map(h => (
+                    <div key={h.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 rounded-2xl border border-amber-100 bg-amber-50/40">
+                      <div className="text-xs">
+                        <p className="font-black text-slate-800">{h.customer_name || 'Customer'} <span className="text-slate-400 font-semibold">• {h.month_paid || 'Saved month'}</span></p>
+                        <p className="text-slate-500 font-semibold">{h.bank_name} • {h.account_number} ({h.account_name})</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-black text-emerald-800 text-sm">₦{h.payout_amount.toLocaleString()}</span>
+                        <button 
+                          type="button"
+                          onClick={() => onRejectPayout?.(h.id)}
+                          className="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded-lg transition text-[10px] whitespace-nowrap"
+                        >
+                          Reject
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => onApprovePayout(h.id)}
+                          className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-1 px-3 rounded-lg transition text-[10px] whitespace-nowrap"
+                        >
+                          Approve & Payout
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Customer Payout logs table */}
             <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm lg:col-span-2">
               <div className="mb-4">
                 <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider font-bold">Customer Withdrawal Logs</h3>
                 <p className="text-xs text-slate-505 font-medium">1-day company fee is deducted automatically when calculating the payout amount.</p>
-              </div>
-              <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50/60 p-3 text-xs text-amber-900">
-                <p className="font-black">Withdrawal requests</p>
-                <p className="mt-1">Pending customer payout submissions can be approved directly from here and pushed to the live payout feed. {payoutRequests.filter(p => p.status === 'Pending').length > 0 ? `(${payoutRequests.filter(p => p.status === 'Pending').length} awaiting approval)` : ''}</p>
               </div>
               <div className="overflow-x-auto text-slate-800 font-semibold">
                 <table className="w-full text-left text-xs border-collapse">
@@ -2205,11 +2486,54 @@ function AdminDashboard({
                                   onClick={() => onApprovePayout(h.id)}
                                   className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-1 px-3 rounded-lg transition text-[10px] whitespace-nowrap"
                                 >
-                                  Approve & Reset Cycle
+                                  Approve & Payout
                                 </button>
                               </div>
                             )}
                           </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Payout History Archive - records moved off the active ledger on approval */}
+            <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm lg:col-span-2">
+              <div className="mb-4">
+                <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider flex items-center gap-1.5 font-bold">
+                  <Landmark className="w-4 h-4 text-emerald-700" />
+                  Payout History Archive
+                </h3>
+                <p className="text-xs text-slate-505 font-medium">Settled saved-month records that have been removed from the active contributions ledger.</p>
+              </div>
+              <div className="overflow-x-auto text-slate-800 font-semibold">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-emerald-50/50 text-emerald-900 font-extrabold border-b border-emerald-200">
+                      <th className="p-3">Approved</th>
+                      <th className="p-3">Customer</th>
+                      <th className="p-3">Month</th>
+                      <th className="p-3">Total Saved</th>
+                      <th className="p-3 text-emerald-800">Payout</th>
+                      <th className="p-3">Bank Details</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-emerald-50">
+                    {payoutHistory.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="p-4 text-center text-slate-400 font-medium">No archived payouts yet.</td>
+                      </tr>
+                    ) : (
+                      payoutHistory.slice(0, 25).map(h => (
+                        <tr key={h.id}>
+                          <td className="p-3 text-slate-505">{new Date(h.approved_at).toLocaleDateString()}</td>
+                          <td className="p-3 font-bold text-slate-700">{h.customer_name || 'Customer'}</td>
+                          <td className="p-3 font-semibold text-emerald-800">{h.month_label}</td>
+                          <td className="p-3">₦{h.total_amount.toLocaleString()}</td>
+                          <td className="p-3 font-bold text-emerald-800">₦{h.payout_amount.toLocaleString()}</td>
+                          <td className="p-3 font-medium text-slate-700">{h.bank_name} • {h.account_number}</td>
                         </tr>
                       ))
                     )}
@@ -2246,23 +2570,32 @@ function AdminDashboard({
                       <th className="p-3">Pace</th>
                       <th className="p-3">Days Marked</th>
                       <th className="p-3 text-right">Active Balance</th>
+                      <th className="p-3 text-right">Uncollected Saved</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-emerald-50 bg-white text-slate-800 font-semibold">
                     {recordSheet.yetToWithdraw.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="p-3 text-center text-slate-400 font-medium">No active savers yet.</td>
+                        <td colSpan={5} className="p-3 text-center text-slate-400 font-medium">No active savers yet.</td>
                       </tr>
                     ) : (
                       recordSheet.yetToWithdraw.map(c => {
                         const markedCount = (markedDays[c.id] || []).length;
                         const balance = markedCount * c.daily_amount;
+                        const uncollectedTotal = sumCurrencyValues(
+                          (savedMonths[c.id] || [])
+                            .filter(m => m.status === 'Saved' || m.status === 'Requested')
+                            .map(m => m.total_amount)
+                        );
                         return (
                           <tr key={c.id}>
                             <td className="p-3 font-bold">{c.name}</td>
                             <td className="p-3">₦{c.daily_amount.toLocaleString()}/day</td>
                             <td className="p-3">{markedCount} / 32</td>
                             <td className="p-3 text-right font-bold text-emerald-800">₦{balance.toLocaleString()}</td>
+                            <td className="p-3 text-right font-bold text-slate-700">
+                              {uncollectedTotal > 0 ? `₦${uncollectedTotal.toLocaleString()}` : '—'}
+                            </td>
                           </tr>
                         );
                       })
@@ -2378,17 +2711,26 @@ function AdminDashboard({
               ) : (
                 groupedTransactions.map(([dateKey, entries]) => {
                   const isExpanded = expandedDates[dateKey] ?? true;
+                  const dayMetrics = getDayGroupMetrics(entries);
                   return (
                     <div key={dateKey} className="overflow-hidden rounded-2xl border border-emerald-100">
                       <button
                         type="button"
                         onClick={() => toggleDateGroup(dateKey)}
-                        className="flex w-full items-center justify-between bg-emerald-50/60 px-4 py-3 text-left text-sm font-black text-emerald-900"
+                        className="flex w-full items-center justify-between gap-3 bg-emerald-50/60 px-4 py-3 text-left text-sm font-black text-emerald-900"
                       >
-                        <span>{formatTransactionDateLabel(dateKey)}</span>
-                        <span className="flex items-center gap-2 text-[11px]">
-                          {entries.length} tx
-                          {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        <span className="whitespace-nowrap">{formatTransactionDateLabel(dateKey)}</span>
+                        <span className="flex flex-1 items-center justify-end gap-2 overflow-x-auto text-[10px] font-bold text-emerald-800 sm:text-[11px]">
+                          <span className="whitespace-nowrap rounded-full bg-white/70 px-2 py-0.5">
+                            Transfer: ₦{dayMetrics.transferAmount.toLocaleString()} (tx: {dayMetrics.transferCount})
+                          </span>
+                          <span className="whitespace-nowrap rounded-full bg-white/70 px-2 py-0.5">
+                            Cash: ₦{dayMetrics.cashAmount.toLocaleString()} (tx: {dayMetrics.cashCount})
+                          </span>
+                          <span className="whitespace-nowrap rounded-full bg-emerald-900 px-2 py-0.5 text-white">
+                            Total: ₦{dayMetrics.totalAmount.toLocaleString()} (tx: {dayMetrics.totalCount})
+                          </span>
+                          {isExpanded ? <ChevronDown className="h-4 w-4 flex-shrink-0" /> : <ChevronRight className="h-4 w-4 flex-shrink-0" />}
                         </span>
                       </button>
                       {isExpanded && (
@@ -2870,21 +3212,31 @@ function StaffDashboard({
 // =========================================================================
 
 function CustomerDashboard({ 
-  customer, transactions, markedDays, supportDetails, onAddPayoutRequest, payoutRequests, onAddCustomerPendingTransaction, onUpdateCustomerSettings
+  customer, transactions, markedDays, supportDetails, onAddPayoutRequest, payoutRequests, savedMonths, cycleArchives, onAddCustomerPendingTransaction, onUpdateCustomerSettings
 }: { 
-  customer: Profile, transactions: Transaction[], markedDays: MarkedDay[], supportDetails: SupportSettings, payoutRequests: PayoutRequest[], onAddPayoutRequest: (bank: string, acctNum: string, acctName: string) => void,
+  customer: Profile, transactions: Transaction[], markedDays: MarkedDay[], supportDetails: SupportSettings, payoutRequests: PayoutRequest[], savedMonths: SavedMonth[], cycleArchives: any[], onAddPayoutRequest: (bank: string, acctNum: string, acctName: string, contributionIds: string[]) => void,
   onAddCustomerPendingTransaction: (amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => void, onUpdateCustomerSettings: (phone: string, dailyAmount: number) => void
 }) {
-  const [customerTab, setCustomerTab] = useState<'tracker' | 'transactions' | 'deposit' | 'settings'>('tracker');
+  const [customerTab, setCustomerTab] = useState<'tracker' | 'transactions' | 'deposit' | 'settings' | 'history'>('tracker');
 
   const myTransactions = transactions.filter(t => t.customer_id === customer.id);
-  const totalSaved = markedDays.reduce((sum, item) => sum + item.amount, 0);
+  // The customer's ACTIVE, still-running cycle (whatever's currently open in marked_days)
+  const totalActiveCycle = markedDays.reduce((sum, item) => sum + item.amount, 0);
+  // Frozen 32-day (or expired) cycles that have been saved but not yet paid out -
+  // these are real money that belongs to the customer just as much as the active
+  // cycle; excluding them was the bug behind "balance only shows the new remainder".
+  const totalUncollected = sumCurrencyValues(
+    savedMonths.filter(m => m.status === 'Saved' || m.status === 'Requested').map(m => m.total_amount)
+  );
+  // Total across everything the customer currently has with the company
+  const totalSaved = totalActiveCycle + totalUncollected;
 
   // Modal / Form state for Payout Request
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [bankName, setBankName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [accountName, setAccountName] = useState('');
+  const [selectedMonthIds, setSelectedMonthIds] = useState<string[]>([]);
 
   // Add Funds form states
   const [depositAmountInput, setDepositAmountInput] = useState('');
@@ -2900,11 +3252,29 @@ function CustomerDashboard({
     return payoutRequests.filter(p => p.customer_id === customer.id);
   }, [payoutRequests, customer.id]);
 
+  // Frozen/saved 32-day months that haven't been collected (requested/paid) yet.
+  // The Payout action is only ever surfaced when this list is non-empty.
+  const uncollectedSavedMonths = useMemo(() => {
+    return savedMonths.filter(m => m.status === 'Saved');
+  }, [savedMonths]);
+
+  const selectedMonths = useMemo(() => {
+    return uncollectedSavedMonths.filter(m => selectedMonthIds.includes(m.id));
+  }, [uncollectedSavedMonths, selectedMonthIds]);
+
+  const selectedTotalAmount = useMemo(() => {
+    return sumCurrencyValues(selectedMonths.map(m => m.total_amount));
+  }, [selectedMonths]);
+
   const expectedPayoutAmount = useMemo(() => {
-    const totalDays = markedDays.length;
-    if (totalDays <= 1) return 0;
-    return (totalDays - 1) * customer.daily_amount; // Deducts exactly 1-day profit fee
-  }, [markedDays, customer.daily_amount]);
+    if (selectedMonths.length === 0) return 0;
+    // 1-day company fee deducted per saved month included in the request
+    return Math.max(0, selectedTotalAmount - selectedMonths.length * customer.daily_amount);
+  }, [selectedMonths, selectedTotalAmount, customer.daily_amount]);
+
+  const toggleMonthSelection = (id: string) => {
+    setSelectedMonthIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
 
   const canChangeAmount = useMemo(() => {
     if (customer.allow_anytime_change) return true;
@@ -2917,14 +3287,15 @@ function CustomerDashboard({
   const handleWithdrawSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!bankName || !accountNumber || !accountName) return;
-    if (markedDays.length <= 1) {
-      alert("A minimum of 2 contribution days is required to withdraw (to allow 1-day company fee deduction).");
+    if (selectedMonthIds.length === 0) {
+      alert("Select at least one saved month to include in this payout request.");
       return;
     }
-    onAddPayoutRequest(bankName, accountNumber, accountName);
+    onAddPayoutRequest(bankName, accountNumber, accountName, selectedMonthIds);
     setBankName('');
     setAccountNumber('');
     setAccountName('');
+    setSelectedMonthIds([]);
     setShowWithdrawModal(false);
   };
 
@@ -3005,7 +3376,7 @@ function CustomerDashboard({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {(['tracker', 'transactions', 'deposit', 'settings'] as const).map(tab => (
+            {(['tracker', 'history', 'transactions', 'deposit', 'settings'] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => setCustomerTab(tab)}
@@ -3016,6 +3387,7 @@ function CustomerDashboard({
                 }`}
               >
                 {tab === 'tracker' && 'My Tracker'}
+                {tab === 'history' && 'My 32-Day History'}
                 {tab === 'transactions' && 'Statement History'}
                 {tab === 'deposit' && 'Deposit Funds'}
                 {tab === 'settings' && 'Plan Settings'}
@@ -3025,14 +3397,36 @@ function CustomerDashboard({
         </div>
       </div>
 
+      {customerTab === 'history' && (() => {
+        const myHistory = buildTrackingHistory(markedDays, savedMonths, cycleArchives);
+        return (
+          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
+            <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider mb-1 font-bold">My 32-Day Tracking History</h3>
+            <p className="text-xs text-slate-505 mb-4 font-medium">Every 32-day cycle you've run, from the one currently in progress to fully paid-out months.</p>
+            {myHistory.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-emerald-200 p-4 text-center text-slate-400">No tracking history yet - your first contribution will start Day 1.</div>
+            ) : (
+              <div className="space-y-2">
+                {myHistory.map(entry => <TrackingHistoryCard key={entry.key} entry={entry} />)}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {customerTab === 'tracker' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="space-y-6 lg:col-span-1">
             {/* Balance Card */}
             <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4 text-slate-800 font-bold">
               <div>
-                <p className="text-[10px] text-slate-505 uppercase font-black tracking-wider">Total Cycle Contributions</p>
+                <p className="text-[10px] text-slate-505 uppercase font-black tracking-wider">Total Balance With HireMercy AJO</p>
                 <p className="text-3xl font-black text-emerald-800 mt-1 font-bold">₦{totalSaved.toLocaleString()}</p>
+                <div className="flex gap-3 mt-1.5 text-[10px] font-bold text-slate-500">
+                  <span>Running: ₦{totalActiveCycle.toLocaleString()}</span>
+                  <span>•</span>
+                  <span>Uncollected: ₦{totalUncollected.toLocaleString()}</span>
+                </div>
               </div>
               
               <div className="pt-4 border-t border-emerald-50 flex justify-between text-xs font-bold">
@@ -3046,18 +3440,18 @@ function CustomerDashboard({
                 </div>
               </div>
 
-              {totalSaved > 0 ? (
+              {uncollectedSavedMonths.length > 0 ? (
                 <button 
                   type="button"
                   onClick={() => setShowWithdrawModal(true)}
                   className="w-full bg-amber-505 hover:bg-amber-606 text-emerald-955 font-black py-2.5 rounded-xl text-xs transition duration-150 shadow-md flex items-center justify-center gap-1.5 font-bold"
                 >
                   <Coins className="w-4 h-4" />
-                  Request Payout / Withdrawal
+                  Request Payout / Withdrawal ({uncollectedSavedMonths.length} saved)
                 </button>
               ) : (
                 <p className="text-[10px] text-center text-slate-400 font-semibold bg-slate-50 p-2 rounded-xl">
-                  Complete first contribution to unlock payouts.
+                  Complete a full 32-day cycle to unlock a payout for that month.
                 </p>
               )}
             </div>
@@ -3373,10 +3767,38 @@ function CustomerDashboard({
               </button>
             </div>
 
+            <div className="space-y-2">
+              <p className="text-xs font-black text-emerald-800">Select saved month(s) to cash out *</p>
+              <div className="max-h-40 overflow-y-auto space-y-1.5 border border-emerald-100 rounded-xl p-2">
+                {uncollectedSavedMonths.length === 0 ? (
+                  <p className="text-[11px] text-slate-400 p-2">No uncollected saved months available.</p>
+                ) : (
+                  uncollectedSavedMonths.map(m => (
+                    <label
+                      key={m.id}
+                      className="flex items-center justify-between gap-2 p-2 rounded-lg border border-emerald-50 hover:bg-emerald-50/40 cursor-pointer text-xs"
+                    >
+                      <span className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedMonthIds.includes(m.id)}
+                          onChange={() => toggleMonthSelection(m.id)}
+                          className="w-4 h-4 accent-emerald-700"
+                        />
+                        <span className="font-bold text-slate-700">{m.month_label}</span>
+                      </span>
+                      <span className="font-black text-emerald-800">₦{m.total_amount.toLocaleString()}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+            </div>
+
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-[11px] text-amber-900 space-y-1.5 leading-relaxed font-semibold font-bold font-bold">
               <p>⚖️ Payout Calculations:</p>
-              <p>• Total Accumulation: <strong>₦{totalSaved.toLocaleString()}</strong> ({markedDays.length} days)</p>
-              <p>• Company Profit Deduction: <strong>- ₦{customer.daily_amount.toLocaleString()}</strong> (1 contribution day)</p>
+              <p>• Selected Months: <strong>{selectedMonths.length}</strong></p>
+              <p>• Total Accumulation: <strong>₦{selectedTotalAmount.toLocaleString()}</strong></p>
+              <p>• Company Profit Deduction: <strong>- ₦{(selectedMonths.length * customer.daily_amount).toLocaleString()}</strong> ({selectedMonths.length} × 1 contribution day)</p>
               <p className="text-emerald-800 border-t border-amber-200 pt-1 text-xs">
                 • Final Settlement: <strong>₦{expectedPayoutAmount.toLocaleString()}</strong>
               </p>
@@ -3426,7 +3848,8 @@ function CustomerDashboard({
 
             <button 
               type="submit"
-              className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl text-xs transition duration-150 shadow-md mt-4"
+              disabled={selectedMonthIds.length === 0}
+              className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-2.5 rounded-xl text-xs transition duration-150 shadow-md mt-4"
             >
               Submit Settlement Request
             </button>
@@ -3453,6 +3876,9 @@ export default function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [markedDays, setMarkedDays] = useState<Record<string, MarkedDay[]>>({});
   const [payoutRequests, setPayoutRequests] = useState<PayoutRequest[]>([]);
+  const [savedMonths, setSavedMonths] = useState<Record<string, SavedMonth[]>>({});
+  const [payoutHistory, setPayoutHistory] = useState<PayoutHistoryRecord[]>([]);
+  const [cycleArchives, setCycleArchives] = useState<Record<string, any[]>>({});
   const [supportDetails, setSupportDetails] = useState<SupportSettings>({
     id: 1,
     support_phone: '+234 803 461 2345',
@@ -3522,6 +3948,9 @@ export default function App() {
         await syncAllOperationalData(latestUser);
         await fetchPayoutRequests(latestUser);
         await fetchNotifications(latestUser);
+        await fetchSavedMonths(latestUser);
+        await fetchPayoutHistory(latestUser);
+        await fetchCycleArchives(latestUser);
       } catch (err) {
         console.error("Background sync failed:", err);
       }
@@ -3530,7 +3959,7 @@ export default function App() {
     // 1. Set up live Realtime postgres listeners for tables
     const channel = supabase.channel('schema-db-changes');
 
-    const tableNames = ['transactions', 'marked_days', 'payout_requests', 'profiles', 'notifications'] as const;
+    const tableNames = ['transactions', 'marked_days', 'payout_requests', 'profiles', 'notifications', 'contributions', 'payout_history', 'cycle_archives'] as const;
     const events = ['INSERT', 'UPDATE', 'DELETE'] as const;
 
     tableNames.forEach((table) => {
@@ -3744,6 +4173,9 @@ export default function App() {
       await syncAllOperationalData(profile);
       await fetchNotifications(profile);
       await fetchPayoutRequests(profile);
+      await fetchSavedMonths(profile);
+      await fetchPayoutHistory(profile);
+      await fetchCycleArchives(profile);
     }
     setIsLoading(false);
   };
@@ -3816,6 +4248,89 @@ export default function App() {
         };
       });
       setPayoutRequests(formatted);
+    }
+  };
+
+  // Loads the "contributions" ledger: frozen/saved 32-day months that a customer has
+  // not yet been paid out for. Admin/Staff see every customer's saved months; a
+  // Customer only sees their own.
+  const fetchSavedMonths = async (userProfile: Profile) => {
+    let query = supabase.from('contributions').select('*').order('created_at', { ascending: false });
+
+    if (userProfile.role === 'Customer') {
+      query = query.eq('customer_id', userProfile.id);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.warn('Saved months fetch failed (has the `contributions` table been created?):', error.message);
+      return;
+    }
+
+    if (data) {
+      const grouped: Record<string, SavedMonth[]> = {};
+      data.forEach((item: any) => {
+        const matchingProfile = profiles.find(p => p.id === item.customer_id);
+        if (!grouped[item.customer_id]) grouped[item.customer_id] = [];
+        grouped[item.customer_id].push({
+          ...item,
+          customer_name: matchingProfile ? matchingProfile.name : 'Customer'
+        });
+      });
+      setSavedMonths(grouped);
+    }
+  };
+
+  // Loads the "payout_history" archive: completed/approved payout requests, along with
+  // which saved month(s) they settled. Written to by handleApprovePayout below.
+  const fetchPayoutHistory = async (userProfile: Profile) => {
+    let query = supabase.from('payout_history').select('*').order('approved_at', { ascending: false });
+
+    if (userProfile.role === 'Customer') {
+      query = query.eq('customer_id', userProfile.id);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.warn('Payout history fetch failed (has the `payout_history` table been created?):', error.message);
+      return;
+    }
+
+    if (data) {
+      const formatted: PayoutHistoryRecord[] = data.map((item: any) => {
+        const matchingProfile = profiles.find(p => p.id === item.customer_id);
+        return { ...item, customer_name: matchingProfile ? matchingProfile.name : 'Customer' };
+      });
+      setPayoutHistory(formatted);
+    }
+  };
+
+  // Loads "cycle_archives" - your pre-existing table that records approved/paid-out
+  // 32-day cycles (the source of the (Collected) badge in the history view). Read
+  // defensively via select('*') since this table's exact columns weren't part of
+  // the schema we've confirmed - pickField() below normalizes whatever shape it is.
+  const fetchCycleArchives = async (userProfile: Profile) => {
+    let query = supabase.from('cycle_archives').select('*');
+
+    if (userProfile.role === 'Customer') {
+      query = query.eq('customer_id', userProfile.id);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.warn('cycle_archives fetch failed (check the table/column names):', error.message);
+      return;
+    }
+
+    if (data) {
+      const grouped: Record<string, any[]> = {};
+      data.forEach((row: any) => {
+        const cId = pickField(row, ['customer_id', 'customerId']);
+        if (!cId) return;
+        if (!grouped[cId]) grouped[cId] = [];
+        grouped[cId].push(row);
+      });
+      setCycleArchives(grouped);
     }
   };
 
@@ -4082,6 +4597,29 @@ export default function App() {
     }
   };
 
+  // NOTE: Freezing a completed 32-day cycle and rolling the remainder into
+  // the next calendar month now happens ENTIRELY inside the database, as
+  // part of the `split_transaction_fn()` trigger on `transactions` (see the
+  // SQL migrations). That trigger runs synchronously within the same INSERT/
+  // UPDATE, so by the time control returns to this client, the freeze +
+  // rollover + correct month labeling has already happened server-side.
+  //
+  // A previous version of this file also tried to do this same freeze
+  // client-side (a function called freezeCompletedMonth). That was a bug:
+  // it re-derived "the current month" from today's real-world date instead
+  // of the period actually being frozen, and it raced against the DB
+  // trigger's own logic - which is exactly what caused a rolled-over month
+  // to get mislabeled with the wrong name. It has been removed. The client
+  // now does nothing but refetch state after a transaction; the database is
+  // the only thing that ever writes to `contributions` or reassigns
+  // `period_key`.
+  const resyncAfterTransaction = async (userProfile: Profile) => {
+    await syncAllOperationalData(userProfile);
+    await fetchNotifications(userProfile);
+    await fetchSavedMonths(userProfile);
+    await fetchCycleArchives(userProfile);
+  };
+
   const createTransaction = async (customerId: string, amount: number, paymentMethod: 'Cash' | 'Bank Transfer' | 'Mobile Money', staffId: string) => {
     setIsLoading(true);
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
@@ -4120,8 +4658,7 @@ export default function App() {
 
     triggerToast('Contribution successfully posted and split!', 'success');
     if (currentUser) {
-      await syncAllOperationalData(currentUser);
-      await fetchNotifications(currentUser);
+      await resyncAfterTransaction(currentUser);
     }
   };
 
@@ -4176,14 +4713,31 @@ export default function App() {
     }
   };
 
-  const handleCreatePayoutRequest = async (bank: string, acctNum: string, acctName: string) => {
+  // WORKFLOW 2: Customer selects one or more of their uncollected "Saved" months
+  // (checkboxes in the withdrawal modal) and submits a single payout request
+  // covering just those months.
+  const handleCreatePayoutRequest = async (bank: string, acctNum: string, acctName: string, contributionIds: string[]) => {
     if (!currentUser) return;
+    if (!contributionIds || contributionIds.length === 0) {
+      triggerToast('Select at least one saved month to request a payout for.', 'error');
+      return;
+    }
     setIsLoading(true);
 
-    const totalDays = (markedDays[currentUser.id] || []).length;
-    const totalAmount = totalDays * currentUser.daily_amount;
-    const payoutAmount = (totalDays - 1) * currentUser.daily_amount;
-    const monthPaidText = getNigerianMonthName();
+    const eligibleMonths = (savedMonths[currentUser.id] || []).filter(
+      m => contributionIds.includes(m.id) && m.status === 'Saved'
+    );
+
+    if (eligibleMonths.length === 0) {
+      setIsLoading(false);
+      triggerToast('Selected month(s) are no longer available for payout.', 'error');
+      return;
+    }
+
+    const totalAmount = sumCurrencyValues(eligibleMonths.map(m => m.total_amount));
+    // Company fee: 1 contribution day deducted per saved month included in this request
+    const payoutAmount = Math.max(0, totalAmount - eligibleMonths.length * currentUser.daily_amount);
+    const monthPaidText = eligibleMonths.map(m => m.month_label).join(', ');
 
     const payoutPayload: any = {
       customer_id: currentUser.id,
@@ -4193,7 +4747,8 @@ export default function App() {
       amount: totalAmount,
       payout_amount: payoutAmount,
       status: 'Pending',
-      month_paid: monthPaidText
+      month_paid: monthPaidText,
+      contribution_ids: contributionIds
     };
 
     let { data: newRequest, error } = await supabase
@@ -4202,13 +4757,14 @@ export default function App() {
       .select('*')
       .single();
 
-    if (error && /month_pay|month_paid/i.test(error.message)) {
+    if (error && /month_pay|month_paid|contribution_ids/i.test(error.message)) {
       const { data: retryRequest, error: retryError } = await supabase
         .from('payout_requests')
         .insert([
           {
             ...payoutPayload,
-            month_paid: undefined
+            month_paid: undefined,
+            contribution_ids: undefined
           }
         ])
         .select('*')
@@ -4217,35 +4773,59 @@ export default function App() {
       error = retryError;
     }
 
-    setIsLoading(false);
     if (error) {
+      setIsLoading(false);
       triggerToast(`Request failed: ${error.message}`, 'error');
-    } else {
-      if (newRequest) {
-        setPayoutRequests(prev => [newRequest, ...prev]);
-      }
-
-      try {
-        await supabase.from('notifications').insert([{
-          user_id: null,
-          title: 'New withdrawal request',
-          message: `${currentUser.name} requested a payout of ₦${payoutAmount.toLocaleString()} to ${bank}.`,
-          is_read: false
-        }]);
-      } catch (notificationError) {
-        console.warn('Admin notification failed:', notificationError);
-      }
-
-      setAdminDashboardRoute('payouts');
-      triggerToast('Withdrawal settlement request submitted to Admin!', 'success');
+      return;
     }
+
+    // Mark the selected saved months as "Requested" so they can't be double-submitted
+    // while this request is pending admin review.
+    await supabase.from('contributions').update({ status: 'Requested' }).in('id', contributionIds);
+    setSavedMonths(prev => ({
+      ...prev,
+      [currentUser.id]: (prev[currentUser.id] || []).map(m =>
+        contributionIds.includes(m.id) ? { ...m, status: 'Requested' } : m
+      )
+    }));
+
+    setIsLoading(false);
+    if (newRequest) {
+      setPayoutRequests(prev => [{ ...newRequest, contribution_ids: contributionIds }, ...prev]);
+    }
+
+    try {
+      await supabase.from('notifications').insert([{
+        user_id: null,
+        title: 'New withdrawal request',
+        message: `${currentUser.name} requested a payout of ₦${payoutAmount.toLocaleString()} (${eligibleMonths.length} saved month${eligibleMonths.length > 1 ? 's' : ''}) to ${bank}.`,
+        is_read: false
+      }]);
+    } catch (notificationError) {
+      console.warn('Admin notification failed:', notificationError);
+    }
+
+    setAdminDashboardRoute('payouts');
+    triggerToast('Withdrawal settlement request submitted to Admin!', 'success');
   };
 
+  // WORKFLOW 3 (Admin "Approve & Payout"): move the saved month(s) attached to this
+  // request out of the active `contributions` ledger and archive them into
+  // `payout_history`, then mark the request itself Successful.
   const handleApprovePayout = async (reqId: string) => {
     setIsLoading(true);
 
     const req = payoutRequests.find(r => r.id === reqId);
-    if (!req) return;
+    if (!req) {
+      setIsLoading(false);
+      return;
+    }
+
+    const contributionIds = req.contribution_ids && req.contribution_ids.length > 0
+      ? req.contribution_ids
+      : (savedMonths[req.customer_id] || []).filter(m => m.status === 'Requested').map(m => m.id);
+
+    const settledMonths = (savedMonths[req.customer_id] || []).filter(m => contributionIds.includes(m.id));
 
     const { error: updateError } = await supabase
       .from('payout_requests')
@@ -4258,17 +4838,41 @@ export default function App() {
       return;
     }
 
-    // Clear customer's past cycle transactions and marked days to reset their balance to 0
-    await supabase.from('marked_days').delete().eq('customer_id', req.customer_id);
-    await supabase.from('transactions').delete().eq('customer_id', req.customer_id);
+    if (contributionIds.length > 0) {
+      // Archive each settled saved month into payout_history...
+      const archiveRows = (settledMonths.length > 0 ? settledMonths : contributionIds.map(id => ({ id }))).map((m: any) => ({
+        customer_id: req.customer_id,
+        contribution_id: m.id,
+        payout_request_id: reqId,
+        month_label: m.month_label || req.month_paid || getNigerianMonthName(),
+        total_amount: m.total_amount ?? req.amount,
+        payout_amount: m.total_amount != null
+          ? Math.max(0, m.total_amount - (profiles.find(p => p.id === req.customer_id)?.daily_amount || 0))
+          : req.payout_amount,
+        bank_name: req.bank_name,
+        account_number: req.account_number,
+        account_name: req.account_name,
+        approved_at: new Date().toISOString()
+      }));
+
+      const { error: archiveError } = await supabase.from('payout_history').insert(archiveRows);
+      if (archiveError) {
+        console.warn('Failed to write payout_history archive:', archiveError.message);
+      }
+
+      // ...then remove those settled records from the active/saved ledger.
+      const { error: deleteError } = await supabase.from('contributions').delete().in('id', contributionIds);
+      if (deleteError) {
+        console.warn('Failed to clear contributions ledger:', deleteError.message);
+      }
+
+      setSavedMonths(prev => ({
+        ...prev,
+        [req.customer_id]: (prev[req.customer_id] || []).filter(m => !contributionIds.includes(m.id))
+      }));
+    }
 
     setPayoutRequests(prev => prev.map(r => r.id === reqId ? { ...r, status: 'Successful' } : r));
-    setMarkedDays(prev => {
-      const next = { ...prev };
-      delete next[req.customer_id];
-      return next;
-    });
-    setTransactions(prev => prev.filter(t => t.customer_id !== req.customer_id));
 
     try {
       await supabase.from('notifications').insert([{
@@ -4283,11 +4887,13 @@ export default function App() {
 
     playNotificationSound('success');
     setIsLoading(false);
-    triggerToast('Payout approved! Customer balance has been reset to 0.', 'success');
-    
+    triggerToast('Payout approved! Settled month(s) archived to payout history.', 'success');
+
     if (currentUser) {
       syncAllOperationalData(currentUser);
       fetchPayoutRequests(currentUser);
+      fetchSavedMonths(currentUser);
+      fetchPayoutHistory(currentUser);
     }
   };
 
@@ -4317,6 +4923,22 @@ export default function App() {
     }
 
     setPayoutRequests(prev => prev.map(r => r.id === reqId ? { ...r, status: 'Rejected' } : r));
+
+    // Release the saved month(s) back onto the active ledger so the customer can request again
+    const releaseIds = req.contribution_ids && req.contribution_ids.length > 0
+      ? req.contribution_ids
+      : (savedMonths[req.customer_id] || []).filter(m => m.status === 'Requested').map(m => m.id);
+
+    if (releaseIds.length > 0) {
+      await supabase.from('contributions').update({ status: 'Saved' }).in('id', releaseIds);
+      setSavedMonths(prev => ({
+        ...prev,
+        [req.customer_id]: (prev[req.customer_id] || []).map(m =>
+          releaseIds.includes(m.id) ? { ...m, status: 'Saved' } : m
+        )
+      }));
+    }
+
     try {
       await supabase.from('notifications').insert([{
         user_id: req.customer_id,
@@ -4541,8 +5163,7 @@ export default function App() {
       playNotificationSound('success');
       triggerToast('Deposit confirmed! Days successfully marked on tracking card.', 'success');
       if (currentUser) {
-        await syncAllOperationalData(currentUser);
-        await fetchNotifications(currentUser);
+        await resyncAfterTransaction(currentUser);
       }
     } catch (err: any) {
       triggerToast(`Approval split logic failed: ${err.message}`, 'error');
@@ -4773,6 +5394,8 @@ export default function App() {
                 markedDays={markedDays} 
                 supportDetails={supportDetails}
                 payoutRequests={payoutRequests}
+                savedMonths={savedMonths}
+                payoutHistory={payoutHistory}
                 withdrawalRequests={withdrawalRequests}
                 onDeleteTransaction={deleteTransaction}
                 onAddTransaction={createTransaction}
@@ -4815,6 +5438,8 @@ export default function App() {
                 markedDays={markedDays[currentUser.id] || []}
                 supportDetails={supportDetails}
                 payoutRequests={payoutRequests}
+                savedMonths={savedMonths[currentUser.id] || []}
+                cycleArchives={cycleArchives[currentUser.id] || []}
                 onAddPayoutRequest={handleCreatePayoutRequest}
                 onAddCustomerPendingTransaction={handleAddCustomerPendingTransaction}
                 onUpdateCustomerSettings={handleUpdateCustomerSettings}

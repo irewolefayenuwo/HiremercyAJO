@@ -359,3 +359,283 @@ CREATE POLICY "Users can read their own or global audit notifications" ON public
 
 CREATE POLICY "Users can mark their notifications as read" ON public.notifications
     FOR UPDATE USING (user_id = auth.uid());
+-- =========================================================================
+-- 32-DAY CONTRIBUTION ROLLOVER + CALENDAR EXPIRATION
+-- Run this in the Supabase SQL Editor. Idempotent (safe to re-run).
+-- =========================================================================
+
+-- -------------------------------------------------------------------------
+-- -1. CREATE THE MISSING TABLES
+--     Your project doesn't have `contributions` or `payout_history` yet -
+--     this is what threw "relation contributions does not exist". Creating
+--     them here before anything else touches them.
+-- -------------------------------------------------------------------------
+create table if not exists contributions (
+  id            uuid primary key default gen_random_uuid(),
+  customer_id   uuid not null references profiles(id) on delete cascade,
+  month_label   text not null,
+  period_key    text not null,
+  total_days    int not null,
+  total_amount  numeric not null,
+  status        text not null default 'saved' check (status in ('saved', 'requested', 'paid')),
+  created_at    timestamptz not null default now()
+);
+
+create table if not exists payout_history (
+  id                 uuid primary key default gen_random_uuid(),
+  customer_id        uuid not null references profiles(id) on delete cascade,
+  contribution_id    uuid references contributions(id) on delete set null,
+  payout_request_id  uuid references payout_requests(id) on delete set null,
+  month_label        text not null,
+  total_amount        numeric not null,
+  payout_amount       numeric not null,
+  bank_name           text not null,
+  account_number      text not null,
+  account_name        text not null,
+  approved_at         timestamptz not null default now()
+);
+
+alter table contributions enable row level security;
+alter table payout_history enable row level security;
+
+-- Baseline policies - mirror whatever pattern you're using on marked_days /
+-- payout_requests. These are permissive owner + staff/admin defaults; tighten
+-- as needed for your actual role setup.
+drop policy if exists "customers read own contributions" on contributions;
+create policy "customers read own contributions" on contributions
+  for select using (
+    customer_id = auth.uid()
+    or exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('Admin', 'Staff'))
+  );
+
+drop policy if exists "staff manage contributions" on contributions;
+create policy "staff manage contributions" on contributions
+  for all using (
+    exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('Admin', 'Staff'))
+  );
+
+drop policy if exists "customers read own payout history" on payout_history;
+create policy "customers read own payout history" on payout_history
+  for select using (
+    customer_id = auth.uid()
+    or exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('Admin', 'Staff'))
+  );
+
+drop policy if exists "staff manage payout history" on payout_history;
+create policy "staff manage payout history" on payout_history
+  for all using (
+    exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('Admin', 'Staff'))
+  );
+
+-- -------------------------------------------------------------------------
+-- 0. SCHEMA: give marked_days and contributions a "period_key" (YYYY-MM)
+--    so multiple month-cycles for the same customer can never collide.
+-- -------------------------------------------------------------------------
+alter table marked_days
+  add column if not exists period_key text,
+  add column if not exists transaction_id uuid references transactions(id);
+
+update marked_days
+  set period_key = to_char(created_at, 'YYYY-MM')
+  where period_key is null;
+
+alter table marked_days
+  alter column period_key set default to_char(now(), 'YYYY-MM');
+
+create index if not exists idx_marked_days_customer_period
+  on marked_days (customer_id, period_key);
+
+alter table contributions
+  add column if not exists period_key text;
+
+create unique index if not exists uq_contributions_customer_period
+  on contributions (customer_id, period_key);
+  -- Prevents the same customer/month ever being frozen twice, even if the
+  -- trigger and the cron job both attempt it in a race.
+
+-- -------------------------------------------------------------------------
+-- 1. HELPERS
+-- -------------------------------------------------------------------------
+create or replace function period_label(p_period_key text)
+returns text language sql immutable as $$
+  select to_char(to_date(p_period_key || '-01', 'YYYY-MM-DD'), 'FMMonth YYYY');
+$$;
+
+create or replace function next_period_key(p_period_key text)
+returns text language sql immutable as $$
+  select to_char(
+    (to_date(p_period_key || '-01', 'YYYY-MM-DD') + interval '1 month')::date,
+    'YYYY-MM'
+  );
+$$;
+
+-- Archives whatever is currently sitting in marked_days for one
+-- customer+period into `contributions` as status='saved', then clears it.
+-- Works identically whether the period is full (32/32) or was cut short
+-- by a calendar rollover (e.g. 15/32) - both are legitimate "saved" states.
+create or replace function freeze_period(p_customer_id uuid, p_period_key text)
+returns void language plpgsql as $$
+declare
+  v_total_days int;
+  v_total_amount numeric;
+begin
+  select count(*), coalesce(sum(amount), 0)
+    into v_total_days, v_total_amount
+  from marked_days
+  where customer_id = p_customer_id and period_key = p_period_key;
+
+  if v_total_days = 0 then
+    return; -- nothing to freeze
+  end if;
+
+  insert into contributions (customer_id, month_label, period_key, total_days, total_amount, status)
+  values (p_customer_id, period_label(p_period_key), p_period_key, v_total_days, v_total_amount, 'saved')
+  on conflict (customer_id, period_key) do nothing;
+
+  delete from marked_days where customer_id = p_customer_id and period_key = p_period_key;
+end;
+$$;
+
+-- -------------------------------------------------------------------------
+-- 2. RULE 1 - THE MULTI-DAY OVERFLOW TRIGGER
+--    Fires on every new transaction. Converts amount -> number of days,
+--    then fills the customer's currently-open period up to exactly 32,
+--    freezes it, and cascades any remainder into the next period(s).
+--    Also defensively applies Rule 2 first, in case a stale prior month
+--    is still sitting open when this transaction arrives.
+-- -------------------------------------------------------------------------
+create or replace function fn_handle_transaction_split()
+returns trigger language plpgsql as $$
+declare
+  v_daily_amount   numeric;
+  v_days_to_mark   int;
+  v_current_period text := to_char(current_date, 'YYYY-MM');
+  v_active_period  text;
+  v_current_count  int;
+  v_remaining_slots int;
+  v_days_this_block int;
+  d int;
+  v_stale record;
+begin
+  select daily_amount into v_daily_amount
+  from profiles where id = new.customer_id;
+
+  if v_daily_amount is null or v_daily_amount <= 0 then
+    raise exception 'Customer % has no valid daily_amount configured', new.customer_id;
+  end if;
+
+  v_days_to_mark := round(new.amount / v_daily_amount);
+  if v_days_to_mark <= 0 then
+    return new; -- amount didn't round up to even 1 day; leave transaction as a plain record
+  end if;
+
+  -- RULE 2 (defensive): freeze any period(s) left over from previous
+  -- calendar months before applying today's contribution, so we never
+  -- add fresh days on top of a stale, unfrozen month.
+  for v_stale in
+    select distinct period_key
+    from marked_days
+    where customer_id = new.customer_id and period_key < v_current_period
+    order by period_key
+  loop
+    perform freeze_period(new.customer_id, v_stale.period_key);
+  end loop;
+
+  -- Whichever period still has open (unfrozen) days is the active one.
+  select period_key into v_active_period
+  from marked_days
+  where customer_id = new.customer_id
+  order by period_key desc
+  limit 1;
+
+  if v_active_period is null then
+    v_active_period := v_current_period;
+  end if;
+
+  -- Allocate days across as many periods as needed (handles lump sums
+  -- covering more than one month's worth of days in a single payment).
+  while v_days_to_mark > 0 loop
+    select count(*) into v_current_count
+    from marked_days
+    where customer_id = new.customer_id and period_key = v_active_period;
+
+    v_remaining_slots := 32 - v_current_count;
+
+    if v_remaining_slots <= 0 then
+      perform freeze_period(new.customer_id, v_active_period);
+      v_active_period := next_period_key(v_active_period);
+      continue;
+    end if;
+
+    v_days_this_block := least(v_days_to_mark, v_remaining_slots);
+
+    for d in 1..v_days_this_block loop
+      insert into marked_days (customer_id, day_number, amount, period_key, transaction_id)
+      values (new.customer_id, v_current_count + d, v_daily_amount, v_active_period, new.id);
+    end loop;
+
+    v_days_to_mark := v_days_to_mark - v_days_this_block;
+
+    -- Exactly hit 32 in this period -> freeze it and roll any remainder
+    -- straight into the next calendar month, immediately.
+    if v_current_count + v_days_this_block >= 32 then
+      perform freeze_period(new.customer_id, v_active_period);
+      v_active_period := next_period_key(v_active_period);
+    end if;
+  end loop;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_transaction_split on transactions;
+create trigger trg_transaction_split
+  after insert on transactions
+  for each row
+  execute function fn_handle_transaction_split();
+
+-- -------------------------------------------------------------------------
+-- 3. RULE 2 - CALENDAR MONTH EXPIRATION (proactive, no transaction needed)
+--    Freezes any customer's incomplete prior-month table the moment the
+--    calendar flips, even if they never make another contribution.
+-- -------------------------------------------------------------------------
+create or replace function expire_stale_periods()
+returns void language plpgsql as $$
+declare
+  v_current_period text := to_char(current_date, 'YYYY-MM');
+  r record;
+begin
+  for r in
+    select distinct customer_id, period_key
+    from marked_days
+    where period_key < v_current_period
+  loop
+    perform freeze_period(r.customer_id, r.period_key);
+  end loop;
+end;
+$$;
+
+-- pg_cron must be enabled before cron.schedule() exists. On most Supabase
+-- projects this line works directly in the SQL Editor. If it errors with a
+-- permissions message instead, enable it manually via:
+--   Dashboard -> Database -> Extensions -> search "pg_cron" -> Enable
+-- then re-run just the two `select cron.schedule(...)` blocks below.
+create extension if not exists pg_cron;
+
+-- Unschedule any earlier partial attempt so re-running this file is safe.
+select cron.unschedule(jobid) from cron.job where jobname = 'expire-stale-contribution-periods-monthly';
+select cron.unschedule(jobid) from cron.job where jobname = 'expire-stale-contribution-periods-daily-safety';
+
+select cron.schedule(
+  'expire-stale-contribution-periods-monthly',
+  '5 0 1 * *',                                  -- 00:05 on the 1st of every month
+  $$select expire_stale_periods();$$
+);
+
+-- Safety net in case of timezone drift around month boundaries - cheap to run,
+-- it's a no-op unless there's genuinely a stale period sitting around.
+select cron.schedule(
+  'expire-stale-contribution-periods-daily-safety',
+  '10 0 * * *',
+  $$select expire_stale_periods();$$
+);
