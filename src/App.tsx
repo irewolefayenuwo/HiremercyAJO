@@ -110,7 +110,7 @@ export interface SavedMonth {
   period_key: string;
   total_days: number;
   total_amount: number;
-  status: 'Saved' | 'Requested' | 'Paid';
+  status: 'saved' | 'requested' | 'paid';
   created_at: string;
 }
 
@@ -193,7 +193,7 @@ const buildTrackingHistory = (
 
   // Uncollected: frozen 32-day (or expired) cycles awaiting payout
   savedMonthsForCustomer
-    .filter(m => m.status === 'Saved' || m.status === 'Requested')
+    .filter(m => m.status === 'saved' || m.status === 'requested')
     .forEach(m => {
       rows.push({
         key: `uncollected-${m.id}`,
@@ -245,17 +245,46 @@ const TrackingStatusBadge = ({ status }: { status: TrackingHistoryEntry['status'
   );
 };
 
-const TrackingHistoryCard = ({ entry }: { entry: TrackingHistoryEntry }) => (
-  <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white p-3.5 shadow-sm">
-    <div>
-      <p className="text-xs font-black text-slate-800">{entry.month_label}</p>
-      <p className="text-[11px] font-semibold text-slate-500">
-        {entry.total_days}/32 days • ₦{entry.total_amount.toLocaleString()}
-      </p>
+const TrackingHistoryCard = ({ entry }: { entry: TrackingHistoryEntry }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setIsOpen(o => !o)}
+        className="w-full flex items-center justify-between gap-3 p-3.5 text-left hover:bg-slate-50/60 transition"
+      >
+        <div>
+          <p className="text-xs font-black text-slate-800">{entry.month_label}</p>
+          <p className="text-[11px] font-semibold text-slate-500">
+            {entry.total_days}/32 days • ₦{entry.total_amount.toLocaleString()}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <TrackingStatusBadge status={entry.status} />
+          {isOpen ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
+        </div>
+      </button>
+      {isOpen && (
+        <div className="border-t border-slate-50 bg-slate-50/40 px-3.5 py-3 text-[11px] font-semibold text-slate-600 space-y-1">
+          <p>Cycle period: <span className="font-bold text-slate-800">{entry.period_key || 'N/A'}</span></p>
+          <p>Days completed: <span className="font-bold text-slate-800">{entry.total_days} / 32</span></p>
+          <p>Amount: <span className="font-bold text-emerald-800">₦{entry.total_amount.toLocaleString()}</span></p>
+          <p>Status: <span className="font-bold text-slate-800">{entry.status}</span></p>
+          {entry.status === 'Uncollected' && (
+            <p className="text-amber-700 pt-1">This month is saved and waiting - request a payout from the tracker tab to collect it.</p>
+          )}
+          {entry.status === 'Running' && (
+            <p className="text-amber-700 pt-1">Still in progress - this will automatically save once it reaches 32 days.</p>
+          )}
+          {entry.status === 'Collected' && (
+            <p className="text-emerald-700 pt-1">Paid out - this cycle is fully settled.</p>
+          )}
+        </div>
+      )}
     </div>
-    <TrackingStatusBadge status={entry.status} />
-  </div>
-);
+  );
+};
 const periodLabelFromKey = (periodKey?: string) => {
   if (!periodKey) return 'Unknown period';
   const [y, m] = periodKey.split('-').map(Number);
@@ -935,7 +964,7 @@ function AdminDashboard({
   const outstandingPayoutCustomers = useMemo(() => {
     return Object.entries(savedMonths)
       .map(([customerId, months]) => {
-        const uncollected = months.filter(m => m.status === 'Saved' || m.status === 'Requested');
+        const uncollected = months.filter(m => m.status === 'saved' || m.status === 'requested');
         const customerProfile = profiles.find(p => p.id === customerId);
         return {
           customerId,
@@ -1249,20 +1278,29 @@ function AdminDashboard({
     }
   };
 
+  // FIX: this used to read from `markedDays` (the customer's ACTIVE, still-
+  // running cycle) and would let an admin "pay out" - and then wipe - money
+  // that was never actually frozen/saved yet. It now sources exclusively
+  // from uncollected `contributions` (the same data the Outstanding Payout
+  // Ledger uses), so this shortcut can never touch the active cycle.
   const manualPayoutCalculation = useMemo(() => {
     if (!manualPayoutCustomerId) return null;
     const target = customers.find(c => c.id === manualPayoutCustomerId);
     if (!target) return null;
-    const totalDays = (markedDays[manualPayoutCustomerId] || []).length;
-    const totalAmount = totalDays * target.daily_amount;
-    const payoutAmount = totalDays > 1 ? (totalDays - 1) * target.daily_amount : 0;
+    const uncollectedMonths = (savedMonths[manualPayoutCustomerId] || []).filter(
+      m => m.status === 'saved' || m.status === 'requested'
+    );
+    if (uncollectedMonths.length === 0) return null;
+    const totalAmount = sumCurrencyValues(uncollectedMonths.map(m => m.total_amount));
+    const payoutAmount = Math.max(0, totalAmount - uncollectedMonths.length * target.daily_amount);
     return {
-      totalDays,
+      uncollectedMonths,
+      totalDays: uncollectedMonths.reduce((s, m) => s + m.total_days, 0),
       totalAmount,
       payoutAmount,
       target
     };
-  }, [manualPayoutCustomerId, markedDays, customers]);
+  }, [manualPayoutCustomerId, savedMonths, customers]);
 
   const pendingTransactions = useMemo(() => {
     return transactions.filter(t => t.status === 'Pending');
@@ -2307,7 +2345,7 @@ function AdminDashboard({
                 <Coins className="w-5 h-5 text-emerald-700" />
                 Trigger Manual Payout
               </h3>
-              <p className="text-[10px] text-slate-400 mb-4">Payout directly resets active splits. Deduction parameters calculate automatically.</p>
+              <p className="text-[10px] text-slate-400 mb-4">Archives this customer's uncollected saved month(s) straight to payout history. Never touches their active, still-running cycle.</p>
 
               <form onSubmit={handleTriggerManualPayoutSubmit} className="space-y-4 text-xs font-semibold">
                 <div>
@@ -2320,11 +2358,17 @@ function AdminDashboard({
                   />
                 </div>
 
+                {manualPayoutCustomerId && !manualPayoutCalculation && (
+                  <div className="rounded-2xl border border-dashed border-slate-200 p-3 text-[10px] text-slate-400">
+                    This customer has no uncollected saved months right now.
+                  </div>
+                )}
+
                 {manualPayoutCalculation && (
                   <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-[10px] text-amber-900 space-y-1 font-semibold leading-relaxed">
-                    <p>Accrued Days: {manualPayoutCalculation.totalDays}</p>
-                    <p>Initial Accumulation: ₦{manualPayoutCalculation.totalAmount.toLocaleString()}</p>
-                    <p>Company Fee (1 Day): - ₦{manualPayoutCalculation.target.daily_amount.toLocaleString()}</p>
+                    <p>Uncollected Months: {manualPayoutCalculation.uncollectedMonths.length} ({manualPayoutCalculation.totalDays} days total)</p>
+                    <p>Saved Accumulation: ₦{manualPayoutCalculation.totalAmount.toLocaleString()}</p>
+                    <p>Company Fee ({manualPayoutCalculation.uncollectedMonths.length} × 1 Day): - ₦{(manualPayoutCalculation.uncollectedMonths.length * manualPayoutCalculation.target.daily_amount).toLocaleString()}</p>
                     <p className="text-emerald-800 border-t border-amber-200 pt-1 font-black">
                       Expected Payout: ₦{manualPayoutCalculation.payoutAmount.toLocaleString()}
                     </p>
@@ -2376,7 +2420,7 @@ function AdminDashboard({
                   disabled={!manualPayoutCalculation || manualPayoutCalculation.payoutAmount === 0}
                   className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl transition shadow-md"
                 >
-                  Trigger Payout & Clear Cycle
+                  Archive & Pay Out Uncollected Months
                 </button>
               </form>
             </div>
@@ -2584,7 +2628,7 @@ function AdminDashboard({
                         const balance = markedCount * c.daily_amount;
                         const uncollectedTotal = sumCurrencyValues(
                           (savedMonths[c.id] || [])
-                            .filter(m => m.status === 'Saved' || m.status === 'Requested')
+                            .filter(m => m.status === 'saved' || m.status === 'requested')
                             .map(m => m.total_amount)
                         );
                         return (
@@ -3226,7 +3270,7 @@ function CustomerDashboard({
   // these are real money that belongs to the customer just as much as the active
   // cycle; excluding them was the bug behind "balance only shows the new remainder".
   const totalUncollected = sumCurrencyValues(
-    savedMonths.filter(m => m.status === 'Saved' || m.status === 'Requested').map(m => m.total_amount)
+    savedMonths.filter(m => m.status === 'saved' || m.status === 'requested').map(m => m.total_amount)
   );
   // Total across everything the customer currently has with the company
   const totalSaved = totalActiveCycle + totalUncollected;
@@ -3255,7 +3299,7 @@ function CustomerDashboard({
   // Frozen/saved 32-day months that haven't been collected (requested/paid) yet.
   // The Payout action is only ever surfaced when this list is non-empty.
   const uncollectedSavedMonths = useMemo(() => {
-    return savedMonths.filter(m => m.status === 'Saved');
+    return savedMonths.filter(m => m.status === 'saved');
   }, [savedMonths]);
 
   const selectedMonths = useMemo(() => {
@@ -3399,17 +3443,37 @@ function CustomerDashboard({
 
       {customerTab === 'history' && (() => {
         const myHistory = buildTrackingHistory(markedDays, savedMonths, cycleArchives);
+        const uncollectedTotal = sumCurrencyValues(
+          myHistory.filter(e => e.status === 'Uncollected').map(e => e.total_amount)
+        );
+        const collectedTotal = sumCurrencyValues(
+          myHistory.filter(e => e.status === 'Collected').map(e => e.total_amount)
+        );
         return (
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
-            <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider mb-1 font-bold">My 32-Day Tracking History</h3>
-            <p className="text-xs text-slate-505 mb-4 font-medium">Every 32-day cycle you've run, from the one currently in progress to fully paid-out months.</p>
-            {myHistory.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-emerald-200 p-4 text-center text-slate-400">No tracking history yet - your first contribution will start Day 1.</div>
-            ) : (
-              <div className="space-y-2">
-                {myHistory.map(entry => <TrackingHistoryCard key={entry.key} entry={entry} />)}
+          <div className="space-y-4">
+            {/* Savings Account summary - accumulates and never clears until an
+                explicit admin-approved payout removes a specific month */}
+            <div className="bg-emerald-955 text-white p-6 rounded-3xl shadow-sm">
+              <p className="text-[10px] uppercase font-black tracking-wider text-emerald-200">My Savings Account</p>
+              <p className="text-3xl font-black mt-1">₦{(totalActiveCycle + uncollectedTotal).toLocaleString()}</p>
+              <div className="flex gap-4 mt-2 text-[11px] font-bold text-emerald-100">
+                <span>Running: ₦{totalActiveCycle.toLocaleString()}</span>
+                <span>Uncollected: ₦{uncollectedTotal.toLocaleString()}</span>
+                <span>Lifetime Collected: ₦{collectedTotal.toLocaleString()}</span>
               </div>
-            )}
+            </div>
+
+            <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
+              <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider mb-1 font-bold">My 32-Day Tracking History</h3>
+              <p className="text-xs text-slate-505 mb-4 font-medium">Every 32-day cycle you've run, from the one currently in progress to fully paid-out months. Click a month for details.</p>
+              {myHistory.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-emerald-200 p-4 text-center text-slate-400">No tracking history yet - your first contribution will start Day 1.</div>
+              ) : (
+                <div className="space-y-2">
+                  {myHistory.map(entry => <TrackingHistoryCard key={entry.key} entry={entry} />)}
+                </div>
+              )}
+            </div>
           </div>
         );
       })()}
@@ -3462,7 +3526,14 @@ function CustomerDashboard({
           <div className="lg:col-span-2 space-y-6">
             <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4">
               <div>
-                <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider font-bold">My 32-Day Contribution Grid</h3>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider font-bold">My 32-Day Contribution Grid</h3>
+                  <span className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-[11px] font-black text-emerald-800">
+                    {periodLabelFromKey((markedDays[0] as any)?.period_key) !== 'Unknown period'
+                      ? periodLabelFromKey((markedDays[0] as any)?.period_key)
+                      : periodLabelFromKey(getCurrentPeriodKey())}
+                  </span>
+                </div>
                 <p className="text-xs text-slate-505 mt-0.5 font-bold">Stars indicate approved/marked allocations corresponding to confirmed payments.</p>
               </div>
               <Grid32 trackingDays={markedDays} dailyAmount={customer.daily_amount} />
@@ -4725,7 +4796,7 @@ export default function App() {
     setIsLoading(true);
 
     const eligibleMonths = (savedMonths[currentUser.id] || []).filter(
-      m => contributionIds.includes(m.id) && m.status === 'Saved'
+      m => contributionIds.includes(m.id) && m.status === 'saved'
     );
 
     if (eligibleMonths.length === 0) {
@@ -4781,11 +4852,11 @@ export default function App() {
 
     // Mark the selected saved months as "Requested" so they can't be double-submitted
     // while this request is pending admin review.
-    await supabase.from('contributions').update({ status: 'Requested' }).in('id', contributionIds);
+    await supabase.from('contributions').update({ status: 'requested' }).in('id', contributionIds);
     setSavedMonths(prev => ({
       ...prev,
       [currentUser.id]: (prev[currentUser.id] || []).map(m =>
-        contributionIds.includes(m.id) ? { ...m, status: 'Requested' } : m
+        contributionIds.includes(m.id) ? { ...m, status: 'requested' } : m
       )
     }));
 
@@ -4823,7 +4894,7 @@ export default function App() {
 
     const contributionIds = req.contribution_ids && req.contribution_ids.length > 0
       ? req.contribution_ids
-      : (savedMonths[req.customer_id] || []).filter(m => m.status === 'Requested').map(m => m.id);
+      : (savedMonths[req.customer_id] || []).filter(m => m.status === 'requested').map(m => m.id);
 
     const settledMonths = (savedMonths[req.customer_id] || []).filter(m => contributionIds.includes(m.id));
 
@@ -4927,14 +4998,14 @@ export default function App() {
     // Release the saved month(s) back onto the active ledger so the customer can request again
     const releaseIds = req.contribution_ids && req.contribution_ids.length > 0
       ? req.contribution_ids
-      : (savedMonths[req.customer_id] || []).filter(m => m.status === 'Requested').map(m => m.id);
+      : (savedMonths[req.customer_id] || []).filter(m => m.status === 'requested').map(m => m.id);
 
     if (releaseIds.length > 0) {
-      await supabase.from('contributions').update({ status: 'Saved' }).in('id', releaseIds);
+      await supabase.from('contributions').update({ status: 'saved' }).in('id', releaseIds);
       setSavedMonths(prev => ({
         ...prev,
         [req.customer_id]: (prev[req.customer_id] || []).map(m =>
-          releaseIds.includes(m.id) ? { ...m, status: 'Saved' } : m
+          releaseIds.includes(m.id) ? { ...m, status: 'saved' } : m
         )
       }));
     }
@@ -5008,6 +5079,15 @@ export default function App() {
     }
   };
 
+  // FIX: this used to unconditionally delete ALL of a customer's marked_days
+  // AND their entire transactions history, based only on their active/
+  // running cycle total - with no connection to `contributions` at all. That
+  // meant clicking this could wipe a customer's balance without ever
+  // archiving anything, and without touching their actual uncollected saved
+  // months. It's rewritten to be a same-day shortcut for exactly what the
+  // real Approve & Payout flow does: archive uncollected `contributions`
+  // into `payout_history` and remove them from the active ledger. It no
+  // longer ever touches marked_days or transactions.
   const handleTriggerManualPayout = async (customerId: string, bank: string, acctNum: string, acctName: string) => {
     setIsLoading(true);
 
@@ -5018,10 +5098,20 @@ export default function App() {
       return;
     }
 
-    const totalDays = (markedDays[customerId] || []).length;
-    const totalAmount = totalDays * targetCustomer.daily_amount;
-    const payoutAmount = totalDays > 1 ? (totalDays - 1) * targetCustomer.daily_amount : 0;
-    const monthPaidText = getNigerianMonthName();
+    const uncollectedMonths = (savedMonths[customerId] || []).filter(
+      m => m.status === 'saved' || m.status === 'requested'
+    );
+
+    if (uncollectedMonths.length === 0) {
+      triggerToast('This customer has no uncollected saved months to pay out.', 'error');
+      setIsLoading(false);
+      return;
+    }
+
+    const contributionIds = uncollectedMonths.map(m => m.id);
+    const totalAmount = sumCurrencyValues(uncollectedMonths.map(m => m.total_amount));
+    const payoutAmount = Math.max(0, totalAmount - uncollectedMonths.length * targetCustomer.daily_amount);
+    const monthPaidText = uncollectedMonths.map(m => m.month_label).join(', ');
 
     const payoutPayload: any = {
       customer_id: customerId,
@@ -5032,6 +5122,7 @@ export default function App() {
       payout_amount: payoutAmount,
       status: 'Successful',
       month_paid: monthPaidText,
+      contribution_ids: contributionIds,
       processed_at: new Date().toISOString()
     };
 
@@ -5041,15 +5132,10 @@ export default function App() {
       .select('*')
       .single();
 
-    if (insertError && /month_pay|month_paid/i.test(insertError.message)) {
+    if (insertError && /month_pay|month_paid|contribution_ids/i.test(insertError.message)) {
       const { data: retryRequest, error: retryError } = await supabase
         .from('payout_requests')
-        .insert([
-          {
-            ...payoutPayload,
-            month_paid: undefined
-          }
-        ])
+        .insert([{ ...payoutPayload, month_paid: undefined, contribution_ids: undefined }])
         .select('*')
         .single();
       newRequest = retryRequest;
@@ -5062,26 +5148,46 @@ export default function App() {
       return;
     }
 
-    // Clear customer's past cycle transactions and marked days to reset their balance to 0
-    await supabase.from('marked_days').delete().eq('customer_id', customerId);
-    await supabase.from('transactions').delete().eq('customer_id', customerId);
+    // Archive each settled month into payout_history, same as the real
+    // Approve & Payout flow, then remove them from the active ledger.
+    const archiveRows = uncollectedMonths.map(m => ({
+      customer_id: customerId,
+      contribution_id: m.id,
+      payout_request_id: newRequest?.id,
+      month_label: m.month_label,
+      total_amount: m.total_amount,
+      payout_amount: Math.max(0, m.total_amount - targetCustomer.daily_amount),
+      bank_name: bank,
+      account_number: acctNum,
+      account_name: acctName,
+      approved_at: new Date().toISOString()
+    }));
 
-    setMarkedDays(prev => {
-      const next = { ...prev };
-      delete next[customerId];
-      return next;
-    });
-    setTransactions(prev => prev.filter(t => t.customer_id !== customerId));
+    const { error: archiveError } = await supabase.from('payout_history').insert(archiveRows);
+    if (archiveError) {
+      console.warn('Failed to write payout_history archive:', archiveError.message);
+    }
+
+    const { error: deleteError } = await supabase.from('contributions').delete().in('id', contributionIds);
+    if (deleteError) {
+      console.warn('Failed to clear contributions ledger:', deleteError.message);
+    }
+
+    setSavedMonths(prev => ({
+      ...prev,
+      [customerId]: (prev[customerId] || []).filter(m => !contributionIds.includes(m.id))
+    }));
     if (newRequest) {
       setPayoutRequests(prev => [newRequest, ...prev]);
     }
 
     setIsLoading(false);
-    triggerToast("Manual payout triggered! ₦" + payoutAmount.toLocaleString() + " logged and tracker reset.", 'success');
-    
+    triggerToast(`Payout triggered! ₦${payoutAmount.toLocaleString()} across ${uncollectedMonths.length} month(s) archived.`, 'success');
+
     if (currentUser) {
-      syncAllOperationalData(currentUser);
-      fetchPayoutRequests(currentUser);
+      await fetchPayoutRequests(currentUser);
+      await fetchSavedMonths(currentUser);
+      await fetchCycleArchives(currentUser);
     }
   };
 
