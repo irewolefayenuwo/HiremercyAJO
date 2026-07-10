@@ -21,6 +21,7 @@ export interface Profile {
   created_at?: string;
   last_amount_change_at?: string;
   allow_anytime_change?: boolean;
+  admin_note?: string;
 }
 
 export interface Branch {
@@ -62,7 +63,9 @@ export interface SupportSettings {
   advert_title?: string;
   advert_description?: string;
   advert_image_url?: string;
+  advert_video_url?: string;
   advert_enabled?: boolean;
+  theme_background_color?: string;
 }
 
 export interface WithdrawalRequest {
@@ -312,7 +315,24 @@ const nigerianBanks = [
   'United Bank for Africa (UBA)', 'Unity Bank', 'Wema Bank', 'Zenith Bank'
 ];
 
-type AdminTab = 'overview' | 'customers' | 'branches' | 'staff' | 'payouts' | 'records' | 'transactions' | 'settings' | 'reports';
+type AdminTab = 'overview' | 'customers' | 'branches' | 'staff' | 'payouts' | 'records' | 'transactions' | 'settings' | 'reports' | 'cashsheet';
+
+export interface CashReconciliation {
+  id: string;
+  folder_name: string;
+  record_date: string;
+  denominations: { denom: number; pieces: number; total: number }[];
+  grand_cash_total: number;
+  trf_amount: number;
+  cash_plus_trf: number;
+  company_profit: number;
+  total_expenses: number;
+  total_payout: number;
+  available_profit_balance: number;
+  notes?: string;
+  created_by?: string;
+  created_at: string;
+}
 
 const isTransferMethod = (method?: string) => Boolean(method && /transfer/i.test(method));
 
@@ -933,7 +953,9 @@ function AdvertisementBanner({ details }: { details: SupportSettings }) {
           <p className="text-sm text-emerald-100">{details.advert_description || 'Join the smart daily savings circle with HireMercyAJO.'}</p>
         </div>
         <div className="overflow-hidden rounded-2xl border border-emerald-700/60 bg-white/10 p-2">
-          {details.advert_image_url ? (
+          {details.advert_video_url ? (
+            <video src={details.advert_video_url} className="h-40 w-full rounded-xl object-cover" autoPlay loop muted playsInline />
+          ) : details.advert_image_url ? (
             <img src={details.advert_image_url} alt="Advertisement" className="h-40 w-full rounded-xl object-cover" />
           ) : (
             <div className="flex h-40 items-center justify-center rounded-xl bg-emerald-900/70 text-center text-sm font-bold text-emerald-100">Daily contributions made simple.</div>
@@ -950,13 +972,155 @@ function AdvertisementBanner({ details }: { details: SupportSettings }) {
 
 function AdminDashboard({ 
   profiles, branches, transactions, markedDays, supportDetails, payoutRequests, savedMonths, payoutHistory, withdrawalRequests, onApprovePayout, onCreateBranch, onUpdateBranch, onDeleteBranch, onCreateStaff, onUpdateStaff, onDeleteStaff, onRegisterCustomer,
-  onDeleteTransaction, onAddTransaction, onUpdateSupport, onDeleteCustomer, onUpdateCustomer, onToggleCustomerActive, onTriggerManualPayout, onApproveTransaction, onApproveWithdrawal, routeTarget, onRouteHandled, onRejectPayout
+  onDeleteTransaction, onAddTransaction, onUpdateSupport, onDeleteCustomer, onUpdateCustomer, onToggleCustomerActive, onTriggerManualPayout, onApproveTransaction, onApproveWithdrawal, routeTarget, onRouteHandled, onRejectPayout, triggerToast, onResetPasswordToDefault
 }: { 
-  profiles: Profile[], branches: Branch[], transactions: Transaction[], markedDays: Record<string, MarkedDay[]>, supportDetails: SupportSettings, payoutRequests: PayoutRequest[], savedMonths: Record<string, SavedMonth[]>, payoutHistory: PayoutHistoryRecord[], withdrawalRequests: WithdrawalRequest[], onDeleteTransaction: (id: string) => void, onAddTransaction: (cId: string, amt: number, method: any, sId: string) => void, onUpdateSupport: (phone: string, whatsapp: string, email: string, bankName: string, acctNum: string, acctName: string, advertTitle: string, advertDescription: string, advertImageUrl: string, advertEnabled: boolean) => void, onApprovePayout: (reqId: string) => void, onCreateBranch: (name: string, address: string) => void, onUpdateBranch: (id: string, name: string, address: string) => void, onDeleteBranch: (id: string) => void, onCreateStaff: (name: string, phone: string, email: string, branchId: string, password: string) => void, onUpdateStaff: (id: string, name: string, phone: string, email: string, branchId: string) => void, onDeleteStaff: (id: string) => void, onRegisterCustomer: (data: any) => void,
-  onDeleteCustomer: (id: string) => void, onUpdateCustomer: (id: string, name: string, phone: string, email: string, dailyAmount: number, branchId: string, allowAnytimeChange: boolean) => void, onToggleCustomerActive: (id: string, is_active: boolean) => void, onTriggerManualPayout: (customerId: string, bank: string, acctNum: string, acctName: string) => void, onApproveTransaction: (id: string) => void, onApproveWithdrawal: (id: string, bankName: string, accountNumber: string, accountName: string) => void, routeTarget?: AdminTab | null, onRouteHandled?: () => void, onRejectPayout?: (reqId: string) => void
+  profiles: Profile[], branches: Branch[], transactions: Transaction[], markedDays: Record<string, MarkedDay[]>, supportDetails: SupportSettings, payoutRequests: PayoutRequest[], savedMonths: Record<string, SavedMonth[]>, payoutHistory: PayoutHistoryRecord[], withdrawalRequests: WithdrawalRequest[], onDeleteTransaction: (id: string) => void, onAddTransaction: (cId: string, amt: number, method: any, sId: string) => void, onUpdateSupport: (phone: string, whatsapp: string, email: string, bankName: string, acctNum: string, acctName: string, advertTitle: string, advertDescription: string, advertImageUrl: string, advertEnabled: boolean, advertVideoUrl: string, themeBackgroundColor: string) => void, onApprovePayout: (reqId: string) => void, onCreateBranch: (name: string, address: string) => void, onUpdateBranch: (id: string, name: string, address: string) => void, onDeleteBranch: (id: string) => void, onCreateStaff: (name: string, phone: string, email: string, branchId: string, password: string) => void, onUpdateStaff: (id: string, name: string, phone: string, email: string, branchId: string) => void, onDeleteStaff: (id: string) => void, onRegisterCustomer: (data: any) => void,
+  onDeleteCustomer: (id: string) => void, onUpdateCustomer: (id: string, name: string, phone: string, email: string, dailyAmount: number, branchId: string, allowAnytimeChange: boolean) => void, onToggleCustomerActive: (id: string, is_active: boolean) => void, onTriggerManualPayout: (customerId: string, bank: string, acctNum: string, acctName: string) => void, onApproveTransaction: (id: string) => void, onApproveWithdrawal: (id: string, bankName: string, accountNumber: string, accountName: string) => void, routeTarget?: AdminTab | null, onRouteHandled?: () => void, onRejectPayout?: (reqId: string) => void, triggerToast?: (message: string, type?: 'success' | 'error') => void, onResetPasswordToDefault?: (customerId: string) => void
 }) {
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [expandedOutstandingCustomerId, setExpandedOutstandingCustomerId] = useState<string | null>(null);
+
+  // --- Cash Balance Sheet state ---
+  const [cashSheetView, setCashSheetView] = useState<'entry' | 'archive'>('entry');
+  const [cashRecords, setCashRecords] = useState<CashReconciliation[]>([]);
+  const [denomRows, setDenomRows] = useState([
+    { denom: 1000, pieces: 0 },
+    { denom: 500, pieces: 0 },
+    { denom: 200, pieces: 0 },
+    { denom: 100, pieces: 0 },
+    { denom: 50, pieces: 0 },
+  ]);
+  const [cashSheetDate, setCashSheetDate] = useState(new Date().toISOString().slice(0, 10));
+  const [companyProfitInput, setCompanyProfitInput] = useState('');
+  const [totalExpensesInput, setTotalExpensesInput] = useState('');
+  const [cashFolderName, setCashFolderName] = useState(getNigerianMonthName().replace(' Collected', ''));
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
+  const [editingFolderName, setEditingFolderName] = useState('');
+
+  const fetchCashRecords = async () => {
+    const { data, error } = await supabase.from('cash_reconciliations').select('*').order('created_at', { ascending: false });
+    if (!error && data) setCashRecords(data);
+  };
+
+  useEffect(() => { fetchCashRecords(); }, []);
+
+  const denomComputed = denomRows.map(r => ({ ...r, total: r.denom * (r.pieces || 0) }));
+  const grandCashTotal = denomComputed.reduce((s, r) => s + r.total, 0);
+
+  const trfAmountForDate = useMemo(() => {
+    return sumCurrencyValues(
+      transactions
+        .filter(t => t.status === 'Successful' && t.date === cashSheetDate && isTransferMethod(t.payment_method))
+        .map(t => Number(t.amount || 0))
+    );
+  }, [transactions, cashSheetDate]);
+
+  const cashPlusTrf = grandCashTotal + trfAmountForDate;
+  const companyProfitNum = Number(companyProfitInput) || 0;
+  const totalExpensesNum = Number(totalExpensesInput) || 0;
+  const totalPayout = companyProfitNum - cashPlusTrf;
+  const availableProfitBalance = companyProfitNum - totalExpensesNum;
+
+  const updateDenomPieces = (denom: number, pieces: string) => {
+    setDenomRows(prev => prev.map(r => r.denom === denom ? { ...r, pieces: Number(pieces) || 0 } : r));
+  };
+
+  const handleSubmitCashRecord = async () => {
+    const payload = {
+      folder_name: cashFolderName || getNigerianMonthName().replace(' Collected', ''),
+      record_date: cashSheetDate,
+      denominations: denomComputed,
+      grand_cash_total: grandCashTotal,
+      trf_amount: trfAmountForDate,
+      cash_plus_trf: cashPlusTrf,
+      company_profit: companyProfitNum,
+      total_expenses: totalExpensesNum,
+      total_payout: totalPayout,
+      available_profit_balance: availableProfitBalance
+    };
+    const { error } = await supabase.from('cash_reconciliations').insert([payload]);
+    if (error) {
+      triggerToast?.(`Failed to save record: ${error.message}`, 'error');
+      return;
+    }
+    triggerToast?.('Cash record submitted and archived!', 'success');
+    setDenomRows([
+      { denom: 1000, pieces: 0 }, { denom: 500, pieces: 0 }, { denom: 200, pieces: 0 },
+      { denom: 100, pieces: 0 }, { denom: 50, pieces: 0 },
+    ]);
+    setCompanyProfitInput('');
+    setTotalExpensesInput('');
+    await fetchCashRecords();
+    setCashSheetView('archive');
+  };
+
+  const handleRenameFolder = async (recordId: string, newName: string) => {
+    await supabase.from('cash_reconciliations').update({ folder_name: newName }).eq('id', recordId);
+    setCashRecords(prev => prev.map(r => r.id === recordId ? { ...r, folder_name: newName } : r));
+    setEditingFolderId(null);
+  };
+
+  const cashFolders = useMemo(() => {
+    const grouped: Record<string, CashReconciliation[]> = {};
+    cashRecords.forEach(r => {
+      const key = r.folder_name || 'Uncategorized';
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(r);
+    });
+    return Object.entries(grouped).sort((a, b) => (b[1][0]?.created_at || '').localeCompare(a[1][0]?.created_at || ''));
+  }, [cashRecords]);
+
+  // --- Quick Notepad (mini-spreadsheet scratchpad) ---
+  const [notepadRows, setNotepadRows] = useState<{ description: string; amount: string; date: string }[]>([
+    { description: '', amount: '', date: '' }
+  ]);
+  const [notepadLoaded, setNotepadLoaded] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from('system_settings').select('notepad_data').limit(1).single();
+      if (data?.notepad_data && Array.isArray(data.notepad_data) && data.notepad_data.length > 0) {
+        setNotepadRows(data.notepad_data);
+      }
+      setNotepadLoaded(true);
+    })();
+  }, []);
+
+  const saveNotepad = async (rows: typeof notepadRows) => {
+    await supabase.from('system_settings').update({ notepad_data: rows }).neq('id', '00000000-0000-0000-0000-000000000000');
+  };
+
+  const updateNotepadCell = (idx: number, field: 'description' | 'amount' | 'date', value: string) => {
+    setNotepadRows(prev => {
+      const next = prev.map((r, i) => i === idx ? { ...r, [field]: value } : r);
+      saveNotepad(next);
+      return next;
+    });
+  };
+
+  const addNotepadRow = () => {
+    setNotepadRows(prev => {
+      const next = [...prev, { description: '', amount: '', date: '' }];
+      saveNotepad(next);
+      return next;
+    });
+  };
+
+  // --- Admin-to-Customer Messaging ---
+  const [noteCustomerId, setNoteCustomerId] = useState('');
+  const [noteText, setNoteText] = useState('');
+
+  const handleSendCustomerNote = async () => {
+    if (!noteCustomerId) return;
+    const { error } = await supabase.from('profiles').update({ admin_note: noteText }).eq('id', noteCustomerId);
+    if (error) {
+      triggerToast?.(`Failed to send note: ${error.message}`, 'error');
+      return;
+    }
+    triggerToast?.('Note sent to customer.', 'success');
+    setNoteText('');
+    setNoteCustomerId('');
+  };
 
   // FEATURE 1 (Admin): customers who have at least one fully-frozen, still
   // uncollected 32-day cycle - anyone with zero uncollected months is
@@ -1031,7 +1195,9 @@ function AdminDashboard({
   const [advertTitle, setAdvertTitle] = useState(supportDetails.advert_title || 'Cartoon characters safely collecting small daily contributions from customers and returning them back to you in bulk!');
   const [advertDescription, setAdvertDescription] = useState(supportDetails.advert_description || 'Join the smart daily savings circle with HireMercyAJO.');
   const [advertImageUrl, setAdvertImageUrl] = useState(supportDetails.advert_image_url || '');
+  const [advertVideoUrl, setAdvertVideoUrl] = useState(supportDetails.advert_video_url || '');
   const [advertEnabled, setAdvertEnabled] = useState(Boolean(supportDetails.advert_enabled));
+  const [themeBackgroundColor, setThemeBackgroundColor] = useState(supportDetails.theme_background_color || '#f0fdf4');
   const [selectedWithdrawalRequest, setSelectedWithdrawalRequest] = useState<WithdrawalRequest | null>(null);
   const [approvalBankName, setApprovalBankName] = useState('');
   const [approvalAccountNumber, setApprovalAccountNumber] = useState('');
@@ -1047,7 +1213,9 @@ function AdminDashboard({
     setAdvertTitle(supportDetails.advert_title || 'Cartoon characters safely collecting small daily contributions from customers and returning them back to you in bulk!');
     setAdvertDescription(supportDetails.advert_description || 'Join the smart daily savings circle with HireMercyAJO.');
     setAdvertImageUrl(supportDetails.advert_image_url || '');
+    setAdvertVideoUrl(supportDetails.advert_video_url || '');
     setAdvertEnabled(Boolean(supportDetails.advert_enabled));
+    setThemeBackgroundColor(supportDetails.theme_background_color || '#f0fdf4');
   }, [supportDetails]);
 
   useEffect(() => {
@@ -1161,7 +1329,7 @@ function AdminDashboard({
 
   const handleSupportSave = (e: React.FormEvent) => {
     e.preventDefault();
-    onUpdateSupport(supportPhone, supportWhatsapp, supportEmail, adminBankName, adminAccountNumber, adminAccountName, advertTitle, advertDescription, advertImageUrl, advertEnabled);
+    onUpdateSupport(supportPhone, supportWhatsapp, supportEmail, adminBankName, adminAccountNumber, adminAccountName, advertTitle, advertDescription, advertImageUrl, advertEnabled, advertVideoUrl, themeBackgroundColor);
   };
 
   const openWithdrawalApproval = (request: WithdrawalRequest) => {
@@ -1429,7 +1597,7 @@ function AdminDashboard({
             Analysis
           </button>
           <LiveTransactionCounter count={successfulTransactions.filter(tx => tx.date === new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' }) && tx.status === 'Successful').length} label="Today's work" />
-          {(['overview', 'customers', 'branches', 'staff', 'payouts', 'records', 'transactions', 'settings', 'reports'] as const).map(tab => (
+          {(['overview', 'customers', 'branches', 'staff', 'payouts', 'records', 'transactions', 'cashsheet', 'settings', 'reports'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -1439,7 +1607,7 @@ function AdminDashboard({
                   : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
               }`}
             >
-              {tab}
+              {tab === 'cashsheet' ? 'Cash Sheet' : tab}
             </button>
           ))}
         </div>
@@ -1724,12 +1892,20 @@ function AdminDashboard({
                 if (!cust) return <p className="text-xs text-slate-400">Select a customer to view their tracking grid.</p>;
                 return (
                   <div className="p-6 bg-emerald-50/20 border-2 border-emerald-200 rounded-2xl space-y-4 animate-fade-in text-slate-800 font-bold">
-                    <div className="flex justify-between items-center">
-                      <div>
+                    <div className="flex justify-between items-start flex-wrap gap-3">
+                      <div className="space-y-1">
                         <h4 className="font-bold text-emerald-955 text-base">{cust.name}</h4>
-                        <p className="text-[11px] text-slate-550 font-bold">Contact: {cust.phone} | Target Plan: ₦{cust.daily_amount.toLocaleString()}/day</p>
+                        <p className="text-[11px] text-slate-550 font-bold">Contact: {cust.phone}</p>
+                        <p className="text-[11px] text-slate-550 font-bold">Target Plan: ₦{cust.daily_amount.toLocaleString()}/day</p>
+                        <p className="text-[11px] text-slate-550 font-bold">
+                          Balance/Amount: ₦{((markedDays[cust.id] || []).reduce((s, d) => s + d.amount, 0)).toLocaleString()}
+                        </p>
+                        <p className="text-[11px] text-slate-550 font-bold">
+                          Month: {periodLabelFromKey((markedDays[cust.id]?.[0] as any)?.period_key || getCurrentPeriodKey())}
+                        </p>
                       </div>
                       <div className="text-right">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Progress</span>
                         <span className="text-[10px] bg-amber-500 text-emerald-955 font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider font-bold">
                           {(markedDays[cust.id] || []).length} / 32 Days Marked
                         </span>
@@ -1919,6 +2095,14 @@ function AdminDashboard({
                             title="Send Password Reset Email Link"
                           >
                             <Key className="w-4 h-4 text-emerald-700" />
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => onResetPasswordToDefault?.(c.id)}
+                            className="p-1.5 text-amber-700 hover:bg-amber-50 rounded-lg transition"
+                            title="Reset password directly to 123456 (no email needed)"
+                          >
+                            <Lock className="w-4 h-4" />
                           </button>
                           <button 
                             type="button"
@@ -2589,6 +2773,190 @@ function AdminDashboard({
         </div>
       )}
 
+      {/* Cash Balance Sheet */}
+      {activeTab === 'cashsheet' && (
+        <div className="space-y-6 animate-fade-in text-slate-800 font-bold">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setCashSheetView('entry')}
+              className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition ${cashSheetView === 'entry' ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-800'}`}
+            >
+              New Entry
+            </button>
+            <button
+              type="button"
+              onClick={() => setCashSheetView('archive')}
+              className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition ${cashSheetView === 'archive' ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-800'}`}
+            >
+              Records Dashboard ({cashRecords.length})
+            </button>
+          </div>
+
+          {cashSheetView === 'entry' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Denomination Calculator */}
+              <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider font-bold">Denomination Calculator</h3>
+                  <input
+                    type="date"
+                    value={cashSheetDate}
+                    onChange={e => setCashSheetDate(e.target.value)}
+                    className="border border-emerald-200 rounded-xl px-3 py-1.5 text-xs font-bold"
+                  />
+                </div>
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-emerald-50 text-emerald-900 font-black">
+                      <th className="p-2 text-left rounded-l-xl">CASH</th>
+                      <th className="p-2 text-left">PIECES</th>
+                      <th className="p-2 text-right rounded-r-xl">TOTAL</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-emerald-50">
+                    {denomComputed.map(row => (
+                      <tr key={row.denom}>
+                        <td className="p-2 font-black text-slate-700">₦{row.denom.toLocaleString()}</td>
+                        <td className="p-2">
+                          <input
+                            type="number"
+                            min="0"
+                            value={row.pieces || ''}
+                            onChange={e => updateDenomPieces(row.denom, e.target.value)}
+                            className="w-20 border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold"
+                            placeholder="0"
+                          />
+                        </td>
+                        <td className="p-2 text-right font-bold text-emerald-800">₦{row.total.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="bg-emerald-955 text-white rounded-2xl p-4 flex items-center justify-between">
+                  <span className="text-xs font-black uppercase tracking-wider">Grand Cash Total</span>
+                  <span className="text-lg font-black">₦{grandCashTotal.toLocaleString()}</span>
+                </div>
+              </div>
+
+              {/* Reconciliation Summary */}
+              <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4">
+                <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider font-bold">Reconciliation Summary</h3>
+
+                <div className="space-y-3 text-xs">
+                  <div className="flex items-center justify-between bg-slate-50 rounded-xl p-3">
+                    <span className="font-bold text-slate-600">TRF (auto, for {cashSheetDate})</span>
+                    <span className="font-black text-emerald-800">₦{trfAmountForDate.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl p-3">
+                    <span className="font-bold text-amber-800">CASH + TRF</span>
+                    <span className="font-black text-amber-900">₦{cashPlusTrf.toLocaleString()}</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Company Profit</label>
+                    <input
+                      type="number"
+                      value={companyProfitInput}
+                      onChange={e => setCompanyProfitInput(e.target.value)}
+                      placeholder="0"
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Total Expenses</label>
+                    <input
+                      type="number"
+                      value={totalExpensesInput}
+                      onChange={e => setTotalExpensesInput(e.target.value)}
+                      placeholder="0"
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between bg-slate-50 rounded-xl p-3">
+                    <span className="font-bold text-slate-600">Total Payout (Profit - (Cash+TRF))</span>
+                    <span className="font-black text-slate-800">₦{totalPayout.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center justify-between bg-emerald-50 rounded-xl p-3">
+                    <span className="font-bold text-emerald-700">Available Profit Balance</span>
+                    <span className="font-black text-emerald-900">₦{availableProfitBalance.toLocaleString()}</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Archive Folder</label>
+                    <input
+                      type="text"
+                      value={cashFolderName}
+                      onChange={e => setCashFolderName(e.target.value)}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSubmitCashRecord}
+                  className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3 rounded-xl transition shadow-md"
+                >
+                  Submit Record
+                </button>
+              </div>
+            </div>
+          )}
+
+          {cashSheetView === 'archive' && (
+            <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
+              <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider mb-4 font-bold">Records Dashboard</h3>
+              {cashFolders.length === 0 ? (
+                <div className="text-center py-12 border border-dashed border-emerald-200 rounded-2xl text-slate-400 text-xs">No cash records archived yet.</div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {cashFolders.map(([folderName, records]) => (
+                    <div key={folderName} className="border border-emerald-100 rounded-2xl p-4 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        {editingFolderId === records[0].id ? (
+                          <div className="flex items-center gap-1 flex-1">
+                            <input
+                              type="text"
+                              value={editingFolderName}
+                              onChange={e => setEditingFolderName(e.target.value)}
+                              className="flex-1 border border-emerald-200 rounded-lg px-2 py-1 text-xs font-bold"
+                              autoFocus
+                            />
+                            <button type="button" onClick={() => handleRenameFolder(records[0].id, editingFolderName)} className="text-emerald-700"><CheckCircle2 className="w-4 h-4" /></button>
+                          </div>
+                        ) : (
+                          <>
+                            <span className="text-xs font-black text-emerald-900 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> {folderName}</span>
+                            <button
+                              type="button"
+                              onClick={() => { setEditingFolderId(records[0].id); setEditingFolderName(folderName); }}
+                              className="text-slate-400 hover:text-emerald-700"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500 font-semibold">{records.length} entr{records.length === 1 ? 'y' : 'ies'}</p>
+                      <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                        {records.map(r => (
+                          <div key={r.id} className="flex items-center justify-between text-[11px] bg-slate-50 rounded-lg p-2">
+                            <span className="font-semibold text-slate-600">{r.record_date}</span>
+                            <span className="font-black text-emerald-800">₦{r.grand_cash_total.toLocaleString()}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Record Sheet */}
       {activeTab === 'records' && (
         <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm animate-fade-in space-y-6">
@@ -2954,6 +3322,34 @@ function AdminDashboard({
                     className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-sm font-medium"
                   />
                 </div>
+                <div>
+                  <label className="block text-xs font-bold text-emerald-800 mb-1">Advertisement Video URL (plays instead of the image if set)</label>
+                  <input
+                    type="url"
+                    placeholder="https://example.com/ad-animation.mp4"
+                    value={advertVideoUrl}
+                    onChange={(e) => setAdvertVideoUrl(e.target.value)}
+                    className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-sm font-medium"
+                  />
+                </div>
+                <h4 className="text-xs font-black text-emerald-955 uppercase tracking-wider">App Theme</h4>
+                <div>
+                  <label className="block text-xs font-bold text-emerald-800 mb-1">Background Color</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={themeBackgroundColor}
+                      onChange={(e) => setThemeBackgroundColor(e.target.value)}
+                      className="h-10 w-16 rounded-lg border border-emerald-200 cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={themeBackgroundColor}
+                      onChange={(e) => setThemeBackgroundColor(e.target.value)}
+                      className="flex-1 px-3 py-2 border border-emerald-200 rounded-xl text-sm font-medium"
+                    />
+                  </div>
+                </div>
                 <h4 className="text-xs font-black text-emerald-955 uppercase tracking-wider">Company Bank Account Settings (For Deposits)</h4>
                 <div>
                   <label className="block text-xs font-bold text-emerald-800 mb-1">Bank Name</label>
@@ -3034,6 +3430,97 @@ function AdminDashboard({
 
             <div className="text-[11px] text-amber-700 bg-amber-50 p-3 rounded-xl border border-amber-200 mt-4 leading-relaxed font-semibold">
               ⚠️ Note: Ensure numbers are written in full international format (e.g. starting with +234) for WhatsApp redirect actions to work.
+            </div>
+          </div>
+
+          {/* Quick Notepad - mini spreadsheet scratchpad */}
+          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
+            <h3 className="text-md font-black text-emerald-955 mb-1 uppercase tracking-wider flex items-center gap-1.5 font-bold">
+              <FileText className="w-5 h-5 text-emerald-700" />
+              Quick Notepad
+            </h3>
+            <p className="text-xs text-slate-505 mb-4 font-medium">Jot down ad-hoc items like daily expenses. Saves automatically.</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="bg-emerald-50 text-emerald-900 font-black">
+                    <th className="p-2 text-left rounded-l-xl">Description</th>
+                    <th className="p-2 text-left">Amount</th>
+                    <th className="p-2 text-left rounded-r-xl">Date</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-emerald-50">
+                  {notepadRows.map((row, idx) => (
+                    <tr key={idx}>
+                      <td className="p-1">
+                        <input
+                          type="text"
+                          value={row.description}
+                          onChange={e => updateNotepadCell(idx, 'description', e.target.value)}
+                          className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs"
+                          placeholder="e.g. Transport"
+                        />
+                      </td>
+                      <td className="p-1">
+                        <input
+                          type="text"
+                          value={row.amount}
+                          onChange={e => updateNotepadCell(idx, 'amount', e.target.value)}
+                          className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs"
+                          placeholder="₦0"
+                        />
+                      </td>
+                      <td className="p-1">
+                        <input
+                          type="date"
+                          value={row.date}
+                          onChange={e => updateNotepadCell(idx, 'date', e.target.value)}
+                          className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <button
+              type="button"
+              onClick={addNotepadRow}
+              className="mt-3 text-xs font-bold text-emerald-700 hover:text-emerald-900 flex items-center gap-1"
+            >
+              <Plus className="w-3.5 h-3.5" /> Add row
+            </button>
+          </div>
+
+          {/* Admin-to-Customer Messaging */}
+          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
+            <h3 className="text-md font-black text-emerald-955 mb-1 uppercase tracking-wider flex items-center gap-1.5 font-bold">
+              <MessageSquare className="w-5 h-5 text-emerald-700" />
+              Send Note to Customer
+            </h3>
+            <p className="text-xs text-slate-505 mb-4 font-medium">This appears at the bottom of the selected customer's dashboard.</p>
+            <div className="space-y-3">
+              <SearchableCustomerSelect
+                customers={profiles.filter(p => p.role === 'Customer')}
+                selectedId={noteCustomerId}
+                onSelect={setNoteCustomerId}
+                placeholder="Select customer..."
+              />
+              <textarea
+                rows={3}
+                value={noteText}
+                onChange={e => setNoteText(e.target.value)}
+                placeholder="e.g. Your payout has been scheduled for Friday."
+                className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-sm font-medium"
+              />
+              <button
+                type="button"
+                onClick={handleSendCustomerNote}
+                disabled={!noteCustomerId}
+                className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 text-white font-bold py-2.5 rounded-xl transition text-sm"
+              >
+                Send Note
+              </button>
             </div>
           </div>
         </div>
@@ -3479,6 +3966,7 @@ function CustomerDashboard({
       })()}
 
       {customerTab === 'tracker' && (
+        <>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="space-y-6 lg:col-span-1">
             {/* Balance Card */}
@@ -3591,6 +4079,17 @@ function CustomerDashboard({
             </div>
           </div>
         </div>
+
+        {customer.admin_note && customer.admin_note.trim() !== '' && (
+          <div className="mt-6 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
+            <MessageSquare className="w-5 h-5 text-amber-700 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wider text-amber-700 mb-1">Note from HireMercy AJO</p>
+              <p className="text-xs font-semibold text-amber-900">{customer.admin_note}</p>
+            </div>
+          </div>
+        )}
+        </>
       )}
 
       {/* Statement History Tab */}
@@ -4405,6 +4904,27 @@ export default function App() {
     }
   };
 
+  // Resets a customer's password directly to '123456' via a server-side
+  // Edge Function - this can NEVER be done safely from client code, since it
+  // requires the Supabase service role key, which must never be shipped to
+  // the browser. See supabase/functions/admin-reset-password for the
+  // function this calls.
+  const handleResetPasswordToDefault = async (customerId: string) => {
+    const target = profiles.find(p => p.id === customerId);
+    if (!target) return;
+    if (!window.confirm(`Reset ${target.name}'s password to "123456"? They should change it after logging in.`)) return;
+
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-reset-password', {
+        body: { customerId }
+      });
+      if (error) throw error;
+      triggerToast(`Password reset to 123456 for ${target.name}.`, 'success');
+    } catch (err: any) {
+      triggerToast(`Password reset failed: ${err.message || 'Edge Function not deployed yet'}`, 'error');
+    }
+  };
+
   const handleMarkNotificationsRead = async () => {
     if (!currentUser || notifications.length === 0) return;
     
@@ -4620,7 +5140,9 @@ export default function App() {
     advertTitle: string,
     advertDescription: string,
     advertImageUrl: string,
-    advertEnabled: boolean
+    advertEnabled: boolean,
+    advertVideoUrl: string,
+    themeBackgroundColor: string
   ) => {
     setIsLoading(true);
     const { error } = await supabase
@@ -4635,7 +5157,9 @@ export default function App() {
         advert_title: advertTitle,
         advert_description: advertDescription,
         advert_image_url: advertImageUrl,
-        advert_enabled: advertEnabled
+        advert_enabled: advertEnabled,
+        advert_video_url: advertVideoUrl,
+        theme_background_color: themeBackgroundColor
       })
       .eq('id', 1);
 
@@ -5503,6 +6027,8 @@ export default function App() {
                 savedMonths={savedMonths}
                 payoutHistory={payoutHistory}
                 withdrawalRequests={withdrawalRequests}
+                triggerToast={triggerToast}
+                onResetPasswordToDefault={handleResetPasswordToDefault}
                 onDeleteTransaction={deleteTransaction}
                 onAddTransaction={createTransaction}
                 onUpdateSupport={handleUpdateSupportDetails}
