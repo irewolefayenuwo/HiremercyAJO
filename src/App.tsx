@@ -47,9 +47,12 @@ export interface Transaction {
 }
 
 export interface MarkedDay {
+  id?: string;
   day_number: number;
   amount: number;
   date: string;
+  period_key?: string;
+  transaction_id?: string;
 }
 
 export interface SupportSettings {
@@ -452,7 +455,7 @@ function SearchableCustomerSelect({
 
 function WelcomeScreen({ onComplete }: { onComplete: () => void }) {
   useEffect(() => {
-    const timer = setTimeout(onComplete, 2200);
+    const timer = setTimeout(onComplete, 900);
     return () => clearTimeout(timer);
   }, [onComplete]);
 
@@ -4435,7 +4438,7 @@ function CustomerDashboard({
 // =========================================================================
 
 export default function App() {
-  const [showSplash, setShowSplash] = useState(true);
+  const [showSplash, setShowSplash] = useState(() => !sessionStorage.getItem('hm_splash_shown'));
   const [currentUser, setCurrentUser] = useState<Profile | null>(null);
   const [sessionUser, setSessionUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -4741,47 +4744,56 @@ export default function App() {
     if (profile) {
       setCurrentUser(profile);
       await syncAllOperationalData(profile);
-      await fetchNotifications(profile);
-      await fetchPayoutRequests(profile);
-      await fetchSavedMonths(profile);
-      await fetchPayoutHistory(profile);
-      await fetchCycleArchives(profile);
+      await Promise.all([
+        fetchNotifications(profile),
+        fetchPayoutRequests(profile),
+        fetchSavedMonths(profile),
+        fetchPayoutHistory(profile),
+        fetchCycleArchives(profile)
+      ]);
     }
     setIsLoading(false);
   };
 
   const syncAllOperationalData = async (userProfile: Profile) => {
     if (userProfile.role === 'Admin' || userProfile.role === 'Staff') {
-      const { data: pData } = await supabase.from('profiles').select('*');
+      const [{ data: pData }, { data: txData }, { data: mData }] = await Promise.all([
+        supabase.from('profiles').select('*'),
+        supabase.from('transactions').select('*').order('created_at', { ascending: false }),
+        supabase.from('marked_days').select('*')
+      ]);
       if (pData) setProfiles(pData);
-
-      const { data: txData } = await supabase.from('transactions').select('*').order('created_at', { ascending: false });
       if (txData) setTransactions(txData);
-
-      const { data: mData } = await supabase.from('marked_days').select('*');
       if (mData) {
         const grouped: Record<string, MarkedDay[]> = {};
         mData.forEach((item: any) => {
           if (!grouped[item.customer_id]) grouped[item.customer_id] = [];
           grouped[item.customer_id].push({
+            id: item.id,
             day_number: item.day_number,
             amount: item.amount,
-            date: item.date
+            date: item.date,
+            period_key: item.period_key,
+            transaction_id: item.transaction_id
           });
         });
         setMarkedDays(grouped);
       }
     } else {
-      const { data: txData } = await supabase.from('transactions').select('*').eq('customer_id', userProfile.id).order('created_at', { ascending: false });
+      const [{ data: txData }, { data: mData }] = await Promise.all([
+        supabase.from('transactions').select('*').eq('customer_id', userProfile.id).order('created_at', { ascending: false }),
+        supabase.from('marked_days').select('*').eq('customer_id', userProfile.id)
+      ]);
       if (txData) setTransactions(txData);
-
-      const { data: mData } = await supabase.from('marked_days').select('*').eq('customer_id', userProfile.id);
       if (mData) {
         setMarkedDays({
           [userProfile.id]: mData.map((item: any) => ({
+            id: item.id,
             day_number: item.day_number,
             amount: item.amount,
-            date: item.date
+            date: item.date,
+            period_key: item.period_key,
+            transaction_id: item.transaction_id
           }))
         });
       }
@@ -5816,7 +5828,7 @@ export default function App() {
   }, [transactions, currentDayKey]);
 
   if (showSplash) {
-    return <WelcomeScreen onComplete={() => setShowSplash(false)} />;
+    return <WelcomeScreen onComplete={() => { sessionStorage.setItem('hm_splash_shown', '1'); setShowSplash(false); }} />;
   }
 
   return (
