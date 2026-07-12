@@ -4474,6 +4474,8 @@ export default function App() {
   const [hasCheckedAdmin, setHasCheckedAdmin] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
+  const [showIosInstallBanner, setShowIosInstallBanner] = useState(false);
+  const [showInAppBrowserBanner, setShowInAppBrowserBanner] = useState(false);
   const [showAlarmBanner, setShowAlarmBanner] = useState(false);
   const [alarmMessage, setAlarmMessage] = useState<string>('');
   const [adminDashboardRoute, setAdminDashboardRoute] = useState<AdminTab | null>(null);
@@ -4564,6 +4566,41 @@ export default function App() {
     syncDayKey();
     const timer = window.setInterval(syncDayKey, 60_000);
     return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const ua = window.navigator.userAgent || '';
+    const isAlreadyInstalled = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+    if (isAlreadyInstalled) return;
+
+    const isIos = /iPad|iPhone|iPod/.test(ua) && !(window as any).MSStream;
+
+    // Real mobile Safari ALWAYS includes both "Version/X.X" and "Safari/" in
+    // its user agent. In-app browsers (WhatsApp, Instagram, Facebook, etc.)
+    // are built on the same underlying WebKit engine and often still include
+    // "Safari/" as boilerplate, but they never set the "Version/" token -
+    // that's set by Safari itself, not by WebKit. This is what catches
+    // WhatsApp's iOS in-app browser specifically: it doesn't send a unique
+    // app token the way FBAN/Instagram do, so without this check it was
+    // silently misidentified as "real Safari" and shown instructions
+    // ("Add to Home Screen") that don't actually work from inside an
+    // in-app browser at all - which is very likely why install was failing
+    // for exactly the customers who tapped a link shared via WhatsApp chat.
+    const isIosInAppBrowser = isIos && !/Version\/[\d.]+.*Safari/i.test(ua);
+
+    const isInAppBrowser = /FBAN|FBAV|Instagram|Line\/|Twitter|MicroMessenger|WhatsApp/i.test(ua)
+      || (ua.includes('wv') && /Android/i.test(ua)) // generic Android WebView signature (covers most in-app browsers incl. many WhatsApp builds)
+      || isIosInAppBrowser;
+
+    if (isInAppBrowser) {
+      setShowInAppBrowserBanner(true);
+    } else if (isIos) {
+      // iOS never fires beforeinstallprompt - Apple provides no such API to any
+      // website, on any browser. Manual "Add to Home Screen" is the only path.
+      setShowIosInstallBanner(true);
+    }
+    // Otherwise (real Chrome/Edge/Samsung Internet on Android, desktop Chrome):
+    // the existing beforeinstallprompt listener below handles it natively.
   }, []);
 
   useEffect(() => {
@@ -5856,6 +5893,49 @@ export default function App() {
                 Dismiss
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showInAppBrowserBanner && (
+        <div className="fixed bottom-4 left-4 right-4 z-50 bg-emerald-900 text-white p-4 rounded-2xl shadow-2xl border border-emerald-700 animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div>
+              <h4 className="text-xs font-black uppercase tracking-wider text-amber-400">Can't Install From Here</h4>
+              <p className="text-[11px] text-emerald-100 mt-1 leading-relaxed">
+                You opened this link inside WhatsApp/Facebook/Instagram, which blocks app installation.
+                Tap the <strong>⋮</strong> or <strong>•••</strong> menu at the top right and choose
+                <strong> "Open in Browser"</strong> (Chrome or Safari), then try installing again from there.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowInAppBrowserBanner(false)}
+              className="text-emerald-300 hover:text-white px-2 text-xs flex-shrink-0"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showIosInstallBanner && (
+        <div className="fixed bottom-4 left-4 right-4 z-50 bg-emerald-900 text-white p-4 rounded-2xl shadow-2xl border border-emerald-700 animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div>
+              <h4 className="text-xs font-black uppercase tracking-wider text-amber-400">Install on iPhone/iPad</h4>
+              <p className="text-[11px] text-emerald-100 mt-1 leading-relaxed">
+                Tap the <strong>Share</strong> icon (square with an arrow) in Safari's toolbar, then scroll down and
+                select <strong>"Add to Home Screen"</strong>.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowIosInstallBanner(false)}
+              className="text-emerald-300 hover:text-white px-2 text-xs flex-shrink-0"
+            >
+              Dismiss
+            </button>
           </div>
         </div>
       )}
