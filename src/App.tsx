@@ -324,14 +324,15 @@ export interface CashReconciliation {
   id: string;
   folder_name: string;
   record_date: string;
+  record_type: 'full_reconciliation' | 'denomination';
   denominations: { denom: number; pieces: number; total: number }[];
   grand_cash_total: number;
   trf_amount: number;
   cash_plus_trf: number;
-  company_profit: number;
+  today_contribution: number;
   total_expenses: number;
-  total_payout: number;
-  available_profit_balance: number;
+  summary_balance: number;
+  account_check: number;
   notes?: string;
   created_by?: string;
   created_at: string;
@@ -994,7 +995,6 @@ function AdminDashboard({
     { denom: 50, pieces: 0 },
   ]);
   const [cashSheetDate, setCashSheetDate] = useState(new Date().toISOString().slice(0, 10));
-  const [companyProfitInput, setCompanyProfitInput] = useState('');
   const [totalExpensesInput, setTotalExpensesInput] = useState('');
   const [cashFolderName, setCashFolderName] = useState(getNigerianMonthName().replace(' Collected', ''));
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
@@ -1018,11 +1018,27 @@ function AdminDashboard({
     );
   }, [transactions, cashSheetDate]);
 
+  // Today's Contribution: total of everything customers actually paid in for
+  // the selected date (cash + transfer combined), pulled straight from the
+  // transaction log - this is the "what should have come in" side of the
+  // reconciliation, independent of what was physically counted.
+  const todaysContributionForDate = useMemo(() => {
+    return sumCurrencyValues(
+      transactions
+        .filter(t => t.status === 'Successful' && t.date === cashSheetDate)
+        .map(t => Number(t.amount || 0))
+    );
+  }, [transactions, cashSheetDate]);
+
   const cashPlusTrf = grandCashTotal + trfAmountForDate;
-  const companyProfitNum = Number(companyProfitInput) || 0;
   const totalExpensesNum = Number(totalExpensesInput) || 0;
-  const totalPayout = companyProfitNum - cashPlusTrf;
-  const availableProfitBalance = companyProfitNum - totalExpensesNum;
+  // Summary Balance: physically reconciled Cash + TRF, plus expenses, so
+  // this balances against total contributions.
+  const summaryBalance = cashPlusTrf + totalExpensesNum;
+  // Account Check: compares what was reconciled (Summary Balance) against
+  // what customers actually contributed (Today's Contribution). Zero means
+  // everything is accounted for.
+  const accountCheck = summaryBalance - todaysContributionForDate;
 
   const updateDenomPieces = (denom: number, pieces: string) => {
     setDenomRows(prev => prev.map(r => r.denom === denom ? { ...r, pieces: Number(pieces) || 0 } : r));
@@ -1032,14 +1048,15 @@ function AdminDashboard({
     const payload = {
       folder_name: cashFolderName || getNigerianMonthName().replace(' Collected', ''),
       record_date: cashSheetDate,
+      record_type: 'full_reconciliation',
       denominations: denomComputed,
       grand_cash_total: grandCashTotal,
       trf_amount: trfAmountForDate,
       cash_plus_trf: cashPlusTrf,
-      company_profit: companyProfitNum,
+      today_contribution: todaysContributionForDate,
       total_expenses: totalExpensesNum,
-      total_payout: totalPayout,
-      available_profit_balance: availableProfitBalance
+      summary_balance: summaryBalance,
+      account_check: accountCheck
     };
     const { error } = await supabase.from('cash_reconciliations').insert([payload]);
     if (error) {
@@ -1051,10 +1068,36 @@ function AdminDashboard({
       { denom: 1000, pieces: 0 }, { denom: 500, pieces: 0 }, { denom: 200, pieces: 0 },
       { denom: 100, pieces: 0 }, { denom: 50, pieces: 0 },
     ]);
-    setCompanyProfitInput('');
     setTotalExpensesInput('');
     await fetchCashRecords();
     setCashSheetView('archive');
+  };
+
+  // Part 3: standalone "Save Denomination Record" - saves ONLY the date,
+  // each denomination's value, and the Grand Total, independent of the full
+  // reconciliation flow. Archived under the same Records -> [Month] folder
+  // structure, tagged so the archive view can tell the two apart.
+  const handleSaveDenominationRecord = async () => {
+    const payload = {
+      folder_name: cashFolderName || getNigerianMonthName().replace(' Collected', ''),
+      record_date: cashSheetDate,
+      record_type: 'denomination',
+      denominations: denomComputed,
+      grand_cash_total: grandCashTotal,
+      trf_amount: 0,
+      cash_plus_trf: 0,
+      today_contribution: 0,
+      total_expenses: 0,
+      summary_balance: 0,
+      account_check: 0
+    };
+    const { error } = await supabase.from('cash_reconciliations').insert([payload]);
+    if (error) {
+      triggerToast?.(`Failed to save denomination record: ${error.message}`, 'error');
+      return;
+    }
+    triggerToast?.('Denomination record saved!', 'success');
+    await fetchCashRecords();
   };
 
   const handleRenameFolder = async (recordId: string, newName: string) => {
@@ -1072,6 +1115,101 @@ function AdminDashboard({
     });
     return Object.entries(grouped).sort((a, b) => (b[1][0]?.created_at || '').localeCompare(a[1][0]?.created_at || ''));
   }, [cashRecords]);
+
+  // --- Report Page: Monthly Financial Summary + Archive ---
+  const [monthlySummaries, setMonthlySummaries] = useState<any[]>([]);
+  const [expandedArchiveMonth, setExpandedArchiveMonth] = useState<string | null>(null);
+
+  const fetchMonthlySummaries = async () => {
+    const { data, error } = await supabase.from('monthly_summaries').select('*').order('period_key', { ascending: false });
+    if (!error && data) setMonthlySummaries(data);
+  };
+
+  useEffect(() => { fetchMonthlySummaries(); }, []);
+
+  // Computes the 4 base metrics for any given period_key ('YYYY-MM') from
+  // real data already loaded - used both for the live current-month display
+  // and for archiving a month that just ended.
+  // Moved here (was previously declared much later in the component) because
+  // computeMonthMetrics below references it and is called synchronously
+  // during render, before the old declaration's line would have run -
+  // that's exactly what caused "Cannot access 'customers' before
+  // initialization".
+  const customers = profiles.filter(p => p.role === 'Customer').sort((a, b) => a.name.localeCompare(b.name));
+
+  const computeMonthMetrics = (periodKey: string) => {
+    const [y, m] = periodKey.split('-').map(Number);
+    const contributions = sumCurrencyValues(
+      transactions.filter(t => {
+        if (!t.date || t.status !== 'Successful') return false;
+        const [ty, tm] = t.date.split('-').map(Number);
+        return ty === y && tm === m;
+      }).map(t => Number(t.amount || 0))
+    );
+    const profit = sumCurrencyValues(
+      customers
+        .filter(c => c.is_active && transactions.some(tx => {
+          if (tx.customer_id !== c.id || tx.status !== 'Successful' || !tx.date) return false;
+          const [ty, tm] = tx.date.split('-').map(Number);
+          return ty === y && tm === m;
+        }))
+        .map(c => c.daily_amount)
+    );
+    const expenses = sumCurrencyValues(
+      cashRecords.filter(r => {
+        if (!r.record_date) return false;
+        const [ry, rm] = r.record_date.split('-').map(Number);
+        return ry === y && rm === m;
+      }).map(r => Number(r.total_expenses || 0))
+    );
+    const payout = sumCurrencyValues(
+      payoutHistory.filter(p => {
+        if (!p.approved_at) return false;
+        const [py, pm] = p.approved_at.split('-').map(Number);
+        return py === y && pm === m;
+      }).map(p => Number(p.payout_amount || 0))
+    );
+    return { contributions, profit, expenses, payout, remaining: contributions - payout };
+  };
+
+  const currentPeriodKey = getCurrentPeriodKey();
+  const liveMonth = computeMonthMetrics(currentPeriodKey);
+  // Part 5: Monthly Payout card - a DIFFERENT metric from the "Total Monthly
+  // Payout" above (which is real money actually paid out via approved
+  // payouts). This one is the formula explicitly requested: what's left of
+  // contributions after profit is set aside.
+  const monthlyPayoutCard = liveMonth.contributions - liveMonth.profit;
+
+  // Auto-archive: if the calendar month immediately before this one has real
+  // transaction data but hasn't been archived yet, archive it now. This is
+  // what makes "when a new month begins, the previous month automatically
+  // archives" actually happen - checked once when the Report tab is viewed.
+  useEffect(() => {
+    (async () => {
+      const prevDate = new Date();
+      prevDate.setMonth(prevDate.getMonth() - 1);
+      const prevPeriodKey = prevDate.toISOString().slice(0, 7);
+
+      const alreadyArchived = monthlySummaries.some(s => s.period_key === prevPeriodKey);
+      if (alreadyArchived) return;
+
+      const hasData = transactions.some(t => t.date && t.date.startsWith(prevPeriodKey));
+      if (!hasData) return;
+
+      const metrics = computeMonthMetrics(prevPeriodKey);
+      const { error } = await supabase.from('monthly_summaries').insert([{
+        month_label: periodLabelFromKey(prevPeriodKey),
+        period_key: prevPeriodKey,
+        total_contributions: metrics.contributions,
+        total_profit: metrics.profit,
+        total_expenses: metrics.expenses,
+        total_payout: metrics.payout,
+        remaining_balance: metrics.remaining
+      }]);
+      if (!error) await fetchMonthlySummaries();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monthlySummaries.length, transactions.length]);
 
   // --- Quick Notepad (mini-spreadsheet scratchpad) ---
   const [notepadRows, setNotepadRows] = useState<{ description: string; amount: string; date: string }[]>([
@@ -1113,6 +1251,14 @@ function AdminDashboard({
   const [noteCustomerId, setNoteCustomerId] = useState('');
   const [noteText, setNoteText] = useState('');
 
+  // When a customer is selected, load their existing note (if any) into the
+  // textarea so the admin is editing the current note, not overwriting blind.
+  const handleSelectNoteCustomer = (id: string) => {
+    setNoteCustomerId(id);
+    const target = profiles.find(p => p.id === id);
+    setNoteText(target?.admin_note || '');
+  };
+
   const handleSendCustomerNote = async () => {
     if (!noteCustomerId) return;
     const { error } = await supabase.from('profiles').update({ admin_note: noteText }).eq('id', noteCustomerId);
@@ -1121,6 +1267,21 @@ function AdminDashboard({
       return;
     }
     triggerToast?.('Note sent to customer.', 'success');
+    setNoteText('');
+    setNoteCustomerId('');
+  };
+
+  // Deleting clears admin_note entirely - since the customer dashboard only
+  // renders the note when it's non-empty, this makes it disappear from their
+  // view immediately on their next fetch/realtime update.
+  const handleDeleteCustomerNote = async () => {
+    if (!noteCustomerId) return;
+    const { error } = await supabase.from('profiles').update({ admin_note: null }).eq('id', noteCustomerId);
+    if (error) {
+      triggerToast?.(`Failed to delete note: ${error.message}`, 'error');
+      return;
+    }
+    triggerToast?.('Note deleted from customer dashboard.', 'success');
     setNoteText('');
     setNoteCustomerId('');
   };
@@ -1228,7 +1389,8 @@ function AdminDashboard({
     }
   }, [routeTarget, onRouteHandled]);
 
-  const customers = profiles.filter(p => p.role === 'Customer').sort((a, b) => a.name.localeCompare(b.name));
+  // (customers is now declared earlier, right before computeMonthMetrics, since
+  // that function references it and was being called before this line ran)
   const staff = profiles.filter(p => p.role === 'Staff').sort((a, b) => a.name.localeCompare(b.name));
 
   const filteredCustomers = useMemo(() => {
@@ -2834,12 +2996,19 @@ function AdminDashboard({
                         <td className="p-2 text-right font-bold text-emerald-800">₦{row.total.toLocaleString()}</td>
                       </tr>
                     ))}
+                    <tr className="bg-emerald-955">
+                      <td className="p-2.5 font-black text-white uppercase tracking-wider text-xs rounded-l-xl" colSpan={2}>Grand Total</td>
+                      <td className="p-2.5 text-right font-black text-white text-sm rounded-r-xl">₦{grandCashTotal.toLocaleString()}</td>
+                    </tr>
                   </tbody>
                 </table>
-                <div className="bg-emerald-955 text-white rounded-2xl p-4 flex items-center justify-between">
-                  <span className="text-xs font-black uppercase tracking-wider">Grand Cash Total</span>
-                  <span className="text-lg font-black">₦{grandCashTotal.toLocaleString()}</span>
-                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveDenominationRecord}
+                  className="w-full bg-amber-500 hover:bg-amber-600 text-emerald-955 font-black py-2.5 rounded-xl text-xs transition shadow-md"
+                >
+                  Save Denomination Record
+                </button>
               </div>
 
               {/* Reconciliation Summary */}
@@ -2855,17 +3024,11 @@ function AdminDashboard({
                     <span className="font-bold text-amber-800">CASH + TRF</span>
                     <span className="font-black text-amber-900">₦{cashPlusTrf.toLocaleString()}</span>
                   </div>
-
-                  <div>
-                    <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Company Profit</label>
-                    <input
-                      type="number"
-                      value={companyProfitInput}
-                      onChange={e => setCompanyProfitInput(e.target.value)}
-                      placeholder="0"
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold"
-                    />
+                  <div className="flex items-center justify-between bg-slate-50 rounded-xl p-3">
+                    <span className="font-bold text-slate-600">Today's Contribution (auto, for {cashSheetDate})</span>
+                    <span className="font-black text-slate-800">₦{todaysContributionForDate.toLocaleString()}</span>
                   </div>
+
                   <div>
                     <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Total Expenses</label>
                     <input
@@ -2877,13 +3040,25 @@ function AdminDashboard({
                     />
                   </div>
 
-                  <div className="flex items-center justify-between bg-slate-50 rounded-xl p-3">
-                    <span className="font-bold text-slate-600">Total Payout (Profit - (Cash+TRF))</span>
-                    <span className="font-black text-slate-800">₦{totalPayout.toLocaleString()}</span>
-                  </div>
                   <div className="flex items-center justify-between bg-emerald-50 rounded-xl p-3">
-                    <span className="font-bold text-emerald-700">Available Profit Balance</span>
-                    <span className="font-black text-emerald-900">₦{availableProfitBalance.toLocaleString()}</span>
+                    <span className="font-bold text-emerald-700">Summary Balance (Cash+TRF+Expenses)</span>
+                    <span className="font-black text-emerald-900">₦{summaryBalance.toLocaleString()}</span>
+                  </div>
+
+                  <div className={`flex items-center justify-between rounded-xl p-3 border ${
+                    accountCheck === 0 ? 'bg-emerald-50 border-emerald-300' :
+                    accountCheck < 0 ? 'bg-red-50 border-red-300' : 'bg-orange-50 border-orange-300'
+                  }`}>
+                    <span className={`font-black ${
+                      accountCheck === 0 ? 'text-emerald-700' : accountCheck < 0 ? 'text-red-700' : 'text-orange-700'
+                    }`}>
+                      {accountCheck === 0 ? '🟢 ACCOUNT BALANCED' : 'Account Check'}
+                    </span>
+                    {accountCheck !== 0 && (
+                      <span className={`font-black ${accountCheck < 0 ? 'text-red-800' : 'text-orange-800'}`}>
+                        {accountCheck < 0 ? '-' : '+'}₦{Math.abs(accountCheck).toLocaleString()}
+                      </span>
+                    )}
                   </div>
 
                   <div>
@@ -2946,7 +3121,12 @@ function AdminDashboard({
                       <div className="space-y-1.5 max-h-40 overflow-y-auto">
                         {records.map(r => (
                           <div key={r.id} className="flex items-center justify-between text-[11px] bg-slate-50 rounded-lg p-2">
-                            <span className="font-semibold text-slate-600">{r.record_date}</span>
+                            <span className="font-semibold text-slate-600 flex items-center gap-1.5">
+                              {r.record_date}
+                              {r.record_type === 'denomination' && (
+                                <span className="text-[9px] font-black uppercase bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">Denomination</span>
+                              )}
+                            </span>
                             <span className="font-black text-emerald-800">₦{r.grand_cash_total.toLocaleString()}</span>
                           </div>
                         ))}
@@ -3200,6 +3380,73 @@ function AdminDashboard({
 
       {/* Corporate Profit & Earnings Reporting tab */}
       {activeTab === 'reports' && (
+        <div className="space-y-6 animate-fade-in">
+          {/* Monthly Financial Summary Dashboard */}
+          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4">
+            <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider flex items-center gap-1.5 font-bold">
+              <LayoutDashboard className="w-5 h-5 text-emerald-700" />
+              Monthly Financial Summary — {periodLabelFromKey(currentPeriodKey)}
+            </h3>
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+              {[
+                { label: 'Total Contributions', value: liveMonth.contributions, color: 'emerald' },
+                { label: 'Total Profit', value: liveMonth.profit, color: 'emerald' },
+                { label: 'Total Expenses', value: liveMonth.expenses, color: 'slate' },
+                { label: 'Total Payout', value: liveMonth.payout, color: 'slate' },
+                { label: 'Remaining Balance', value: liveMonth.remaining, color: 'amber' },
+              ].map(card => (
+                <div key={card.label} className="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-4">
+                  <p className="text-[11px] font-black uppercase tracking-wider text-emerald-800">{card.label}</p>
+                  <p className="text-xl sm:text-2xl font-black text-emerald-955 mt-1">₦{card.value.toLocaleString()}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Part 5: Monthly Payout Card */}
+          <div className="bg-emerald-955 text-white p-6 rounded-3xl shadow-sm">
+            <p className="text-[10px] uppercase font-black tracking-wider text-emerald-200">Monthly Payout (Contributions − Profit)</p>
+            <p className="text-3xl font-black mt-1">₦{monthlyPayoutCard.toLocaleString()}</p>
+            <p className="text-[11px] text-emerald-300 mt-1.5">Resets automatically at the start of each new month.</p>
+          </div>
+
+          {/* Monthly Archive */}
+          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
+            <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider mb-1 font-bold">Monthly Archive</h3>
+            <p className="text-xs text-slate-505 mb-4 font-medium">Previous months archive automatically once they end. The current month always stays live above.</p>
+            {monthlySummaries.length === 0 ? (
+              <div className="text-center py-8 border border-dashed border-emerald-200 rounded-2xl text-slate-400 text-xs">No archived months yet.</div>
+            ) : (
+              <div className="space-y-2">
+                {monthlySummaries.map(s => {
+                  const isOpen = expandedArchiveMonth === s.id;
+                  return (
+                    <div key={s.id} className="border border-slate-100 rounded-2xl overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedArchiveMonth(isOpen ? null : s.id)}
+                        className="w-full flex items-center justify-between p-4 bg-slate-50/60 hover:bg-slate-100/60 transition"
+                      >
+                        <span className="text-xs font-black text-slate-800">{s.month_label}</span>
+                        {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                      </button>
+                      {isOpen && (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 bg-white text-sm">
+                          <div><span className="text-slate-600 block font-bold text-[10px] uppercase">Total Collected</span><span className="font-black text-emerald-900 text-base">₦{Number(s.total_contributions).toLocaleString()}</span></div>
+                          <div><span className="text-slate-600 block font-bold text-[10px] uppercase">Total Profit</span><span className="font-black text-emerald-900 text-base">₦{Number(s.total_profit).toLocaleString()}</span></div>
+                          <div><span className="text-slate-600 block font-bold text-[10px] uppercase">Total Expenses</span><span className="font-black text-slate-900 text-base">₦{Number(s.total_expenses).toLocaleString()}</span></div>
+                          <div><span className="text-slate-600 block font-bold text-[10px] uppercase">Total Paid Out</span><span className="font-black text-slate-900 text-base">₦{Number(s.total_payout).toLocaleString()}</span></div>
+                          <div><span className="text-slate-600 block font-bold text-[10px] uppercase">Remaining Balance</span><span className="font-black text-amber-800 text-base">₦{Number(s.remaining_balance).toLocaleString()}</span></div>
+                          <div><span className="text-slate-600 block font-bold text-[10px] uppercase">Date Archived</span><span className="font-black text-slate-900 text-base">{new Date(s.date_archived).toLocaleDateString()}</span></div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
         <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm animate-fade-in space-y-6">
           <div>
             <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider flex items-center gap-1.5 font-bold">
@@ -3235,6 +3482,7 @@ function AdminDashboard({
               </div>
             </div>
           </div>
+        </div>
         </div>
       )}
 
@@ -3499,14 +3747,14 @@ function AdminDashboard({
           <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
             <h3 className="text-md font-black text-emerald-955 mb-1 uppercase tracking-wider flex items-center gap-1.5 font-bold">
               <MessageSquare className="w-5 h-5 text-emerald-700" />
-              Send Note to Customer
+              Customer Note
             </h3>
-            <p className="text-xs text-slate-505 mb-4 font-medium">This appears at the bottom of the selected customer's dashboard.</p>
+            <p className="text-xs text-slate-505 mb-4 font-medium">Appears directly below the balance card on the selected customer's dashboard. Only the latest note shows - editing replaces it, deleting removes it immediately.</p>
             <div className="space-y-3">
               <SearchableCustomerSelect
                 customers={profiles.filter(p => p.role === 'Customer')}
                 selectedId={noteCustomerId}
-                onSelect={setNoteCustomerId}
+                onSelect={handleSelectNoteCustomer}
                 placeholder="Select customer..."
               />
               <textarea
@@ -3516,14 +3764,25 @@ function AdminDashboard({
                 placeholder="e.g. Your payout has been scheduled for Friday."
                 className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-sm font-medium"
               />
-              <button
-                type="button"
-                onClick={handleSendCustomerNote}
-                disabled={!noteCustomerId}
-                className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 text-white font-bold py-2.5 rounded-xl transition text-sm"
-              >
-                Send Note
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleSendCustomerNote}
+                  disabled={!noteCustomerId}
+                  className="flex-1 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 text-white font-bold py-2.5 rounded-xl transition text-sm"
+                >
+                  {profiles.find(p => p.id === noteCustomerId)?.admin_note ? 'Save Edit' : 'Send Note'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteCustomerNote}
+                  disabled={!noteCustomerId || !profiles.find(p => p.id === noteCustomerId)?.admin_note}
+                  className="px-4 bg-red-50 hover:bg-red-100 disabled:opacity-30 text-red-700 font-bold py-2.5 rounded-xl transition text-sm flex items-center gap-1.5"
+                  title="Delete note"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -3944,9 +4203,9 @@ function CustomerDashboard({
             {/* Savings Account summary - accumulates and never clears until an
                 explicit admin-approved payout removes a specific month */}
             <div className="bg-emerald-955 text-white p-6 rounded-3xl shadow-sm">
-              <p className="text-[10px] uppercase font-black tracking-wider text-emerald-200">My Savings Account</p>
-              <p className="text-3xl font-black mt-1">₦{(totalActiveCycle + uncollectedTotal).toLocaleString()}</p>
-              <div className="flex gap-4 mt-2 text-[11px] font-bold text-emerald-100">
+              <p className="text-[11px] uppercase font-black tracking-wider text-amber-400">My Savings Account</p>
+              <p className="text-3xl sm:text-4xl font-black mt-1 text-white">₦{(totalActiveCycle + uncollectedTotal).toLocaleString()}</p>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2.5 text-xs font-black text-emerald-50">
                 <span>Running: ₦{totalActiveCycle.toLocaleString()}</span>
                 <span>Uncollected: ₦{uncollectedTotal.toLocaleString()}</span>
                 <span>Lifetime Collected: ₦{collectedTotal.toLocaleString()}</span>
@@ -3969,7 +4228,6 @@ function CustomerDashboard({
       })()}
 
       {customerTab === 'tracker' && (
-        <>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="space-y-6 lg:col-span-1">
             {/* Balance Card */}
@@ -4010,6 +4268,16 @@ function CustomerDashboard({
                 </p>
               )}
             </div>
+
+            {customer.admin_note && customer.admin_note.trim() !== '' && (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
+                <MessageSquare className="w-5 h-5 text-amber-700 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-amber-700 mb-1">Note from HireMercy AJO</p>
+                  <p className="text-xs font-semibold text-amber-900">{customer.admin_note}</p>
+                </div>
+              </div>
+            )}
 
             <SupportWidget details={supportDetails} />
           </div>
@@ -4082,17 +4350,6 @@ function CustomerDashboard({
             </div>
           </div>
         </div>
-
-        {customer.admin_note && customer.admin_note.trim() !== '' && (
-          <div className="mt-6 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
-            <MessageSquare className="w-5 h-5 text-amber-700 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-wider text-amber-700 mb-1">Note from HireMercy AJO</p>
-              <p className="text-xs font-semibold text-amber-900">{customer.admin_note}</p>
-            </div>
-          </div>
-        )}
-        </>
       )}
 
       {/* Statement History Tab */}
