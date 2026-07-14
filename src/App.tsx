@@ -4204,7 +4204,7 @@ function CustomerDashboard({
                 explicit admin-approved payout removes a specific month */}
             <div className="bg-emerald-955 text-white p-6 rounded-3xl shadow-sm">
               <p className="text-[11px] uppercase font-black tracking-wider text-amber-400">My Savings Account</p>
-              <p className="text-3xl sm:text-4xl font-black mt-1 text-white">₦{(totalActiveCycle + uncollectedTotal).toLocaleString()}</p>
+              <p className="text-3xl sm:text-4xl font-black mt-1 text-black market ">₦{(totalActiveCycle + uncollectedTotal).toLocaleString()}</p>
               <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2.5 text-xs font-black text-emerald-50">
                 <span>Running: ₦{totalActiveCycle.toLocaleString()}</span>
                 <span>Uncollected: ₦{uncollectedTotal.toLocaleString()}</span>
@@ -5049,16 +5049,51 @@ export default function App() {
     setIsLoading(false);
   };
 
+  // Supabase's PostgREST API caps any single response at 1000 rows by
+  // default - a plain, unbounded select() on a table that's grown past
+  // that silently returns only the first 1000, with no error. This loops
+  // using .range() to fetch every page until exhausted, guaranteeing the
+  // complete result set regardless of table size. This is what was
+  // missing for marked_days: unlike transactions (safe to window by recent
+  // date), we genuinely need every customer's current data regardless of
+  // age, so pagination - not a date/row cutoff - is the correct fix here.
+  const fetchAllRows = async (table: string, select: string) => {
+    const pageSize = 1000;
+    let allRows: any[] = [];
+    let from = 0;
+    while (true) {
+      const { data, error } = await supabase.from(table).select(select).range(from, from + pageSize - 1);
+      if (error) {
+        console.error(`fetchAllRows(${table}) failed:`, error.message);
+        break;
+      }
+      if (!data || data.length === 0) break;
+      allRows = allRows.concat(data);
+      if (data.length < pageSize) break; // last page reached
+      from += pageSize;
+    }
+    return allRows;
+  };
+
   const syncAllOperationalData = async (userProfile: Profile) => {
     if (userProfile.role === 'Admin' || userProfile.role === 'Staff') {
-      const [{ data: pData }, { data: txData }, { data: mData }] = await Promise.all([
-        supabase.from('profiles').select('*'),
-        supabase.from('transactions').select('*').order('created_at', { ascending: false }),
-        supabase.from('marked_days').select('*')
+      const [pData, { data: txData }, mData] = await Promise.all([
+        fetchAllRows('profiles', 'id, name, phone, email, role, branch_id, daily_amount, is_active, created_at, last_amount_change_at, allow_anytime_change, admin_note'),
+        // FIX: this table grows forever and was being fetched in FULL, with
+        // no limit, on every single Admin page load - almost certainly the
+        // main driver of the Supabase egress quota being exhausted.
+        // Using a date filter (not a row-count limit) so the current
+        // month's data - which Monthly Financial Summary depends on being
+        // complete - is always fully included, while still bounding
+        // unbounded growth from many months/years of accumulated history.
+        // Older data is still permanently in the database; only how much
+        // gets re-downloaded on every page load is limited.
+        supabase.from('transactions').select('*').gte('created_at', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()).order('created_at', { ascending: false }),
+        fetchAllRows('marked_days', 'id, customer_id, day_number, amount, date, period_key, transaction_id')
       ]);
-      if (pData) setProfiles(pData);
+      if (pData && pData.length > 0) setProfiles(pData);
       if (txData) setTransactions(txData);
-      if (mData) {
+      if (mData && mData.length > 0) {
         const grouped: Record<string, MarkedDay[]> = {};
         mData.forEach((item: any) => {
           if (!grouped[item.customer_id]) grouped[item.customer_id] = [];
