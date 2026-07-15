@@ -3,7 +3,7 @@ import {
   PiggyBank, Phone, Lock, EyeOff, Eye as EyeIcon, Mail, User as UserIcon, 
   ChevronLeft, ChevronRight, ChevronDown, LayoutDashboard, Users, Plus, Search, Trash2, Calendar, 
   CheckCircle2, XCircle, LogOut, Shield, Briefcase, Landmark, Info, Key,
-  Bell, Settings, HelpCircle, MessageSquare, Building2, UserPlus, Coins, Clock, FileText, Edit2
+  Bell, Settings, HelpCircle, MessageSquare, Building2, UserPlus, Coins, Clock, FileText, Edit2, X
 } from 'lucide-react';
 import { type Session, type AuthChangeEvent } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
@@ -22,6 +22,20 @@ export interface Profile {
   last_amount_change_at?: string;
   allow_anytime_change?: boolean;
   admin_note?: string;
+  loan_status: 'No Loan' | 'Active Loan' | 'Loan Cleared';
+}
+
+export interface Loan {
+  id: string;
+  customer_id: string;
+  status: 'No Loan' | 'Active Loan' | 'Loan Cleared';
+  loan_amount: number;
+  outstanding_balance: number;
+  date_issued?: string;
+  due_date?: string;
+  installments?: number;
+  amount_repaid: number;
+  amount_remaining: number;
 }
 
 export interface Branch {
@@ -248,6 +262,255 @@ const TrackingStatusBadge = ({ status }: { status: TrackingHistoryEntry['status'
     <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-slate-700">
       Uncollected
     </span>
+  );
+};
+
+// Badge + inline editor for a customer's loan status. Colors per spec:
+// green = No Loan, amber = Active Loan, blue = Loan Cleared. Admin can
+// change it directly from the dot/select; this is a manual field only -
+// no loan calculation logic, per the "prepare, don't implement" scope.
+const LoanStatusBadge = ({ status, onChange }: { status: Profile['loan_status'], onChange: (newStatus: Profile['loan_status']) => void }) => {
+  const dotColor =
+    status === 'Active Loan' ? 'bg-amber-500' :
+    status === 'Loan Cleared' ? 'bg-blue-500' :
+    'bg-emerald-500';
+  return (
+    <div className="inline-flex items-center gap-1.5">
+      <span className={`w-2 h-2 rounded-full ${dotColor}`} />
+      <select
+        value={status}
+        onChange={(e) => onChange(e.target.value as Profile['loan_status'])}
+        className="text-[10px] font-bold border border-slate-200 rounded-lg px-1.5 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-300"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <option value="No Loan">No Loan</option>
+        <option value="Active Loan">Active Loan</option>
+        <option value="Loan Cleared">Loan Cleared</option>
+      </select>
+    </div>
+  );
+};
+
+// Full customer detail view, opened by clicking a name in the Customer
+// Directory. Transaction history and loan info are fetched on-demand for
+// just this one customer (not from the global, 90-day-windowed admin
+// state) so this always shows complete history regardless of that filter.
+const CustomerDetailsModal = ({
+  customer, branches, profiles, markedDays, savedMonths, payoutHistory,
+  dateFilter, setDateFilter, customFrom, setCustomFrom, customTo, setCustomTo,
+  viewingDay, setViewingDay, onClose,
+}: {
+  customer: Profile, branches: Branch[], profiles: Profile[],
+  markedDays: Record<string, MarkedDay[]>, savedMonths: Record<string, SavedMonth[]>,
+  payoutHistory: PayoutHistoryRecord[],
+  dateFilter: 'today' | 'week' | 'month' | 'custom', setDateFilter: (v: 'today' | 'week' | 'month' | 'custom') => void,
+  customFrom: string, setCustomFrom: (v: string) => void, customTo: string, setCustomTo: (v: string) => void,
+  viewingDay: MarkedDay | null, setViewingDay: (d: MarkedDay | null) => void,
+  onClose: () => void,
+}) => {
+  const [fullTransactions, setFullTransactions] = useState<any[]>([]);
+  const [loadingTx, setLoadingTx] = useState(true);
+  const [loanRecord, setLoanRecord] = useState<Loan | null>(null);
+  const [loadingLoan, setLoadingLoan] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingTx(true);
+    supabase
+      .from('transactions')
+      .select('id, customer_id, amount, date, payment_method, days_covered, start_day, end_day, branch_id, status, staff_id, created_at')
+      .eq('customer_id', customer.id)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => { if (!cancelled) { setFullTransactions(data || []); setLoadingTx(false); } });
+
+    setLoadingLoan(true);
+    supabase
+      .from('loans')
+      .select('*')
+      .eq('customer_id', customer.id)
+      .maybeSingle()
+      .then(({ data }) => { if (!cancelled) { setLoanRecord(data as Loan || null); setLoadingLoan(false); } });
+
+    return () => { cancelled = true; };
+  }, [customer.id]);
+
+  const branch = branches.find(b => b.id === customer.branch_id);
+  const staffLookup = (id?: string) => profiles.find(p => p.id === id)?.name || 'Admin';
+
+  const filteredTx = useMemo(() => {
+    const now = new Date();
+    return fullTransactions.filter((t: any) => {
+      const txDate = new Date(t.created_at || t.date);
+      if (dateFilter === 'today') return txDate.toDateString() === now.toDateString();
+      if (dateFilter === 'week') { const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7); return txDate >= weekAgo; }
+      if (dateFilter === 'month') return txDate.getMonth() === now.getMonth() && txDate.getFullYear() === now.getFullYear();
+      if (dateFilter === 'custom') { if (!customFrom || !customTo) return true; return txDate >= new Date(customFrom) && txDate <= new Date(customTo + 'T23:59:59'); }
+      return true;
+    });
+  }, [fullTransactions, dateFilter, customFrom, customTo]);
+
+  const marked = markedDays[customer.id] || [];
+  const daysCompleted = marked.length;
+  const totalContribution = marked.reduce((s, d) => s + d.amount, 0);
+  const uncollected = (savedMonths[customer.id] || []).filter(s => s.status === 'saved' || s.status === 'requested');
+  const collected = payoutHistory.filter(p => p.customer_id === customer.id);
+  const viewingDayTx = viewingDay ? fullTransactions.find((t: any) => t.id === viewingDay.transaction_id) : null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-black text-emerald-955">{customer.name}</h2>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+        </div>
+
+        <section className="mb-6 bg-emerald-50/50 rounded-2xl p-4">
+          <h3 className="text-xs font-black uppercase text-emerald-800 mb-3">Customer Information</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+            <div><p className="text-slate-500 font-bold">Full Name</p><p className="font-bold">{customer.name}</p></div>
+            <div><p className="text-slate-500 font-bold">Phone</p><p className="font-bold">{customer.phone}</p></div>
+            <div><p className="text-slate-500 font-bold">Email</p><p className="font-bold">{customer.email || '—'}</p></div>
+            <div><p className="text-slate-500 font-bold">Branch</p><p className="font-bold">{branch?.name || '—'}</p></div>
+            <div><p className="text-slate-500 font-bold">Daily Target</p><p className="font-bold">₦{customer.daily_amount.toLocaleString()}</p></div>
+            <div><p className="text-slate-500 font-bold">Registered</p><p className="font-bold">{customer.created_at ? new Date(customer.created_at).toLocaleDateString() : '—'}</p></div>
+            <div><p className="text-slate-500 font-bold">Status</p><p className="font-bold">{customer.is_active ? 'Active' : 'Inactive'}</p></div>
+          </div>
+        </section>
+
+        <section className="mb-6">
+          <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
+            <h3 className="text-xs font-black uppercase text-emerald-800">Transaction History</h3>
+            <div className="flex gap-1 items-center">
+              {(['today', 'week', 'month', 'custom'] as const).map(f => (
+                <button key={f} type="button" onClick={() => setDateFilter(f)}
+                  className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase ${dateFilter === f ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                  {f}
+                </button>
+              ))}
+            </div>
+          </div>
+          {dateFilter === 'custom' && (
+            <div className="flex gap-2 mb-2 text-[10px]">
+              <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="border rounded-lg px-2 py-1" />
+              <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className="border rounded-lg px-2 py-1" />
+            </div>
+          )}
+          {loadingTx ? (
+            <p className="text-xs text-slate-400">Loading...</p>
+          ) : filteredTx.length === 0 ? (
+            <p className="text-xs text-slate-400">No transactions in this range.</p>
+          ) : (
+            <div className="overflow-x-auto max-h-56 overflow-y-auto">
+              <table className="w-full text-left text-[11px]">
+                <thead><tr className="text-slate-500 font-bold border-b"><th className="p-1.5">Date</th><th className="p-1.5">Time</th><th className="p-1.5">Amount</th><th className="p-1.5">Method</th><th className="p-1.5">Staff</th></tr></thead>
+                <tbody className="divide-y">
+                  {filteredTx.map((t: any) => (
+                    <tr key={t.id}>
+                      <td className="p-1.5">{new Date(t.created_at || t.date).toLocaleDateString()}</td>
+                      <td className="p-1.5">{t.created_at ? new Date(t.created_at).toLocaleTimeString() : '—'}</td>
+                      <td className="p-1.5 font-bold">₦{t.amount.toLocaleString()}</td>
+                      <td className="p-1.5">{t.payment_method}</td>
+                      <td className="p-1.5">{staffLookup(t.staff_id)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className="mb-6">
+          <h3 className="text-xs font-black uppercase text-emerald-800 mb-2">32-Day Contribution Grid</h3>
+          <div className="grid grid-cols-8 gap-1.5 mb-2">
+            {Array.from({ length: 32 }, (_, i) => i + 1).map(dayNum => {
+              const day = marked.find(d => d.day_number === dayNum);
+              return (
+                <button key={dayNum} type="button" disabled={!day} onClick={() => day && setViewingDay(day)}
+                  className={`aspect-square rounded-lg text-[10px] font-black flex items-center justify-center ${day ? 'bg-emerald-600 text-white cursor-pointer hover:bg-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
+                  {dayNum}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex gap-4 text-[11px] font-bold text-slate-600">
+            <span>Days Completed: {daysCompleted}</span>
+            <span>Remaining: {32 - daysCompleted}</span>
+            <span>Total: ₦{totalContribution.toLocaleString()}</span>
+          </div>
+        </section>
+
+        <section className="mb-6">
+          <h3 className="text-xs font-black uppercase text-emerald-800 mb-2">Savings History</h3>
+          <p className="text-[10px] font-black uppercase text-slate-500 mb-1">Completed but Uncollected</p>
+          {uncollected.length === 0 ? <p className="text-xs text-slate-400 mb-3">None.</p> : (
+            <table className="w-full text-left text-[11px] mb-3">
+              <thead><tr className="text-slate-500 font-bold border-b"><th className="p-1.5">Month</th><th className="p-1.5">Total Saved</th><th className="p-1.5">Completion Date</th><th className="p-1.5">Status</th></tr></thead>
+              <tbody className="divide-y">
+                {uncollected.map(u => (
+                  <tr key={u.id}>
+                    <td className="p-1.5">{u.month_label}</td>
+                    <td className="p-1.5 font-bold">₦{u.total_amount.toLocaleString()}</td>
+                    <td className="p-1.5">{new Date(u.created_at).toLocaleDateString()}</td>
+                    <td className="p-1.5 capitalize">{u.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <p className="text-[10px] font-black uppercase text-slate-500 mb-1">Collected Savings</p>
+          {collected.length === 0 ? <p className="text-xs text-slate-400">None.</p> : (
+            <table className="w-full text-left text-[11px]">
+              <thead><tr className="text-slate-500 font-bold border-b"><th className="p-1.5">Month</th><th className="p-1.5">Total Saved</th><th className="p-1.5">Collection Date</th><th className="p-1.5">Amount Collected</th></tr></thead>
+              <tbody className="divide-y">
+                {collected.map(c => (
+                  <tr key={c.id}>
+                    <td className="p-1.5">{c.month_label}</td>
+                    <td className="p-1.5">₦{c.total_amount.toLocaleString()}</td>
+                    <td className="p-1.5">{new Date(c.approved_at).toLocaleDateString()}</td>
+                    <td className="p-1.5 font-bold">₦{c.payout_amount.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+
+        <section>
+          <h3 className="text-xs font-black uppercase text-emerald-800 mb-2">Loan Information</h3>
+          {loadingLoan ? (
+            <p className="text-xs text-slate-400">Loading...</p>
+          ) : !loanRecord || customer.loan_status === 'No Loan' ? (
+            <p className="text-xs text-slate-500 font-semibold">This customer has no active loan.</p>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+              <div><p className="text-slate-500 font-bold">Status</p><p className="font-bold">{loanRecord.status}</p></div>
+              <div><p className="text-slate-500 font-bold">Loan Amount</p><p className="font-bold">₦{loanRecord.loan_amount.toLocaleString()}</p></div>
+              <div><p className="text-slate-500 font-bold">Outstanding</p><p className="font-bold">₦{loanRecord.outstanding_balance.toLocaleString()}</p></div>
+              <div><p className="text-slate-500 font-bold">Issued</p><p className="font-bold">{loanRecord.date_issued ? new Date(loanRecord.date_issued).toLocaleDateString() : '—'}</p></div>
+              <div><p className="text-slate-500 font-bold">Due Date</p><p className="font-bold">{loanRecord.due_date ? new Date(loanRecord.due_date).toLocaleDateString() : '—'}</p></div>
+              <div><p className="text-slate-500 font-bold">Installments</p><p className="font-bold">{loanRecord.installments ?? '—'}</p></div>
+              <div><p className="text-slate-500 font-bold">Repaid</p><p className="font-bold">₦{loanRecord.amount_repaid.toLocaleString()}</p></div>
+              <div><p className="text-slate-500 font-bold">Remaining</p><p className="font-bold">₦{loanRecord.amount_remaining.toLocaleString()}</p></div>
+            </div>
+          )}
+        </section>
+
+        {viewingDay && (
+          <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4" onClick={() => setViewingDay(null)}>
+            <div className="bg-white rounded-2xl p-5 max-w-xs w-full" onClick={e => e.stopPropagation()}>
+              <h4 className="text-sm font-black text-emerald-955 mb-3">Day {viewingDay.day_number} Payment</h4>
+              <div className="space-y-1.5 text-xs">
+                <p><span className="text-slate-500 font-bold">Date:</span> {new Date(viewingDay.date).toLocaleDateString()}</p>
+                <p><span className="text-slate-500 font-bold">Time:</span> {viewingDayTx?.created_at ? new Date(viewingDayTx.created_at).toLocaleTimeString() : '—'}</p>
+                <p><span className="text-slate-500 font-bold">Amount:</span> ₦{viewingDay.amount.toLocaleString()}</p>
+                <p><span className="text-slate-500 font-bold">Staff:</span> {staffLookup(viewingDayTx?.staff_id)}</p>
+              </div>
+              <button type="button" onClick={() => setViewingDay(null)} className="mt-4 w-full bg-emerald-700 text-white text-xs font-bold py-2 rounded-xl">Close</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 };
 
@@ -976,10 +1239,10 @@ function AdvertisementBanner({ details }: { details: SupportSettings }) {
 
 function AdminDashboard({ 
   profiles, branches, transactions, markedDays, supportDetails, payoutRequests, savedMonths, payoutHistory, withdrawalRequests, onApprovePayout, onCreateBranch, onUpdateBranch, onDeleteBranch, onCreateStaff, onUpdateStaff, onDeleteStaff, onRegisterCustomer,
-  onDeleteTransaction, onAddTransaction, onUpdateSupport, onDeleteCustomer, onUpdateCustomer, onToggleCustomerActive, onTriggerManualPayout, onApproveTransaction, onApproveWithdrawal, routeTarget, onRouteHandled, onRejectPayout, triggerToast, onResetPasswordToDefault
+  onDeleteTransaction, onAddTransaction, onUpdateSupport, onDeleteCustomer, onUpdateCustomer, onToggleCustomerActive, onUpdateLoanStatus, onTriggerManualPayout, onApproveTransaction, onApproveWithdrawal, routeTarget, onRouteHandled, onRejectPayout, triggerToast, onResetPasswordToDefault
 }: { 
   profiles: Profile[], branches: Branch[], transactions: Transaction[], markedDays: Record<string, MarkedDay[]>, supportDetails: SupportSettings, payoutRequests: PayoutRequest[], savedMonths: Record<string, SavedMonth[]>, payoutHistory: PayoutHistoryRecord[], withdrawalRequests: WithdrawalRequest[], onDeleteTransaction: (id: string) => void, onAddTransaction: (cId: string, amt: number, method: any, sId: string) => void, onUpdateSupport: (phone: string, whatsapp: string, email: string, bankName: string, acctNum: string, acctName: string, advertTitle: string, advertDescription: string, advertImageUrl: string, advertEnabled: boolean, advertVideoUrl: string, themeBackgroundColor: string) => void, onApprovePayout: (reqId: string) => void, onCreateBranch: (name: string, address: string) => void, onUpdateBranch: (id: string, name: string, address: string) => void, onDeleteBranch: (id: string) => void, onCreateStaff: (name: string, phone: string, email: string, branchId: string, password: string) => void, onUpdateStaff: (id: string, name: string, phone: string, email: string, branchId: string) => void, onDeleteStaff: (id: string) => void, onRegisterCustomer: (data: any) => void,
-  onDeleteCustomer: (id: string) => void, onUpdateCustomer: (id: string, name: string, phone: string, email: string, dailyAmount: number, branchId: string, allowAnytimeChange: boolean) => void, onToggleCustomerActive: (id: string, is_active: boolean) => void, onTriggerManualPayout: (customerId: string, bank: string, acctNum: string, acctName: string) => void, onApproveTransaction: (id: string) => void, onApproveWithdrawal: (id: string, bankName: string, accountNumber: string, accountName: string) => void, routeTarget?: AdminTab | null, onRouteHandled?: () => void, onRejectPayout?: (reqId: string) => void, triggerToast?: (message: string, type?: 'success' | 'error') => void, onResetPasswordToDefault?: (customerId: string) => void
+  onDeleteCustomer: (id: string) => void, onUpdateCustomer: (id: string, name: string, phone: string, email: string, dailyAmount: number, branchId: string, allowAnytimeChange: boolean) => void, onToggleCustomerActive: (id: string, is_active: boolean) => void, onUpdateLoanStatus: (id: string, loan_status: 'No Loan' | 'Active Loan' | 'Loan Cleared') => void, onTriggerManualPayout: (customerId: string, bank: string, acctNum: string, acctName: string) => void, onApproveTransaction: (id: string) => void, onApproveWithdrawal: (id: string, bankName: string, accountNumber: string, accountName: string) => void, routeTarget?: AdminTab | null, onRouteHandled?: () => void, onRejectPayout?: (reqId: string) => void, triggerToast?: (message: string, type?: 'success' | 'error') => void, onResetPasswordToDefault?: (customerId: string) => void
 }) {
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [expandedOutstandingCustomerId, setExpandedOutstandingCustomerId] = useState<string | null>(null);
@@ -1310,6 +1573,12 @@ function AdminDashboard({
 
   // Filter and Editing states
   const [selectedBranchFilter, setSelectedBranchFilter] = useState('');
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+  const [viewingCustomerDetails, setViewingCustomerDetails] = useState<Profile | null>(null);
+  const [customerDetailsDateFilter, setCustomerDetailsDateFilter] = useState<'today' | 'week' | 'month' | 'custom'>('month');
+  const [customerDetailsCustomFrom, setCustomerDetailsCustomFrom] = useState('');
+  const [customerDetailsCustomTo, setCustomerDetailsCustomTo] = useState('');
+  const [viewingDayDetail, setViewingDayDetail] = useState<MarkedDay | null>(null);
   const [editingCustomer, setEditingCustomer] = useState<Profile | null>(null);
 
   // Manual Payout states
@@ -1394,11 +1663,17 @@ function AdminDashboard({
   const staff = profiles.filter(p => p.role === 'Staff').sort((a, b) => a.name.localeCompare(b.name));
 
   const filteredCustomers = useMemo(() => {
+    const query = customerSearchQuery.trim().toLowerCase();
     return customers.filter(c => {
-      if (selectedBranchFilter === '') return true;
-      return c.branch_id === selectedBranchFilter;
+      if (selectedBranchFilter !== '' && c.branch_id !== selectedBranchFilter) return false;
+      if (query === '') return true;
+      return (
+        c.name.toLowerCase().includes(query) ||
+        c.phone.toLowerCase().includes(query) ||
+        c.id.toLowerCase().includes(query)
+      );
     });
-  }, [customers, selectedBranchFilter]);
+  }, [customers, selectedBranchFilter, customerSearchQuery]);
 
   const stats = useMemo(() => {
     // Current West Africa Time (WAT) Month metrics
@@ -2212,6 +2487,19 @@ function AdminDashboard({
                 </select>
               </div>
             </div>
+            <div className="relative mb-4">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={customerSearchQuery}
+                onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                placeholder="Search by name, phone, or customer ID..."
+                className="w-full pl-9 pr-3 py-2 text-xs border border-emerald-200 rounded-xl font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-300"
+              />
+            </div>
+            {filteredCustomers.length === 0 ? (
+              <div className="text-center py-10 text-slate-400 text-sm font-bold">No customer found.</div>
+            ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
@@ -2220,6 +2508,7 @@ function AdminDashboard({
                     <th className="p-3">Phone number</th>
                     <th className="p-3">Daily Target</th>
                     <th className="p-3">Status</th>
+                    <th className="p-3">Loan Status</th>
                     <th className="p-3">Marked count</th>
                     <th className="p-3 text-right">Consolidated contribution</th>
                     <th className="p-3 text-right">Actions</th>
@@ -2231,7 +2520,15 @@ function AdminDashboard({
                     const totalContributed = marked.reduce((sum, item) => sum + item.amount, 0);
                     return (
                       <tr key={c.id} className="hover:bg-emerald-50/20 transition text-slate-800">
-                        <td className="p-3 font-bold">{c.name}</td>
+                        <td className="p-3 font-bold">
+                          <button
+                            type="button"
+                            onClick={() => setViewingCustomerDetails(c)}
+                            className="text-emerald-800 hover:text-emerald-950 hover:underline text-left"
+                          >
+                            {c.name}
+                          </button>
+                        </td>
                         <td className="p-3 font-semibold text-slate-655">{c.phone}</td>
                         <td className="p-3 font-bold">₦{c.daily_amount.toLocaleString()}</td>
                         <td className="p-3">
@@ -2245,6 +2542,9 @@ function AdminDashboard({
                           >
                             {c.is_active ? 'Active' : 'Suspended'}
                           </button>
+                        </td>
+                        <td className="p-3">
+                          <LoanStatusBadge status={c.loan_status} onChange={(newStatus) => onUpdateLoanStatus(c.id, newStatus)} />
                         </td>
                         <td className="p-3">
                           <span className="bg-amber-100 text-amber-900 font-bold px-2 py-0.5 rounded-full">
@@ -2292,11 +2592,32 @@ function AdminDashboard({
                 </tbody>
               </table>
             </div>
+            )}
           </div>
         </div>
       )}
 
       {/* Editing Customer Dialog Modal */}
+      {viewingCustomerDetails && (
+        <CustomerDetailsModal
+          customer={customers.find(c => c.id === viewingCustomerDetails.id) || viewingCustomerDetails}
+          branches={branches}
+          profiles={profiles}
+          markedDays={markedDays}
+          savedMonths={savedMonths}
+          payoutHistory={payoutHistory}
+          dateFilter={customerDetailsDateFilter}
+          setDateFilter={setCustomerDetailsDateFilter}
+          customFrom={customerDetailsCustomFrom}
+          setCustomFrom={setCustomerDetailsCustomFrom}
+          customTo={customerDetailsCustomTo}
+          setCustomTo={setCustomerDetailsCustomTo}
+          viewingDay={viewingDayDetail}
+          setViewingDay={setViewingDayDetail}
+          onClose={() => { setViewingCustomerDetails(null); setViewingDayDetail(null); }}
+        />
+      )}
+
       {editingCustomer && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <form onSubmit={handleSaveEditCustomer} className="bg-white rounded-3xl max-w-md w-full p-6 border border-emerald-100 shadow-2xl space-y-4">
@@ -6024,6 +6345,22 @@ export default function App() {
     }
   };
 
+  const handleUpdateLoanStatus = async (id: string, loan_status: 'No Loan' | 'Active Loan' | 'Loan Cleared') => {
+    setIsLoading(true);
+    const { error } = await supabase
+      .from('profiles')
+      .update({ loan_status })
+      .eq('id', id);
+
+    setIsLoading(false);
+    if (error) {
+      triggerToast(`Loan status update failed: ${error.message}`, 'error');
+    } else {
+      triggerToast('Loan status updated.', 'success');
+      fetchGlobalConfiguration();
+    }
+  };
+
   // FIX: this used to unconditionally delete ALL of a customer's marked_days
   // AND their entire transactions history, based only on their active/
   // running cycle total - with no connection to `contributions` at all. That
@@ -6523,6 +6860,7 @@ export default function App() {
                 onDeleteCustomer={handleDeleteCustomer}
                 onUpdateCustomer={handleUpdateCustomer}
                 onToggleCustomerActive={handleToggleCustomerActive}
+                onUpdateLoanStatus={handleUpdateLoanStatus}
                 onTriggerManualPayout={handleTriggerManualPayout}
                 onApproveTransaction={handleApproveTransaction}
                 onApproveWithdrawal={handleApproveWithdrawal}
