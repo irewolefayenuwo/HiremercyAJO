@@ -3002,6 +3002,30 @@ function AdminDashboard({
                     </tr>
                   </tbody>
                 </table>
+
+                {/* Grand Total section - reads directly from denomComputed/
+                    grandCashTotal, which already recompute on every keystroke
+                    via updateDenomPieces, so this stays in sync automatically
+                    with no additional wiring. Uses bg-emerald-900 (a real
+                    Tailwind shade) rather than bg-emerald-955 used in the
+                    table row above, since that class isn't a standard shade
+                    and may not render depending on the Tailwind config. */}
+                <div className="bg-emerald-900 text-white rounded-2xl p-4">
+                  <p className="text-[10px] uppercase font-black tracking-wider text-emerald-200 mb-1.5">Grand Total</p>
+                  {grandCashTotal === 0 ? (
+                    <p className="text-2xl sm:text-3xl font-black">₦0</p>
+                  ) : (
+                    <>
+                      <div className="text-[11px] font-bold text-emerald-100 space-y-0.5 mb-1.5">
+                        {denomComputed.filter(r => r.pieces > 0).map(r => (
+                          <p key={r.denom}>₦{r.denom.toLocaleString()} × {r.pieces} = ₦{r.total.toLocaleString()}</p>
+                        ))}
+                      </div>
+                      <p className="text-2xl sm:text-3xl font-black">= ₦{grandCashTotal.toLocaleString()}</p>
+                    </>
+                  )}
+                </div>
+
                 <button
                   type="button"
                   onClick={handleSaveDenominationRecord}
@@ -3406,7 +3430,7 @@ function AdminDashboard({
           {/* Part 5: Monthly Payout Card */}
           <div className="bg-emerald-955 text-white p-6 rounded-3xl shadow-sm">
             <p className="text-[10px] uppercase font-black tracking-wider text-emerald-200">Monthly Payout (Contributions − Profit)</p>
-            <p className="text-3xl font-black mt-1">₦{monthlyPayoutCard.toLocaleString()}</p>
+            <p className="text-3xl font-black mt-1 text-[#166534]">₦{monthlyPayoutCard.toLocaleString()}</p>
             <p className="text-[11px] text-emerald-300 mt-1.5">Resets automatically at the start of each new month.</p>
           </div>
 
@@ -4204,7 +4228,7 @@ function CustomerDashboard({
                 explicit admin-approved payout removes a specific month */}
             <div className="bg-emerald-955 text-white p-6 rounded-3xl shadow-sm">
               <p className="text-[11px] uppercase font-black tracking-wider text-amber-400">My Savings Account</p>
-              <p className="text-3xl sm:text-4xl font-black mt-1 text-black market ">₦{(totalActiveCycle + uncollectedTotal).toLocaleString()}</p>
+              <p className="text-3xl sm:text-4xl font-black mt-1 text-[#166534]">₦{(totalActiveCycle + uncollectedTotal).toLocaleString()}</p>
               <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2.5 text-xs font-black text-emerald-50">
                 <span>Running: ₦{totalActiveCycle.toLocaleString()}</span>
                 <span>Uncollected: ₦{uncollectedTotal.toLocaleString()}</span>
@@ -5088,7 +5112,7 @@ export default function App() {
         // unbounded growth from many months/years of accumulated history.
         // Older data is still permanently in the database; only how much
         // gets re-downloaded on every page load is limited.
-        supabase.from('transactions').select('*').gte('created_at', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()).order('created_at', { ascending: false }),
+        supabase.from('transactions').select('id, customer_id, amount, date, payment_method, days_covered, start_day, end_day, branch_id, status, created_at').gte('created_at', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()).order('created_at', { ascending: false }),
         fetchAllRows('marked_days', 'id, customer_id, day_number, amount, date, period_key, transaction_id')
       ]);
       if (pData && pData.length > 0) setProfiles(pData);
@@ -5130,7 +5154,7 @@ export default function App() {
   };
 
   const fetchNotifications = async (userProfile: Profile) => {
-    let query = supabase.from('notifications').select('*').order('created_at', { ascending: false });
+    let query = supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(100);
     
     if (userProfile.role === 'Customer') {
       query = query.eq('user_id', userProfile.id);
@@ -5140,6 +5164,27 @@ export default function App() {
 
     const { data } = await query;
     if (data) setNotifications(data);
+  };
+
+  // "Clear All Notifications" - deletes every notification currently visible
+  // to this user (their own, if Customer; global/admin ones, if Admin/Staff).
+  // Supabase stays the source of truth: this permanently deletes server-side
+  // (backed by the DELETE policy scoped identically to the SELECT above), not
+  // just a local/visual clear, so it stays cleared across devices too.
+  const clearAllNotifications = async (userProfile: Profile) => {
+    let query = supabase.from('notifications').delete();
+    if (userProfile.role === 'Customer') {
+      query = query.eq('user_id', userProfile.id);
+    } else {
+      query = query.is('user_id', null);
+    }
+    const { error } = await query;
+    if (error) {
+      triggerToast(`Failed to clear notifications: ${error.message}`, 'error');
+      return;
+    }
+    setNotifications([]);
+    triggerToast('Notifications cleared.', 'success');
   };
 
   const fetchPayoutRequests = async (userProfile: Profile) => {
@@ -5549,8 +5594,43 @@ export default function App() {
   // now does nothing but refetch state after a transaction; the database is
   // the only thing that ever writes to `contributions` or reassigns
   // `period_key`.
-  const resyncAfterTransaction = async (userProfile: Profile) => {
-    await syncAllOperationalData(userProfile);
+  const resyncAfterTransaction = async (userProfile: Profile, affectedCustomerId?: string) => {
+    if ((userProfile.role === 'Admin' || userProfile.role === 'Staff') && affectedCustomerId) {
+      const [{ data: freshTx }, { data: freshMarked }] = await Promise.all([
+        supabase.from('transactions')
+          .select('id, customer_id, amount, date, payment_method, days_covered, start_day, end_day, branch_id, status, created_at')
+          .eq('customer_id', affectedCustomerId)
+          .gte('created_at', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString())
+          .order('created_at', { ascending: false }),
+        supabase.from('marked_days')
+          .select('id, customer_id, day_number, amount, date, period_key, transaction_id')
+          .eq('customer_id', affectedCustomerId)
+      ]);
+
+      if (freshTx) {
+        setTransactions(prev => {
+          const others = prev.filter((t: any) => t.customer_id !== affectedCustomerId);
+          const merged = [...freshTx, ...others];
+          merged.sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+          return merged;
+        });
+      }
+      if (freshMarked) {
+        setMarkedDays(prev => ({
+          ...prev,
+          [affectedCustomerId]: freshMarked.map((item: any) => ({
+            id: item.id,
+            day_number: item.day_number,
+            amount: item.amount,
+            date: item.date,
+            period_key: item.period_key,
+            transaction_id: item.transaction_id
+          }))
+        }));
+      }
+    } else {
+      await syncAllOperationalData(userProfile);
+    }
     await fetchNotifications(userProfile);
     await fetchSavedMonths(userProfile);
     await fetchCycleArchives(userProfile);
@@ -5594,7 +5674,7 @@ export default function App() {
 
     triggerToast('Contribution successfully posted and split!', 'success');
     if (currentUser) {
-      await resyncAfterTransaction(currentUser);
+      await resyncAfterTransaction(currentUser, customerId);
     }
   };
 
@@ -6134,7 +6214,7 @@ export default function App() {
       playNotificationSound('success');
       triggerToast('Deposit confirmed! Days successfully marked on tracking card.', 'success');
       if (currentUser) {
-        await resyncAfterTransaction(currentUser);
+        await resyncAfterTransaction(currentUser, tx.customer_id);
       }
     } catch (err: any) {
       triggerToast(`Approval split logic failed: ${err.message}`, 'error');
@@ -6324,13 +6404,28 @@ export default function App() {
                       <span className="font-extrabold text-xs text-emerald-955 uppercase tracking-wider">
                         {currentUser.role === 'Customer' ? 'My Notifications' : 'Audit Activity Alerts'}
                       </span>
-                      <button 
-                        type="button"
-                        onClick={() => setShowNotifications(false)} 
-                        className="text-[10px] text-slate-400 hover:text-slate-600 font-bold"
-                      >
-                        Dismiss
-                      </button>
+                      <div className="flex items-center gap-2.5">
+                        {notifications.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm('Clear all notifications? This cannot be undone.')) {
+                                clearAllNotifications(currentUser);
+                              }
+                            }}
+                            className="text-[10px] text-rose-500 hover:text-rose-700 font-bold"
+                          >
+                            Clear All
+                          </button>
+                        )}
+                        <button 
+                          type="button"
+                          onClick={() => setShowNotifications(false)} 
+                          className="text-[10px] text-slate-400 hover:text-slate-600 font-bold"
+                        >
+                          Dismiss
+                        </button>
+                      </div>
                     </div>
                     <div className="max-h-64 overflow-y-auto divide-y divide-emerald-50 text-xs">
                       {notifications.length === 0 ? (
