@@ -1886,11 +1886,14 @@ function AdminDashboard({
     }
   };
 
-  // FIX: this used to read from `markedDays` (the customer's ACTIVE, still-
-  // running cycle) and would let an admin "pay out" - and then wipe - money
-  // that was never actually frozen/saved yet. It now sources exclusively
-  // from uncollected `contributions` (the same data the Outstanding Payout
-  // Ledger uses), so this shortcut can never touch the active cycle.
+  // Preview calculation for the Trigger Manual Payout form/button. Must stay
+  // in sync with handleTriggerManualPayout's actual logic below - if these
+  // two diverge, the submit button can end up disabled even when the
+  // handler itself would succeed (or vice versa). Admin can pay out at any
+  // time: if there are no fully-completed uncollected months, this falls
+  // back to previewing a payout of the customer's current running cycle.
+  // Customer self-service payout requests are untouched by this - they
+  // still only ever draw from fully-completed, frozen months.
   const manualPayoutCalculation = useMemo(() => {
     if (!manualPayoutCustomerId) return null;
     const target = customers.find(c => c.id === manualPayoutCustomerId);
@@ -1898,15 +1901,22 @@ function AdminDashboard({
     const uncollectedMonths = (savedMonths[manualPayoutCustomerId] || []).filter(
       m => m.status === 'saved' || m.status === 'requested'
     );
-    if (uncollectedMonths.length === 0) return null;
-    const totalAmount = sumCurrencyValues(uncollectedMonths.map(m => m.total_amount));
-    const payoutAmount = Math.max(0, totalAmount - uncollectedMonths.length * target.daily_amount);
+    const runningDays = markedDays[manualPayoutCustomerId] || [];
+    const isPartialPayout = uncollectedMonths.length === 0 && runningDays.length > 0;
+    if (uncollectedMonths.length === 0 && runningDays.length === 0) return null;
+
+    const totalAmount = isPartialPayout
+      ? sumCurrencyValues(runningDays.map(d => d.amount))
+      : sumCurrencyValues(uncollectedMonths.map(m => m.total_amount));
+    const feeCount = isPartialPayout ? 1 : uncollectedMonths.length;
+    const payoutAmount = Math.max(0, totalAmount - feeCount * target.daily_amount);
     return {
       uncollectedMonths,
-      totalDays: uncollectedMonths.reduce((s, m) => s + m.total_days, 0),
+      totalDays: isPartialPayout ? runningDays.length : uncollectedMonths.reduce((s, m) => s + m.total_days, 0),
       totalAmount,
       payoutAmount,
-      target
+      target,
+      isPartialPayout
     };
   }, [manualPayoutCustomerId, savedMonths, customers]);
 
@@ -3015,7 +3025,7 @@ function AdminDashboard({
                 <Coins className="w-5 h-5 text-emerald-700" />
                 Trigger Manual Payout
               </h3>
-              <p className="text-[10px] text-slate-400 mb-4">Archives this customer's uncollected saved month(s) straight to payout history. Never touches their active, still-running cycle.</p>
+              <p className="text-[10px] text-slate-400 mb-4">Archives this customer's uncollected saved month(s) to payout history. If none are fully completed yet, pays out their current running cycle instead and clears it.</p>
 
               <form onSubmit={handleTriggerManualPayoutSubmit} className="space-y-4 text-xs font-semibold">
                 <div>
@@ -3030,15 +3040,19 @@ function AdminDashboard({
 
                 {manualPayoutCustomerId && !manualPayoutCalculation && (
                   <div className="rounded-2xl border border-dashed border-slate-200 p-3 text-[10px] text-slate-400">
-                    This customer has no uncollected saved months right now.
+                    This customer has no contributions to pay out right now.
                   </div>
                 )}
 
                 {manualPayoutCalculation && (
                   <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-[10px] text-amber-900 space-y-1 font-semibold leading-relaxed">
-                    <p>Uncollected Months: {manualPayoutCalculation.uncollectedMonths.length} ({manualPayoutCalculation.totalDays} days total)</p>
+                    {manualPayoutCalculation.isPartialPayout ? (
+                      <p>Early Payout - Running Cycle: {manualPayoutCalculation.totalDays} day(s) marked so far</p>
+                    ) : (
+                      <p>Uncollected Months: {manualPayoutCalculation.uncollectedMonths.length} ({manualPayoutCalculation.totalDays} days total)</p>
+                    )}
                     <p>Saved Accumulation: ₦{manualPayoutCalculation.totalAmount.toLocaleString()}</p>
-                    <p>Company Fee ({manualPayoutCalculation.uncollectedMonths.length} × 1 Day): - ₦{(manualPayoutCalculation.uncollectedMonths.length * manualPayoutCalculation.target.daily_amount).toLocaleString()}</p>
+                    <p>Company Fee ({manualPayoutCalculation.isPartialPayout ? 1 : manualPayoutCalculation.uncollectedMonths.length} × 1 Day): - ₦{((manualPayoutCalculation.isPartialPayout ? 1 : manualPayoutCalculation.uncollectedMonths.length) * manualPayoutCalculation.target.daily_amount).toLocaleString()}</p>
                     <p className="text-emerald-800 border-t border-amber-200 pt-1 font-black">
                       Expected Payout: ₦{manualPayoutCalculation.payoutAmount.toLocaleString()}
                     </p>
@@ -6384,16 +6398,31 @@ export default function App() {
       m => m.status === 'saved' || m.status === 'requested'
     );
 
-    if (uncollectedMonths.length === 0) {
-      triggerToast('This customer has no uncollected saved months to pay out.', 'error');
+    // Payout rule change: previously, a payout could only be triggered once
+    // at least one full 32-day cycle had frozen into savedMonths. Admin can
+    // now pay out at any time. If there's no fully-completed month, pay out
+    // whatever is currently marked (marked_days) instead, then clear those
+    // days afterward so the tracker and balance stay correct post-payout -
+    // exactly like a normal completed-cycle payout clears its saved month.
+    // The original completed-cycle path below is otherwise unchanged.
+    const runningDays = markedDays[customerId] || [];
+    const isPartialPayout = uncollectedMonths.length === 0 && runningDays.length > 0;
+
+    if (uncollectedMonths.length === 0 && runningDays.length === 0) {
+      triggerToast('This customer has no contributions to pay out.', 'error');
       setIsLoading(false);
       return;
     }
 
     const contributionIds = uncollectedMonths.map(m => m.id);
-    const totalAmount = sumCurrencyValues(uncollectedMonths.map(m => m.total_amount));
-    const payoutAmount = Math.max(0, totalAmount - uncollectedMonths.length * targetCustomer.daily_amount);
-    const monthPaidText = uncollectedMonths.map(m => m.month_label).join(', ');
+    const totalAmount = isPartialPayout
+      ? sumCurrencyValues(runningDays.map(d => d.amount))
+      : sumCurrencyValues(uncollectedMonths.map(m => m.total_amount));
+    const feeCount = isPartialPayout ? 1 : uncollectedMonths.length;
+    const payoutAmount = Math.max(0, totalAmount - feeCount * targetCustomer.daily_amount);
+    const monthPaidText = isPartialPayout
+      ? `${getNigerianMonthName()} (early payout - ${runningDays.length}/32 days)`
+      : uncollectedMonths.map(m => m.month_label).join(', ');
 
     const payoutPayload: any = {
       customer_id: customerId,
@@ -6430,41 +6459,68 @@ export default function App() {
       return;
     }
 
-    // Archive each settled month into payout_history, same as the real
-    // Approve & Payout flow, then remove them from the active ledger.
-    const archiveRows = uncollectedMonths.map(m => ({
-      customer_id: customerId,
-      contribution_id: m.id,
-      payout_request_id: newRequest?.id,
-      month_label: m.month_label,
-      total_amount: m.total_amount,
-      payout_amount: Math.max(0, m.total_amount - targetCustomer.daily_amount),
-      bank_name: bank,
-      account_number: acctNum,
-      account_name: acctName,
-      approved_at: new Date().toISOString()
-    }));
+    if (isPartialPayout) {
+      const { error: archiveError } = await supabase.from('payout_history').insert([{
+        customer_id: customerId,
+        payout_request_id: newRequest?.id,
+        month_label: monthPaidText,
+        total_amount: totalAmount,
+        payout_amount: payoutAmount,
+        bank_name: bank,
+        account_number: acctNum,
+        account_name: acctName,
+        approved_at: new Date().toISOString()
+      }]);
+      if (archiveError) {
+        console.warn('Failed to write payout_history archive:', archiveError.message);
+      }
 
-    const { error: archiveError } = await supabase.from('payout_history').insert(archiveRows);
-    if (archiveError) {
-      console.warn('Failed to write payout_history archive:', archiveError.message);
+      const dayIds = runningDays.map(d => d.id).filter(Boolean) as string[];
+      if (dayIds.length > 0) {
+        const { error: deleteError } = await supabase.from('marked_days').delete().in('id', dayIds);
+        if (deleteError) {
+          console.warn('Failed to clear paid-out marked days:', deleteError.message);
+        }
+      }
+
+      setMarkedDays(prev => ({ ...prev, [customerId]: [] }));
+    } else {
+      // Archive each settled month into payout_history, same as the real
+      // Approve & Payout flow, then remove them from the active ledger.
+      const archiveRows = uncollectedMonths.map(m => ({
+        customer_id: customerId,
+        contribution_id: m.id,
+        payout_request_id: newRequest?.id,
+        month_label: m.month_label,
+        total_amount: m.total_amount,
+        payout_amount: Math.max(0, m.total_amount - targetCustomer.daily_amount),
+        bank_name: bank,
+        account_number: acctNum,
+        account_name: acctName,
+        approved_at: new Date().toISOString()
+      }));
+
+      const { error: archiveError } = await supabase.from('payout_history').insert(archiveRows);
+      if (archiveError) {
+        console.warn('Failed to write payout_history archive:', archiveError.message);
+      }
+
+      const { error: deleteError } = await supabase.from('contributions').delete().in('id', contributionIds);
+      if (deleteError) {
+        console.warn('Failed to clear contributions ledger:', deleteError.message);
+      }
+
+      setSavedMonths(prev => ({
+        ...prev,
+        [customerId]: (prev[customerId] || []).filter(m => !contributionIds.includes(m.id))
+      }));
     }
-
-    const { error: deleteError } = await supabase.from('contributions').delete().in('id', contributionIds);
-    if (deleteError) {
-      console.warn('Failed to clear contributions ledger:', deleteError.message);
-    }
-
-    setSavedMonths(prev => ({
-      ...prev,
-      [customerId]: (prev[customerId] || []).filter(m => !contributionIds.includes(m.id))
-    }));
     if (newRequest) {
       setPayoutRequests(prev => [newRequest, ...prev]);
     }
 
     setIsLoading(false);
-    triggerToast(`Payout triggered! ₦${payoutAmount.toLocaleString()} across ${uncollectedMonths.length} month(s) archived.`, 'success');
+    triggerToast(`Payout triggered! ₦${payoutAmount.toLocaleString()} ${isPartialPayout ? '(early payout)' : `across ${uncollectedMonths.length} month(s)`} archived.`, 'success');
 
     if (currentUser) {
       await fetchPayoutRequests(currentUser);
