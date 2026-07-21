@@ -22,20 +22,48 @@ export interface Profile {
   last_amount_change_at?: string;
   allow_anytime_change?: boolean;
   admin_note?: string;
-  loan_status: 'No Loan' | 'Active Loan' | 'Loan Cleared';
+  loan_status: 'No Loan' | 'Pending Approval' | 'Active Loan' | 'Loan Cleared';
 }
 
 export interface Loan {
   id: string;
   customer_id: string;
-  status: 'No Loan' | 'Active Loan' | 'Loan Cleared';
+  customer_name?: string;
+  status: 'Active Loan' | 'Loan Cleared';
   loan_amount: number;
+  repayment_amount: number;
+  service_charge: number;
+  daily_amount_snapshot: number;
   outstanding_balance: number;
   date_issued?: string;
   due_date?: string;
   installments?: number;
   amount_repaid: number;
   amount_remaining: number;
+  amount_already_counted: number;
+  days_repaid: number;
+  total_days: number;
+  approved_by?: string;
+  remarks?: string;
+  source: 'customer_request' | 'admin_assigned';
+  loan_request_id?: string;
+  completed_at?: string;
+  created_at?: string;
+}
+
+export interface LoanRequest {
+  id: string;
+  customer_id: string;
+  customer_name?: string;
+  daily_amount_snapshot: number;
+  loan_amount: number;
+  repayment_amount: number;
+  service_charge: number;
+  status: 'Pending Approval' | 'Approved' | 'Rejected';
+  requested_at: string;
+  decided_at?: string;
+  decided_by?: string;
+  rejection_reason?: string;
 }
 
 export interface Branch {
@@ -265,28 +293,24 @@ const TrackingStatusBadge = ({ status }: { status: TrackingHistoryEntry['status'
   );
 };
 
-// Badge + inline editor for a customer's loan status. Colors per spec:
-// green = No Loan, amber = Active Loan, blue = Loan Cleared. Admin can
-// change it directly from the dot/select; this is a manual field only -
-// no loan calculation logic, per the "prepare, don't implement" scope.
-const LoanStatusBadge = ({ status, onChange }: { status: Profile['loan_status'], onChange: (newStatus: Profile['loan_status']) => void }) => {
+// Read-only loan status badge for the Customer Directory. Colors per spec:
+// green = No Loan, yellow = Pending Approval, orange = Active Loan,
+// blue = Loan Repaid (stored as 'Loan Cleared'). This used to be a manual
+// dropdown editor from before the real Loan Management module existed;
+// now that loans/loan_requests + the repayment trigger manage this field
+// automatically, making it editable here would let it drift out of sync
+// with the real loan record, so it's now display-only.
+const LoanStatusBadge = ({ status }: { status: Profile['loan_status'] }) => {
   const dotColor =
-    status === 'Active Loan' ? 'bg-amber-500' :
+    status === 'Pending Approval' ? 'bg-yellow-500' :
+    status === 'Active Loan' ? 'bg-orange-500' :
     status === 'Loan Cleared' ? 'bg-blue-500' :
     'bg-emerald-500';
+  const label = status === 'Loan Cleared' ? 'Loan Repaid' : status;
   return (
     <div className="inline-flex items-center gap-1.5">
       <span className={`w-2 h-2 rounded-full ${dotColor}`} />
-      <select
-        value={status}
-        onChange={(e) => onChange(e.target.value as Profile['loan_status'])}
-        className="text-[10px] font-bold border border-slate-200 rounded-lg px-1.5 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-300"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <option value="No Loan">No Loan</option>
-        <option value="Active Loan">Active Loan</option>
-        <option value="Loan Cleared">Loan Cleared</option>
-      </select>
+      <span className="text-[10px] font-bold text-slate-700">{label}</span>
     </div>
   );
 };
@@ -581,7 +605,7 @@ const nigerianBanks = [
   'United Bank for Africa (UBA)', 'Unity Bank', 'Wema Bank', 'Zenith Bank'
 ];
 
-type AdminTab = 'overview' | 'customers' | 'branches' | 'staff' | 'payouts' | 'records' | 'transactions' | 'settings' | 'reports' | 'cashsheet';
+type AdminTab = 'overview' | 'customers' | 'branches' | 'staff' | 'payouts' | 'records' | 'transactions' | 'settings' | 'reports' | 'cashsheet' | 'loans';
 
 export interface CashReconciliation {
   id: string;
@@ -632,6 +656,17 @@ const formatCurrency = (value: number) =>
 const sumCurrencyValues = (values: number[]) => {
   const cents = values.reduce((total, value) => total + Math.round(Number(value || 0) * 100), 0);
   return cents / 100;
+};
+
+// Single source of truth for the loan formula, per business rule:
+// Maximum Loan = Daily Contribution x 30, Repayment = Daily Contribution x 32.
+// Used identically by both the customer Request Loan flow and the Admin
+// Assign Loan flow, so the two methods can never diverge in their math.
+const computeLoanEligibility = (dailyAmount: number) => {
+  const maxLoan = sumCurrencyValues([dailyAmount * 30]);
+  const repaymentAmount = sumCurrencyValues([dailyAmount * 32]);
+  const serviceCharge = sumCurrencyValues([repaymentAmount - maxLoan]);
+  return { maxLoan, repaymentAmount, serviceCharge };
 };
 
 function LiveTransactionCounter({ count, label = 'Live transactions' }: { count: number; label?: string }) {
@@ -1239,12 +1274,25 @@ function AdvertisementBanner({ details }: { details: SupportSettings }) {
 
 function AdminDashboard({ 
   profiles, branches, transactions, markedDays, supportDetails, payoutRequests, savedMonths, payoutHistory, withdrawalRequests, onApprovePayout, onCreateBranch, onUpdateBranch, onDeleteBranch, onCreateStaff, onUpdateStaff, onDeleteStaff, onRegisterCustomer,
-  onDeleteTransaction, onAddTransaction, onUpdateSupport, onDeleteCustomer, onUpdateCustomer, onToggleCustomerActive, onUpdateLoanStatus, onTriggerManualPayout, onApproveTransaction, onApproveWithdrawal, routeTarget, onRouteHandled, onRejectPayout, triggerToast, onResetPasswordToDefault
+  onDeleteTransaction, onAddTransaction, onUpdateSupport, onDeleteCustomer, onUpdateCustomer, onToggleCustomerActive, onUpdateLoanStatus, onTriggerManualPayout, onApproveTransaction, onApproveWithdrawal, routeTarget, onRouteHandled, onRejectPayout, triggerToast, onResetPasswordToDefault,
+  loans, loanRequests, loanHistory, onApproveLoanRequest, onRejectLoanRequest, onAssignLoan
 }: { 
   profiles: Profile[], branches: Branch[], transactions: Transaction[], markedDays: Record<string, MarkedDay[]>, supportDetails: SupportSettings, payoutRequests: PayoutRequest[], savedMonths: Record<string, SavedMonth[]>, payoutHistory: PayoutHistoryRecord[], withdrawalRequests: WithdrawalRequest[], onDeleteTransaction: (id: string) => void, onAddTransaction: (cId: string, amt: number, method: any, sId: string) => void, onUpdateSupport: (phone: string, whatsapp: string, email: string, bankName: string, acctNum: string, acctName: string, advertTitle: string, advertDescription: string, advertImageUrl: string, advertEnabled: boolean, advertVideoUrl: string, themeBackgroundColor: string) => void, onApprovePayout: (reqId: string) => void, onCreateBranch: (name: string, address: string) => void, onUpdateBranch: (id: string, name: string, address: string) => void, onDeleteBranch: (id: string) => void, onCreateStaff: (name: string, phone: string, email: string, branchId: string, password: string) => void, onUpdateStaff: (id: string, name: string, phone: string, email: string, branchId: string) => void, onDeleteStaff: (id: string) => void, onRegisterCustomer: (data: any) => void,
-  onDeleteCustomer: (id: string) => void, onUpdateCustomer: (id: string, name: string, phone: string, email: string, dailyAmount: number, branchId: string, allowAnytimeChange: boolean) => void, onToggleCustomerActive: (id: string, is_active: boolean) => void, onUpdateLoanStatus: (id: string, loan_status: 'No Loan' | 'Active Loan' | 'Loan Cleared') => void, onTriggerManualPayout: (customerId: string, bank: string, acctNum: string, acctName: string) => void, onApproveTransaction: (id: string) => void, onApproveWithdrawal: (id: string, bankName: string, accountNumber: string, accountName: string) => void, routeTarget?: AdminTab | null, onRouteHandled?: () => void, onRejectPayout?: (reqId: string) => void, triggerToast?: (message: string, type?: 'success' | 'error') => void, onResetPasswordToDefault?: (customerId: string) => void
+  onDeleteCustomer: (id: string) => void, onUpdateCustomer: (id: string, name: string, phone: string, email: string, dailyAmount: number, branchId: string, allowAnytimeChange: boolean) => void, onToggleCustomerActive: (id: string, is_active: boolean) => void, onUpdateLoanStatus: (id: string, loan_status: 'No Loan' | 'Pending Approval' | 'Active Loan' | 'Loan Cleared') => void, onTriggerManualPayout: (customerId: string, bank: string, acctNum: string, acctName: string) => void, onApproveTransaction: (id: string) => void, onApproveWithdrawal: (id: string, bankName: string, accountNumber: string, accountName: string) => void, routeTarget?: AdminTab | null, onRouteHandled?: () => void, onRejectPayout?: (reqId: string) => void, triggerToast?: (message: string, type?: 'success' | 'error') => void, onResetPasswordToDefault?: (customerId: string) => void,
+  loans: Loan[], loanRequests: LoanRequest[], loanHistory: any[], onApproveLoanRequest: (requestId: string) => void, onRejectLoanRequest: (requestId: string, reason: string) => void, onAssignLoan: (customerId: string, approvedAmount: number, remarks: string, disbursementDate: string) => void
 }) {
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
+  const [loanSubView, setLoanSubView] = useState<'pending' | 'active' | 'completed' | 'history'>('pending');
+  const [showAssignLoanModal, setShowAssignLoanModal] = useState(false);
+  const [assignLoanCustomerId, setAssignLoanCustomerId] = useState('');
+  const [assignLoanAmount, setAssignLoanAmount] = useState('');
+  const [assignLoanRemarks, setAssignLoanRemarks] = useState('');
+  const [assignLoanDate, setAssignLoanDate] = useState(new Date().toISOString().slice(0, 10));
+  const [rejectingRequestId, setRejectingRequestId] = useState<string | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [loanHistoryMonthFilter, setLoanHistoryMonthFilter] = useState('');
+  const [loanHistoryBranchFilter, setLoanHistoryBranchFilter] = useState('');
+  const [loanHistoryStatusFilter, setLoanHistoryStatusFilter] = useState('');
   const [expandedOutstandingCustomerId, setExpandedOutstandingCustomerId] = useState<string | null>(null);
 
   // --- Cash Balance Sheet state ---
@@ -1573,6 +1621,7 @@ function AdminDashboard({
 
   // Filter and Editing states
   const [selectedBranchFilter, setSelectedBranchFilter] = useState('');
+  const [selectedLoanStatusFilter, setSelectedLoanStatusFilter] = useState('');
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
   const [viewingCustomerDetails, setViewingCustomerDetails] = useState<Profile | null>(null);
   const [customerDetailsDateFilter, setCustomerDetailsDateFilter] = useState<'today' | 'week' | 'month' | 'custom'>('month');
@@ -1666,6 +1715,7 @@ function AdminDashboard({
     const query = customerSearchQuery.trim().toLowerCase();
     return customers.filter(c => {
       if (selectedBranchFilter !== '' && c.branch_id !== selectedBranchFilter) return false;
+      if (selectedLoanStatusFilter !== '' && c.loan_status !== selectedLoanStatusFilter) return false;
       if (query === '') return true;
       return (
         c.name.toLowerCase().includes(query) ||
@@ -1673,7 +1723,7 @@ function AdminDashboard({
         c.id.toLowerCase().includes(query)
       );
     });
-  }, [customers, selectedBranchFilter, customerSearchQuery]);
+  }, [customers, selectedBranchFilter, selectedLoanStatusFilter, customerSearchQuery]);
 
   const stats = useMemo(() => {
     // Current West Africa Time (WAT) Month metrics
@@ -2047,7 +2097,7 @@ function AdminDashboard({
             Analysis
           </button>
           <LiveTransactionCounter count={successfulTransactions.filter(tx => tx.date === new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' }) && tx.status === 'Successful').length} label="Today's work" />
-          {(['overview', 'customers', 'branches', 'staff', 'payouts', 'records', 'transactions', 'cashsheet', 'settings', 'reports'] as const).map(tab => (
+          {(['overview', 'customers', 'branches', 'staff', 'payouts', 'records', 'transactions', 'cashsheet', 'loans', 'settings', 'reports'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -2057,7 +2107,7 @@ function AdminDashboard({
                   : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
               }`}
             >
-              {tab === 'cashsheet' ? 'Cash Sheet' : tab}
+              {tab === 'cashsheet' ? 'Cash Sheet' : tab === 'loans' ? 'Loan Management' : tab}
             </button>
           ))}
         </div>
@@ -2483,7 +2533,7 @@ function AdminDashboard({
           <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm lg:col-span-2 h-fit">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 text-slate-800">
               <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider">Customer Directory</h3>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[10px] font-black uppercase text-emerald-800">Filter Branch:</span>
                 <select
                   value={selectedBranchFilter}
@@ -2494,6 +2544,18 @@ function AdminDashboard({
                   {branches.map(b => (
                     <option key={b.id} value={b.id}>{b.name}</option>
                   ))}
+                </select>
+                <span className="text-[10px] font-black uppercase text-emerald-800">Loan Status:</span>
+                <select
+                  value={selectedLoanStatusFilter}
+                  onChange={(e) => setSelectedLoanStatusFilter(e.target.value)}
+                  className="px-2 py-1 text-xs border border-emerald-200 rounded-lg bg-white font-bold"
+                >
+                  <option value="">All</option>
+                  <option value="No Loan">No Loan</option>
+                  <option value="Pending Approval">Pending Approval</option>
+                  <option value="Active Loan">Active Loan</option>
+                  <option value="Loan Cleared">Loan Repaid</option>
                 </select>
               </div>
             </div>
@@ -2554,7 +2616,7 @@ function AdminDashboard({
                           </button>
                         </td>
                         <td className="p-3">
-                          <LoanStatusBadge status={c.loan_status} onChange={(newStatus) => onUpdateLoanStatus(c.id, newStatus)} />
+                          <LoanStatusBadge status={c.loan_status} />
                         </td>
                         <td className="p-3">
                           <span className="bg-amber-100 text-amber-900 font-bold px-2 py-0.5 rounded-full">
@@ -3737,6 +3799,242 @@ function AdminDashboard({
         </div>
       )}
 
+      {/* Loan Management tab */}
+      {activeTab === 'loans' && (() => {
+        const pendingRequests = loanRequests.filter(r => r.status === 'Pending Approval');
+        const activeLoans = loans.filter(l => l.status === 'Active Loan');
+        const completedLoans = loans.filter(l => l.status === 'Loan Cleared');
+        const lookupCustomer = (id: string) => profiles.find(p => p.id === id);
+        const lookupBranch = (customerId: string) => branches.find(b => b.id === lookupCustomer(customerId)?.branch_id)?.name || '—';
+
+        const filteredHistory = loanHistory.filter((h: any) => {
+          if (loanHistoryStatusFilter !== '' && h.event_type !== loanHistoryStatusFilter) return false;
+          if (loanHistoryBranchFilter !== '' && lookupCustomer(h.customer_id)?.branch_id !== loanHistoryBranchFilter) return false;
+          if (loanHistoryMonthFilter !== '') {
+            const d = new Date(h.created_at);
+            const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            if (ym !== loanHistoryMonthFilter) return false;
+          }
+          return true;
+        });
+
+        const assignTarget = assignLoanCustomerId ? lookupCustomer(assignLoanCustomerId) : null;
+        const assignEligibility = assignTarget ? computeLoanEligibility(assignTarget.daily_amount) : null;
+        const assignMarked = assignTarget ? (markedDays[assignTarget.id] || []) : [];
+        const assignSavingsTotal = assignMarked.reduce((s, d) => s + d.amount, 0);
+        const assignBlocked = assignTarget && (assignTarget.loan_status === 'Active Loan' || assignTarget.loan_status === 'Pending Approval');
+        const assignAmountNum = Number(assignLoanAmount || 0);
+        const assignRepayment = assignEligibility ? sumCurrencyValues([assignAmountNum + assignEligibility.serviceCharge]) : 0;
+
+        return (
+          <div className="space-y-6 animate-fade-in">
+            <div className="flex flex-wrap justify-between items-center gap-3">
+              <div className="flex gap-2">
+                {(['pending', 'active', 'completed', 'history'] as const).map(v => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setLoanSubView(v)}
+                    className={`px-3 py-1.5 rounded-xl text-[11px] font-black uppercase transition ${loanSubView === v ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'}`}
+                  >
+                    {v === 'pending' ? `Pending Requests (${pendingRequests.length})` : v === 'active' ? `Active Loans (${activeLoans.length})` : v === 'completed' ? `Completed Loans (${completedLoans.length})` : 'Loan History'}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => { setShowAssignLoanModal(true); setAssignLoanCustomerId(''); setAssignLoanAmount(''); setAssignLoanRemarks(''); setAssignLoanDate(new Date().toISOString().slice(0, 10)); }}
+                className="bg-amber-500 hover:bg-amber-600 text-emerald-955 font-black px-4 py-2 rounded-xl text-xs uppercase"
+              >
+                Assign Loan
+              </button>
+            </div>
+
+            {loanSubView === 'pending' && (
+              <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm overflow-x-auto">
+                {pendingRequests.length === 0 ? (
+                  <p className="text-xs text-slate-400 py-6 text-center">No pending loan requests.</p>
+                ) : (
+                  <table className="w-full text-left text-xs">
+                    <thead><tr className="text-slate-500 font-bold border-b"><th className="p-2">Customer</th><th className="p-2">Phone</th><th className="p-2">Branch</th><th className="p-2">Daily</th><th className="p-2">Loan Amount</th><th className="p-2">Repayment</th><th className="p-2">Requested</th><th className="p-2 text-right">Actions</th></tr></thead>
+                    <tbody className="divide-y">
+                      {pendingRequests.map(r => {
+                        const c = lookupCustomer(r.customer_id);
+                        return (
+                          <tr key={r.id}>
+                            <td className="p-2 font-bold">{c?.name || '—'}</td>
+                            <td className="p-2">{c?.phone || '—'}</td>
+                            <td className="p-2">{lookupBranch(r.customer_id)}</td>
+                            <td className="p-2">₦{r.daily_amount_snapshot.toLocaleString()}</td>
+                            <td className="p-2 font-bold">₦{r.loan_amount.toLocaleString()}</td>
+                            <td className="p-2">₦{r.repayment_amount.toLocaleString()}</td>
+                            <td className="p-2">{new Date(r.requested_at).toLocaleDateString()}</td>
+                            <td className="p-2 text-right space-x-1.5 whitespace-nowrap">
+                              <button type="button" onClick={() => onApproveLoanRequest(r.id)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1 rounded-lg text-[10px] uppercase">Approve</button>
+                              <button type="button" onClick={() => { setRejectingRequestId(r.id); setRejectionReason(''); }} className="bg-red-100 hover:bg-red-200 text-red-800 font-bold px-2.5 py-1 rounded-lg text-[10px] uppercase">Reject</button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+
+            {loanSubView === 'active' && (
+              <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm overflow-x-auto">
+                {activeLoans.length === 0 ? (
+                  <p className="text-xs text-slate-400 py-6 text-center">No active loans.</p>
+                ) : (
+                  <table className="w-full text-left text-xs">
+                    <thead><tr className="text-slate-500 font-bold border-b"><th className="p-2">Customer</th><th className="p-2">Loan</th><th className="p-2">Repayment</th><th className="p-2">Paid</th><th className="p-2">Remaining</th><th className="p-2">Days</th><th className="p-2">Start</th><th className="p-2">Remaining Days</th></tr></thead>
+                    <tbody className="divide-y">
+                      {activeLoans.map(l => (
+                        <tr key={l.id}>
+                          <td className="p-2 font-bold">{lookupCustomer(l.customer_id)?.name || '—'}</td>
+                          <td className="p-2">₦{l.loan_amount.toLocaleString()}</td>
+                          <td className="p-2">₦{l.repayment_amount.toLocaleString()}</td>
+                          <td className="p-2">₦{l.amount_repaid.toLocaleString()}</td>
+                          <td className="p-2 font-bold text-red-600">₦{l.amount_remaining.toLocaleString()}</td>
+                          <td className="p-2">{l.days_repaid}/{l.total_days}</td>
+                          <td className="p-2">{l.date_issued ? new Date(l.date_issued).toLocaleDateString() : '—'}</td>
+                          <td className="p-2">{Math.max(0, l.total_days - l.days_repaid)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+
+            {loanSubView === 'completed' && (
+              <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm overflow-x-auto">
+                {completedLoans.length === 0 ? (
+                  <p className="text-xs text-slate-400 py-6 text-center">No completed loans yet.</p>
+                ) : (
+                  <table className="w-full text-left text-xs">
+                    <thead><tr className="text-slate-500 font-bold border-b"><th className="p-2">Customer</th><th className="p-2">Loan Amount</th><th className="p-2">Approved</th><th className="p-2">Completed</th><th className="p-2">Service Charge</th><th className="p-2">Total Repaid</th></tr></thead>
+                    <tbody className="divide-y">
+                      {completedLoans.map(l => (
+                        <tr key={l.id}>
+                          <td className="p-2 font-bold">{lookupCustomer(l.customer_id)?.name || '—'}</td>
+                          <td className="p-2">₦{l.loan_amount.toLocaleString()}</td>
+                          <td className="p-2">{l.date_issued ? new Date(l.date_issued).toLocaleDateString() : '—'}</td>
+                          <td className="p-2">{l.completed_at ? new Date(l.completed_at).toLocaleDateString() : '—'}</td>
+                          <td className="p-2">₦{l.service_charge.toLocaleString()}</td>
+                          <td className="p-2 font-bold text-emerald-700">₦{l.amount_repaid.toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+
+            {loanSubView === 'history' && (
+              <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <input type="month" value={loanHistoryMonthFilter} onChange={e => setLoanHistoryMonthFilter(e.target.value)} className="border rounded-lg px-2 py-1 text-xs" />
+                  <select value={loanHistoryBranchFilter} onChange={e => setLoanHistoryBranchFilter(e.target.value)} className="border rounded-lg px-2 py-1 text-xs font-bold">
+                    <option value="">All Branches</option>
+                    {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                  <select value={loanHistoryStatusFilter} onChange={e => setLoanHistoryStatusFilter(e.target.value)} className="border rounded-lg px-2 py-1 text-xs font-bold">
+                    <option value="">All Events</option>
+                    <option value="Requested">Requested</option>
+                    <option value="Approved">Approved</option>
+                    <option value="Rejected">Rejected</option>
+                    <option value="Assigned">Assigned</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                </div>
+                <div className="overflow-x-auto max-h-96 overflow-y-auto">
+                  {filteredHistory.length === 0 ? (
+                    <p className="text-xs text-slate-400 py-6 text-center">No loan history matches these filters.</p>
+                  ) : (
+                    <table className="w-full text-left text-xs">
+                      <thead><tr className="text-slate-500 font-bold border-b"><th className="p-2">Date</th><th className="p-2">Customer</th><th className="p-2">Event</th><th className="p-2">Loan Amount</th><th className="p-2">Repayment</th></tr></thead>
+                      <tbody className="divide-y">
+                        {filteredHistory.map((h: any) => (
+                          <tr key={h.id}>
+                            <td className="p-2">{new Date(h.created_at).toLocaleDateString()}</td>
+                            <td className="p-2 font-bold">{lookupCustomer(h.customer_id)?.name || '—'}</td>
+                            <td className="p-2">{h.event_type}</td>
+                            <td className="p-2">{h.loan_amount != null ? `₦${Number(h.loan_amount).toLocaleString()}` : '—'}</td>
+                            <td className="p-2">{h.repayment_amount != null ? `₦${Number(h.repayment_amount).toLocaleString()}` : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {rejectingRequestId && (
+              <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setRejectingRequestId(null)}>
+                <div className="bg-white rounded-2xl p-5 max-w-sm w-full" onClick={e => e.stopPropagation()}>
+                  <h4 className="text-sm font-black text-emerald-955 mb-3">Reject Loan Request</h4>
+                  <textarea value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} placeholder="Reason (optional)" className="w-full border rounded-xl px-3 py-2 text-xs mb-3" rows={3} />
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setRejectingRequestId(null)} className="flex-1 bg-slate-100 text-slate-700 font-bold py-2 rounded-xl text-xs">Cancel</button>
+                    <button type="button" onClick={() => { onRejectLoanRequest(rejectingRequestId, rejectionReason); setRejectingRequestId(null); }} className="flex-1 bg-red-600 text-white font-bold py-2 rounded-xl text-xs">Confirm Reject</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {showAssignLoanModal && (
+              <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowAssignLoanModal(false)}>
+                <div className="bg-white rounded-3xl max-w-md w-full max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+                  <h3 className="text-md font-black text-emerald-955 mb-3">Assign Loan</h3>
+                  <SearchableCustomerSelect
+                    customers={profiles.filter(p => p.role === 'Customer')}
+                    selectedId={assignLoanCustomerId}
+                    onSelect={setAssignLoanCustomerId}
+                  />
+                  {assignTarget && assignEligibility && (
+                    <div className="mt-3 space-y-1.5 text-xs font-semibold bg-emerald-50/50 rounded-2xl p-3">
+                      <p><span className="text-slate-500">Branch:</span> {lookupBranch(assignTarget.id)}</p>
+                      <p><span className="text-slate-500">Daily Contribution:</span> ₦{assignTarget.daily_amount.toLocaleString()}</p>
+                      <p><span className="text-slate-500">32-Day Savings Value:</span> ₦{assignSavingsTotal.toLocaleString()}</p>
+                      <p><span className="text-slate-500">Maximum Loan Eligible:</span> ₦{assignEligibility.maxLoan.toLocaleString()}</p>
+                      <p><span className="text-slate-500">Current Loan Status:</span> {assignTarget.loan_status}</p>
+                      <p><span className="text-slate-500">Customer Status:</span> {assignTarget.is_active ? 'Active' : 'Inactive'}</p>
+                      {assignBlocked && (
+                        <p className="text-red-600 font-bold">This customer already has an active or pending loan.</p>
+                      )}
+                    </div>
+                  )}
+                  {assignTarget && !assignBlocked && (
+                    <div className="mt-3 space-y-2">
+                      <label className="text-[10px] font-black uppercase text-slate-500">Approved Loan Amount</label>
+                      <input type="number" value={assignLoanAmount} onChange={e => setAssignLoanAmount(e.target.value)} max={assignEligibility?.maxLoan} placeholder={`Up to ₦${assignEligibility?.maxLoan.toLocaleString()}`} className="w-full border rounded-xl px-3 py-2 text-xs" />
+                      <label className="text-[10px] font-black uppercase text-slate-500">Disbursement Date</label>
+                      <input type="date" value={assignLoanDate} onChange={e => setAssignLoanDate(e.target.value)} className="w-full border rounded-xl px-3 py-2 text-xs" />
+                      <label className="text-[10px] font-black uppercase text-slate-500">Remarks</label>
+                      <textarea value={assignLoanRemarks} onChange={e => setAssignLoanRemarks(e.target.value)} className="w-full border rounded-xl px-3 py-2 text-xs" rows={2} />
+                      {assignAmountNum > 0 && (
+                        <p className="text-xs font-black text-emerald-800">Repayment Amount: ₦{assignRepayment.toLocaleString()}</p>
+                      )}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    disabled={!assignTarget || !!assignBlocked || assignAmountNum <= 0 || (assignEligibility ? assignAmountNum > assignEligibility.maxLoan : true)}
+                    onClick={() => { onAssignLoan(assignLoanCustomerId, assignAmountNum, assignLoanRemarks, assignLoanDate); setShowAssignLoanModal(false); }}
+                    className="w-full mt-4 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black py-2.5 rounded-xl text-xs uppercase"
+                  >
+                    Assign Loan
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Corporate Profit & Earnings Reporting tab */}
       {activeTab === 'reports' && (
         <div className="space-y-6 animate-fade-in">
@@ -3761,6 +4059,72 @@ function AdminDashboard({
               ))}
             </div>
           </div>
+
+          {/* Loan Reports */}
+          {(() => {
+            const totalLoansIssued = loans.length;
+            const pendingLoanRequests = loanRequests.filter(r => r.status === 'Pending Approval').length;
+            const activeLoansCount = loans.filter(l => l.status === 'Active Loan').length;
+            const completedLoansCount = loans.filter(l => l.status === 'Loan Cleared').length;
+            const outstandingLoanBalance = sumCurrencyValues(loans.filter(l => l.status === 'Active Loan').map(l => l.amount_remaining));
+            const totalLoanRepayments = sumCurrencyValues(loans.map(l => l.amount_repaid));
+
+            const now = new Date();
+            const monthlyLoans = loans.filter(l => {
+              if (!l.date_issued) return false;
+              const d = new Date(l.date_issued);
+              return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+            });
+            const monthlyLoanAmount = sumCurrencyValues(monthlyLoans.map(l => l.loan_amount));
+
+            const branchSummary = branches.map(b => {
+              const branchCustomerIds = profiles.filter(p => p.branch_id === b.id).map(p => p.id);
+              const branchLoans = loans.filter(l => branchCustomerIds.includes(l.customer_id));
+              return { name: b.name, count: branchLoans.length, total: sumCurrencyValues(branchLoans.map(l => l.loan_amount)) };
+            }).filter(b => b.count > 0);
+
+            return (
+              <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4">
+                <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider flex items-center gap-1.5 font-bold">
+                  <LayoutDashboard className="w-5 h-5 text-emerald-700" />
+                  Loan Reports
+                </h3>
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                  {[
+                    { label: 'Total Loans Issued', value: totalLoansIssued, isCurrency: false },
+                    { label: 'Pending Loan Requests', value: pendingLoanRequests, isCurrency: false },
+                    { label: 'Active Loans', value: activeLoansCount, isCurrency: false },
+                    { label: 'Completed Loans', value: completedLoansCount, isCurrency: false },
+                    { label: 'Outstanding Loan Balance', value: outstandingLoanBalance, isCurrency: true },
+                    { label: 'Total Loan Repayments', value: totalLoanRepayments, isCurrency: true },
+                  ].map(card => (
+                    <div key={card.label} className="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-4">
+                      <p className="text-[11px] font-black uppercase tracking-wider text-emerald-800">{card.label}</p>
+                      <p className="text-xl sm:text-2xl font-black text-emerald-955 mt-1">{card.isCurrency ? `₦${card.value.toLocaleString()}` : card.value}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="grid sm:grid-cols-2 gap-4 pt-2">
+                  <div>
+                    <p className="text-[11px] font-black uppercase text-slate-500 mb-1.5">Monthly Loan Summary — {now.toLocaleString('default', { month: 'long', year: 'numeric' })}</p>
+                    <p className="text-xs font-semibold">{monthlyLoans.length} loan(s) issued, ₦{monthlyLoanAmount.toLocaleString()} total</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-black uppercase text-slate-500 mb-1.5">Branch Loan Summary</p>
+                    {branchSummary.length === 0 ? (
+                      <p className="text-xs text-slate-400">No loan activity by branch yet.</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {branchSummary.map(b => (
+                          <p key={b.name} className="text-xs font-semibold">{b.name}: {b.count} loan(s), ₦{b.total.toLocaleString()}</p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Part 5: Monthly Payout Card */}
           <div className="bg-emerald-955 text-white p-6 rounded-3xl shadow-sm">
@@ -4364,10 +4728,12 @@ function StaffDashboard({
 // =========================================================================
 
 function CustomerDashboard({ 
-  customer, transactions, markedDays, supportDetails, onAddPayoutRequest, payoutRequests, savedMonths, cycleArchives, onAddCustomerPendingTransaction, onUpdateCustomerSettings
+  customer, transactions, markedDays, supportDetails, onAddPayoutRequest, payoutRequests, savedMonths, cycleArchives, onAddCustomerPendingTransaction, onUpdateCustomerSettings,
+  activeLoan, myLoans, myLoanRequests, onRequestLoan, profiles
 }: { 
   customer: Profile, transactions: Transaction[], markedDays: MarkedDay[], supportDetails: SupportSettings, payoutRequests: PayoutRequest[], savedMonths: SavedMonth[], cycleArchives: any[], onAddPayoutRequest: (bank: string, acctNum: string, acctName: string, contributionIds: string[]) => void,
-  onAddCustomerPendingTransaction: (amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => void, onUpdateCustomerSettings: (phone: string, dailyAmount: number) => void
+  onAddCustomerPendingTransaction: (amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => void, onUpdateCustomerSettings: (phone: string, dailyAmount: number) => void,
+  activeLoan: Loan | null, myLoans: Loan[], myLoanRequests: LoanRequest[], onRequestLoan: (customerId: string) => void, profiles: Profile[]
 }) {
   const [customerTab, setCustomerTab] = useState<'tracker' | 'transactions' | 'deposit' | 'settings' | 'history'>('tracker');
 
@@ -4382,6 +4748,15 @@ function CustomerDashboard({
   );
   // Total across everything the customer currently has with the company
   const totalSaved = totalActiveCycle + totalUncollected;
+
+  // Loan-derived values, shared by both the default Tracker tab (the real
+  // Balance Card lives there) and the History tab's summary card - computed
+  // once here rather than duplicated per-tab.
+  const latestLoan = myLoans[0] || null;
+  const justClearedLoan = latestLoan && latestLoan.status === 'Loan Cleared';
+  const pendingLoanRequest = myLoanRequests.find(r => r.status === 'Pending Approval');
+  const canRequestLoan = customer.is_active && customer.loan_status !== 'Active Loan' && customer.loan_status !== 'Pending Approval';
+  const [showLoanRequestModal, setShowLoanRequestModal] = useState(false);
 
   // Modal / Form state for Payout Request
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
@@ -4612,7 +4987,25 @@ function CustomerDashboard({
                 </div>
               </div>
 
-              {uncollectedSavedMonths.length > 0 ? (
+              {activeLoan && (
+                <div className="pt-4 border-t border-emerald-50">
+                  <span className="text-slate-400 block font-bold text-[10px] uppercase">Loan Balance</span>
+                  <p className="text-2xl font-black mt-0.5 text-red-600">
+                    -₦{Math.max(0, activeLoan.repayment_amount - activeLoan.amount_repaid).toLocaleString()}
+                  </p>
+                </div>
+              )}
+              {!activeLoan && justClearedLoan && (
+                <div className="pt-4 border-t border-emerald-50">
+                  <p className="text-sm font-black text-green-600">Loan Repayment Complete</p>
+                </div>
+              )}
+
+              {activeLoan ? (
+                <p className="text-[10px] text-center text-red-700 font-semibold bg-red-50 p-2 rounded-xl">
+                  You have an active loan to repay. Savings withdrawal is unavailable until your loan has been fully repaid.
+                </p>
+              ) : uncollectedSavedMonths.length > 0 ? (
                 <button 
                   type="button"
                   onClick={() => setShowWithdrawModal(true)}
@@ -4627,6 +5020,86 @@ function CustomerDashboard({
                 </p>
               )}
             </div>
+
+            <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
+              <div className="flex justify-between items-center mb-1">
+                <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider">Loan Information</h3>
+                {canRequestLoan && !pendingLoanRequest && (
+                  <button
+                    type="button"
+                    onClick={() => setShowLoanRequestModal(true)}
+                    className="bg-amber-500 hover:bg-amber-600 text-emerald-955 font-black px-3 py-1.5 rounded-xl text-[11px] uppercase transition"
+                  >
+                    Request Loan
+                  </button>
+                )}
+              </div>
+              {pendingLoanRequest ? (
+                <p className="text-xs text-amber-700 font-bold mt-2">Your loan request is pending admin approval.</p>
+              ) : activeLoan ? (
+                <div className="mt-2 space-y-2 text-xs">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 font-semibold">
+                    <div><p className="text-slate-500">Loan Status</p><p className="font-bold">{activeLoan.status === 'Loan Cleared' ? 'Loan Repaid' : activeLoan.status}</p></div>
+                    <div><p className="text-slate-500">Loan ID</p><p className="font-bold text-[10px]">{activeLoan.id.slice(0, 8)}</p></div>
+                    <div><p className="text-slate-500">Loan Amount</p><p className="font-bold">₦{activeLoan.loan_amount.toLocaleString()}</p></div>
+                    <div><p className="text-slate-500">Repayment Amount</p><p className="font-bold">₦{activeLoan.repayment_amount.toLocaleString()}</p></div>
+                    <div><p className="text-slate-500">Amount Already Counted</p><p className="font-bold">₦{activeLoan.amount_already_counted.toLocaleString()}</p></div>
+                    <div><p className="text-slate-500">Amount Repaid</p><p className="font-bold">₦{activeLoan.amount_repaid.toLocaleString()}</p></div>
+                    <div><p className="text-slate-500">Outstanding Balance</p><p className="font-bold text-red-600">₦{activeLoan.amount_remaining.toLocaleString()}</p></div>
+                    <div><p className="text-slate-500">Current Daily Contribution</p><p className="font-bold">₦{customer.daily_amount.toLocaleString()}</p></div>
+                    <div><p className="text-slate-500">Days Repaid</p><p className="font-bold">{activeLoan.days_repaid} / {activeLoan.total_days}</p></div>
+                    <div><p className="text-slate-500">Remaining Days</p><p className="font-bold">{Math.max(0, activeLoan.total_days - activeLoan.days_repaid)}</p></div>
+                    <div><p className="text-slate-500">Approval Date</p><p className="font-bold">{activeLoan.date_issued ? new Date(activeLoan.date_issued).toLocaleDateString() : '—'}</p></div>
+                    <div><p className="text-slate-500">Approved By</p><p className="font-bold">{profiles.find(p => p.id === activeLoan.approved_by)?.name || '—'}</p></div>
+                  </div>
+                  <div className="pt-1">
+                    <div className="w-full bg-slate-100 rounded-full h-2.5">
+                      <div
+                        className="bg-emerald-600 h-2.5 rounded-full transition-all"
+                        style={{ width: `${Math.min(100, (activeLoan.days_repaid / activeLoan.total_days) * 100)}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] font-bold text-slate-500 mt-1">{activeLoan.days_repaid} / {activeLoan.total_days} Days Completed</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400 font-semibold mt-2">
+                  {customer.is_active ? 'You have no active loan.' : 'Your account must be active to request a loan.'}
+                </p>
+              )}
+            </div>
+
+            {showLoanRequestModal && (
+              <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowLoanRequestModal(false)}>
+                <div className="bg-white rounded-3xl max-w-sm w-full p-6" onClick={(e) => e.stopPropagation()}>
+                  <h3 className="text-md font-black text-emerald-955 mb-3">Loan Request</h3>
+                  {(() => {
+                    const { maxLoan, repaymentAmount } = computeLoanEligibility(customer.daily_amount);
+                    const completedDays = markedDays.length;
+                    const amountAlreadyCounted = Math.min(totalActiveCycle, repaymentAmount);
+                    const remainingRepayment = Math.max(0, repaymentAmount - amountAlreadyCounted);
+                    return (
+                      <div className="space-y-1.5 text-xs font-semibold mb-4">
+                        <p><span className="text-slate-500">Customer Name:</span> {customer.name}</p>
+                        <p><span className="text-slate-500">Daily Contribution:</span> ₦{customer.daily_amount.toLocaleString()}</p>
+                        <p><span className="text-slate-500">Maximum Loan Eligible:</span> ₦{maxLoan.toLocaleString()}</p>
+                        <p><span className="text-slate-500">Repayment Amount:</span> ₦{repaymentAmount.toLocaleString()}</p>
+                        <p><span className="text-slate-500">Completed Days:</span> {completedDays}</p>
+                        <p><span className="text-slate-500">Amount Already Counted:</span> ₦{amountAlreadyCounted.toLocaleString()}</p>
+                        <p className="font-black text-emerald-800">Remaining Repayment Amount: ₦{remainingRepayment.toLocaleString()}</p>
+                      </div>
+                    );
+                  })()}
+                  <button
+                    type="button"
+                    onClick={() => { onRequestLoan(customer.id); setShowLoanRequestModal(false); }}
+                    className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-black py-2.5 rounded-xl text-xs uppercase"
+                  >
+                    Submit Loan Request
+                  </button>
+                </div>
+              </div>
+            )}
 
             {customer.admin_note && customer.admin_note.trim() !== '' && (
               <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
@@ -5068,6 +5541,9 @@ export default function App() {
   const [savedMonths, setSavedMonths] = useState<Record<string, SavedMonth[]>>({});
   const [payoutHistory, setPayoutHistory] = useState<PayoutHistoryRecord[]>([]);
   const [cycleArchives, setCycleArchives] = useState<Record<string, any[]>>({});
+  const [loanRequests, setLoanRequests] = useState<LoanRequest[]>([]);
+  const [loans, setLoans] = useState<Loan[]>([]);
+  const [loanHistory, setLoanHistory] = useState<any[]>([]);
   const [supportDetails, setSupportDetails] = useState<SupportSettings>({
     id: 1,
     support_phone: '+234 803 461 2345',
@@ -5142,6 +5618,9 @@ export default function App() {
         await fetchSavedMonths(latestUser);
         await fetchPayoutHistory(latestUser);
         await fetchCycleArchives(latestUser);
+        await fetchLoans(latestUser);
+        await fetchLoanRequests(latestUser);
+        await fetchLoanHistory(latestUser);
       } catch (err) {
         console.error("Background sync failed:", err);
       }
@@ -5150,7 +5629,7 @@ export default function App() {
     // 1. Set up live Realtime postgres listeners for tables
     const channel = supabase.channel('schema-db-changes');
 
-    const tableNames = ['transactions', 'marked_days', 'payout_requests', 'profiles', 'notifications', 'contributions', 'payout_history', 'cycle_archives'] as const;
+    const tableNames = ['transactions', 'marked_days', 'payout_requests', 'profiles', 'notifications', 'contributions', 'payout_history', 'cycle_archives', 'loans', 'loan_requests', 'loan_repayments', 'loan_history'] as const;
     const events = ['INSERT', 'UPDATE', 'DELETE'] as const;
 
     tableNames.forEach((table) => {
@@ -5402,7 +5881,10 @@ export default function App() {
         fetchPayoutRequests(profile),
         fetchSavedMonths(profile),
         fetchPayoutHistory(profile),
-        fetchCycleArchives(profile)
+        fetchCycleArchives(profile),
+        fetchLoans(profile),
+        fetchLoanRequests(profile),
+        fetchLoanHistory(profile)
       ]);
     }
     setIsLoading(false);
@@ -5623,6 +6105,45 @@ export default function App() {
       });
       setCycleArchives(grouped);
     }
+  };
+
+  const fetchLoanRequests = async (userProfile: Profile) => {
+    let query = supabase.from('loan_requests').select('*').order('requested_at', { ascending: false });
+    if (userProfile.role === 'Customer') {
+      query = query.eq('customer_id', userProfile.id);
+    }
+    const { data, error } = await query;
+    if (error) {
+      console.warn('loan_requests fetch failed:', error.message);
+      return;
+    }
+    if (data) setLoanRequests(data as LoanRequest[]);
+  };
+
+  const fetchLoans = async (userProfile: Profile) => {
+    let query = supabase.from('loans').select('*').order('created_at', { ascending: false });
+    if (userProfile.role === 'Customer') {
+      query = query.eq('customer_id', userProfile.id);
+    }
+    const { data, error } = await query;
+    if (error) {
+      console.warn('loans fetch failed:', error.message);
+      return;
+    }
+    if (data) setLoans(data as Loan[]);
+  };
+
+  const fetchLoanHistory = async (userProfile: Profile) => {
+    let query = supabase.from('loan_history').select('*').order('created_at', { ascending: false });
+    if (userProfile.role === 'Customer') {
+      query = query.eq('customer_id', userProfile.id);
+    }
+    const { data, error } = await query;
+    if (error) {
+      console.warn('loan_history fetch failed:', error.message);
+      return;
+    }
+    if (data) setLoanHistory(data);
   };
 
   // Resets a customer's password directly to '123456' via a server-side
@@ -5969,6 +6490,8 @@ export default function App() {
     await fetchNotifications(userProfile);
     await fetchSavedMonths(userProfile);
     await fetchCycleArchives(userProfile);
+    await fetchLoans(userProfile);
+    await fetchLoanRequests(userProfile);
   };
 
   const createTransaction = async (customerId: string, amount: number, paymentMethod: 'Cash' | 'Bank Transfer' | 'Mobile Money', staffId: string) => {
@@ -6303,19 +6826,26 @@ export default function App() {
     triggerToast('Withdrawal request rejected.', 'error');
   };
 
+  // Deletes the customer's Auth account via an Edge Function (requires the
+  // service role key, which must never be shipped to the browser - see
+  // supabase/functions/admin-delete-customer). profiles_id_fkey has
+  // ON DELETE CASCADE from auth.users, so this also removes their profile
+  // and everything that cascades from it (transactions, loans, etc.) in
+  // one clean operation - and critically, frees their phone/email for
+  // re-registration, which a plain profiles-row delete never did.
   const handleDeleteCustomer = async (id: string) => {
     setIsLoading(true);
-    const { error } = await supabase
-      .from('profiles')
-      .delete()
-      .eq('id', id);
-
-    setIsLoading(false);
-    if (error) {
-      triggerToast(`Delete failed: ${error.message}`, 'error');
-    } else {
-      triggerToast('Customer profile deleted successfully.', 'success');
+    try {
+      const { error } = await supabase.functions.invoke('admin-delete-customer', {
+        body: { customerId: id }
+      });
+      if (error) throw error;
+      triggerToast('Customer account deleted successfully.', 'success');
       fetchGlobalConfiguration();
+    } catch (err: any) {
+      triggerToast(`Delete failed: ${err.message || 'Edge Function not deployed yet'}`, 'error');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -6359,7 +6889,7 @@ export default function App() {
     }
   };
 
-  const handleUpdateLoanStatus = async (id: string, loan_status: 'No Loan' | 'Active Loan' | 'Loan Cleared') => {
+  const handleUpdateLoanStatus = async (id: string, loan_status: 'No Loan' | 'Pending Approval' | 'Active Loan' | 'Loan Cleared') => {
     setIsLoading(true);
     const { error } = await supabase
       .from('profiles')
@@ -6373,6 +6903,261 @@ export default function App() {
       triggerToast('Loan status updated.', 'success');
       fetchGlobalConfiguration();
     }
+  };
+
+  // Customer-initiated loan request. Blocked (both here and by the button
+  // being disabled in the UI) if the customer already has an Active Loan
+  // or a request already Pending Approval. A customer whose prior loan
+  // reached 'Loan Cleared' CAN request again, per the business rule that
+  // only blocks active/pending loans, not completed ones.
+  const handleRequestLoan = async (customerId: string) => {
+    const customer = profiles.find(p => p.id === customerId);
+    if (!customer) return;
+    if (customer.loan_status === 'Active Loan' || customer.loan_status === 'Pending Approval') {
+      triggerToast('You already have an active or pending loan.', 'error');
+      return;
+    }
+    if (!customer.is_active) {
+      triggerToast('Your account must be active to request a loan.', 'error');
+      return;
+    }
+
+    const { maxLoan, repaymentAmount, serviceCharge } = computeLoanEligibility(customer.daily_amount);
+    setIsLoading(true);
+
+    const { error: reqError } = await supabase.from('loan_requests').insert([{
+      customer_id: customerId,
+      daily_amount_snapshot: customer.daily_amount,
+      loan_amount: maxLoan,
+      repayment_amount: repaymentAmount,
+      service_charge: serviceCharge,
+      status: 'Pending Approval'
+    }]);
+
+    if (reqError) {
+      setIsLoading(false);
+      triggerToast(`Loan request failed: ${reqError.message}`, 'error');
+      return;
+    }
+
+    await supabase.from('profiles').update({ loan_status: 'Pending Approval' }).eq('id', customerId);
+    await supabase.from('loan_history').insert([{
+      customer_id: customerId, event_type: 'Requested', loan_amount: maxLoan, repayment_amount: repaymentAmount
+    }]);
+
+    setIsLoading(false);
+    triggerToast('Loan request submitted successfully.', 'success');
+    await fetchLoanRequests(customer);
+    await fetchGlobalConfiguration();
+  };
+
+  // Approves a pending customer loan request, creating the real loans row.
+  // Produces the exact same loans-row shape as handleAssignLoan below, per
+  // the spec's requirement that both methods behave identically thereafter.
+  // Shared by both loan-creation paths (customer-request approval and
+  // direct admin assignment). Reads the customer's CURRENT marked_days
+  // fresh from the DB (not stale client state) and credits whatever days
+  // are already complete toward the new loan, so repayment never restarts
+  // from Day 1. Retroactively logs one loan_repayments row per already-
+  // completed day (tagged with that day's real period_key) so that when
+  // freeze_period() eventually processes that period, it correctly
+  // recognizes it as a loan repayment cycle - see the DB migration comment
+  // on freeze_period for why this is necessary. Returns the values the
+  // caller should use in its own loans-row insert.
+  const computeRetroactiveLoanCredit = async (customerId: string, loanId: string, repaymentAmount: number) => {
+    const { data: currentMarkedDays } = await supabase
+      .from('marked_days')
+      .select('id, transaction_id, day_number, amount, period_key')
+      .eq('customer_id', customerId);
+
+    const rows = currentMarkedDays || [];
+    const amountAlreadyCounted = Math.min(
+      sumCurrencyValues(rows.map(r => r.amount)),
+      repaymentAmount
+    );
+    const daysAlreadyCounted = rows.length;
+
+    if (rows.length > 0) {
+      await supabase.from('loan_repayments').insert(
+        rows.map(r => ({
+          loan_id: loanId,
+          customer_id: customerId,
+          transaction_id: r.transaction_id,
+          day_number: r.day_number,
+          amount: r.amount,
+          period_key: r.period_key
+        }))
+      );
+    }
+
+    return { amountAlreadyCounted, daysAlreadyCounted };
+  };
+
+  const handleApproveLoanRequest = async (requestId: string) => {
+    if (!currentUser) return;
+    const request = loanRequests.find(r => r.id === requestId);
+    if (!request) return;
+
+    setIsLoading(true);
+    const today = new Date();
+    const newLoanId = crypto.randomUUID();
+
+    const { amountAlreadyCounted, daysAlreadyCounted } = await computeRetroactiveLoanCredit(
+      request.customer_id, newLoanId, request.repayment_amount
+    );
+    const remainingAfterCredit = Math.max(0, request.repayment_amount - amountAlreadyCounted);
+    const clearedImmediately = remainingAfterCredit <= 0;
+
+    const { error: loanError } = await supabase.from('loans').insert([{
+      id: newLoanId,
+      customer_id: request.customer_id,
+      status: clearedImmediately ? 'Loan Cleared' : 'Active Loan',
+      loan_amount: request.loan_amount,
+      repayment_amount: request.repayment_amount,
+      service_charge: request.service_charge,
+      daily_amount_snapshot: request.daily_amount_snapshot,
+      outstanding_balance: remainingAfterCredit,
+      amount_already_counted: amountAlreadyCounted,
+      amount_repaid: amountAlreadyCounted,
+      amount_remaining: remainingAfterCredit,
+      days_repaid: daysAlreadyCounted,
+      total_days: 32,
+      approved_by: currentUser.id,
+      source: 'customer_request',
+      loan_request_id: request.id,
+      date_issued: today.toISOString().slice(0, 10),
+      completed_at: clearedImmediately ? new Date().toISOString() : null
+    }]);
+
+    if (loanError) {
+      setIsLoading(false);
+      triggerToast(`Loan approval failed: ${loanError.message}`, 'error');
+      return;
+    }
+
+    await supabase.from('loan_requests').update({
+      status: 'Approved', decided_at: new Date().toISOString(), decided_by: currentUser.id
+    }).eq('id', requestId);
+    await supabase.from('profiles').update({ loan_status: clearedImmediately ? 'Loan Cleared' : 'Active Loan' }).eq('id', request.customer_id);
+    await supabase.from('loan_history').insert([{
+      loan_id: newLoanId, customer_id: request.customer_id, event_type: 'Approved',
+      loan_amount: request.loan_amount, repayment_amount: request.repayment_amount, performed_by: currentUser.id
+    }]);
+    if (clearedImmediately) {
+      await supabase.from('loan_history').insert([{
+        loan_id: newLoanId, customer_id: request.customer_id, event_type: 'Completed',
+        loan_amount: request.loan_amount, repayment_amount: request.repayment_amount, performed_by: currentUser.id
+      }]);
+    }
+
+    setIsLoading(false);
+    triggerToast('Loan approved and disbursed.', 'success');
+    await fetchLoanRequests(currentUser);
+    await fetchLoans(currentUser);
+    await fetchGlobalConfiguration();
+  };
+
+  const handleRejectLoanRequest = async (requestId: string, reason: string) => {
+    if (!currentUser) return;
+    const request = loanRequests.find(r => r.id === requestId);
+    if (!request) return;
+
+    setIsLoading(true);
+    const { error } = await supabase.from('loan_requests').update({
+      status: 'Rejected', decided_at: new Date().toISOString(), decided_by: currentUser.id, rejection_reason: reason
+    }).eq('id', requestId);
+
+    if (error) {
+      setIsLoading(false);
+      triggerToast(`Rejection failed: ${error.message}`, 'error');
+      return;
+    }
+
+    await supabase.from('profiles').update({ loan_status: 'No Loan' }).eq('id', request.customer_id);
+    await supabase.from('loan_history').insert([{
+      customer_id: request.customer_id, event_type: 'Rejected',
+      loan_amount: request.loan_amount, repayment_amount: request.repayment_amount, performed_by: currentUser.id
+    }]);
+
+    setIsLoading(false);
+    triggerToast('Loan request rejected.', 'success');
+    await fetchLoanRequests(currentUser);
+    await fetchGlobalConfiguration();
+  };
+
+  // Admin direct assignment - for customers who don't use the app
+  // themselves. Produces the identical loans-row shape as approving a
+  // customer request above. Admin may reduce the disbursed amount below
+  // the maximum eligible; the fixed 2-day service charge (daily x 2) is
+  // preserved on top of whatever amount is actually disbursed, so
+  // repayment_amount = approvedAmount + serviceCharge. This design choice
+  // - keeping the service charge fixed rather than scaling proportionally
+  // - is the most direct generalization of the stated formula and is worth
+  // confirming matches intent if a reduced amount is ever actually used.
+  const handleAssignLoan = async (customerId: string, approvedAmount: number, remarks: string, disbursementDate: string) => {
+    if (!currentUser) return;
+    const customer = profiles.find(p => p.id === customerId);
+    if (!customer) return;
+    if (customer.loan_status === 'Active Loan' || customer.loan_status === 'Pending Approval') {
+      triggerToast('This customer already has an active or pending loan.', 'error');
+      return;
+    }
+
+    const { serviceCharge } = computeLoanEligibility(customer.daily_amount);
+    const repaymentAmount = sumCurrencyValues([approvedAmount + serviceCharge]);
+    const issuedDate = disbursementDate || new Date().toISOString().slice(0, 10);
+    const newLoanId = crypto.randomUUID();
+
+    setIsLoading(true);
+    const { amountAlreadyCounted, daysAlreadyCounted } = await computeRetroactiveLoanCredit(
+      customerId, newLoanId, repaymentAmount
+    );
+    const remainingAfterCredit = Math.max(0, repaymentAmount - amountAlreadyCounted);
+    const clearedImmediately = remainingAfterCredit <= 0;
+
+    const { error: loanError } = await supabase.from('loans').insert([{
+      id: newLoanId,
+      customer_id: customerId,
+      status: clearedImmediately ? 'Loan Cleared' : 'Active Loan',
+      loan_amount: approvedAmount,
+      repayment_amount: repaymentAmount,
+      service_charge: serviceCharge,
+      daily_amount_snapshot: customer.daily_amount,
+      outstanding_balance: remainingAfterCredit,
+      amount_already_counted: amountAlreadyCounted,
+      amount_repaid: amountAlreadyCounted,
+      amount_remaining: remainingAfterCredit,
+      days_repaid: daysAlreadyCounted,
+      total_days: 32,
+      approved_by: currentUser.id,
+      remarks,
+      source: 'admin_assigned',
+      date_issued: issuedDate,
+      completed_at: clearedImmediately ? new Date().toISOString() : null
+    }]);
+
+    if (loanError) {
+      setIsLoading(false);
+      triggerToast(`Loan assignment failed: ${loanError.message}`, 'error');
+      return;
+    }
+
+    await supabase.from('profiles').update({ loan_status: clearedImmediately ? 'Loan Cleared' : 'Active Loan' }).eq('id', customerId);
+    await supabase.from('loan_history').insert([{
+      loan_id: newLoanId, customer_id: customerId, event_type: 'Assigned',
+      loan_amount: approvedAmount, repayment_amount: repaymentAmount, performed_by: currentUser.id
+    }]);
+    if (clearedImmediately) {
+      await supabase.from('loan_history').insert([{
+        loan_id: newLoanId, customer_id: customerId, event_type: 'Completed',
+        loan_amount: approvedAmount, repayment_amount: repaymentAmount, performed_by: currentUser.id
+      }]);
+    }
+
+    setIsLoading(false);
+    triggerToast('Loan assigned successfully.', 'success');
+    await fetchLoans(currentUser);
+    await fetchGlobalConfiguration();
   };
 
   // FIX: this used to unconditionally delete ALL of a customer's marked_days
@@ -6917,6 +7702,12 @@ export default function App() {
                 onUpdateCustomer={handleUpdateCustomer}
                 onToggleCustomerActive={handleToggleCustomerActive}
                 onUpdateLoanStatus={handleUpdateLoanStatus}
+                loans={loans}
+                loanRequests={loanRequests}
+                loanHistory={loanHistory}
+                onApproveLoanRequest={handleApproveLoanRequest}
+                onRejectLoanRequest={handleRejectLoanRequest}
+                onAssignLoan={handleAssignLoan}
                 onTriggerManualPayout={handleTriggerManualPayout}
                 onApproveTransaction={handleApproveTransaction}
                 onApproveWithdrawal={handleApproveWithdrawal}
@@ -6948,6 +7739,11 @@ export default function App() {
                 onAddPayoutRequest={handleCreatePayoutRequest}
                 onAddCustomerPendingTransaction={handleAddCustomerPendingTransaction}
                 onUpdateCustomerSettings={handleUpdateCustomerSettings}
+                activeLoan={loans.find(l => l.customer_id === currentUser.id && l.status === 'Active Loan') || null}
+                myLoans={loans.filter(l => l.customer_id === currentUser.id)}
+                myLoanRequests={loanRequests.filter(r => r.customer_id === currentUser.id)}
+                onRequestLoan={handleRequestLoan}
+                profiles={profiles}
               />
             )}
           </div>
