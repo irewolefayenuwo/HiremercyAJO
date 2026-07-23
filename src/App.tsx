@@ -138,9 +138,10 @@ export interface PayoutRequest {
   id: string;
   customer_id: string;
   customer_name?: string;
-  account_name: string;
-  account_number: string;
-  bank_name: string;
+  account_name?: string;
+  account_number?: string;
+  bank_name?: string;
+  payout_method: 'Transfer' | 'Cash';
   amount: number;
   payout_amount: number;
   status: 'Pending' | 'Successful' | 'Rejected';
@@ -171,9 +172,10 @@ export interface PayoutHistoryRecord {
   month_label: string;
   total_amount: number;
   payout_amount: number;
-  bank_name: string;
-  account_number: string;
-  account_name: string;
+  bank_name?: string;
+  account_number?: string;
+  account_name?: string;
+  payout_method: 'Transfer' | 'Cash';
   approved_at: string;
 }
 
@@ -1278,7 +1280,7 @@ function AdminDashboard({
   loans, loanRequests, loanHistory, onApproveLoanRequest, onRejectLoanRequest, onAssignLoan
 }: { 
   profiles: Profile[], branches: Branch[], transactions: Transaction[], markedDays: Record<string, MarkedDay[]>, supportDetails: SupportSettings, payoutRequests: PayoutRequest[], savedMonths: Record<string, SavedMonth[]>, payoutHistory: PayoutHistoryRecord[], withdrawalRequests: WithdrawalRequest[], onDeleteTransaction: (id: string) => void, onAddTransaction: (cId: string, amt: number, method: any, sId: string) => void, onUpdateSupport: (phone: string, whatsapp: string, email: string, bankName: string, acctNum: string, acctName: string, advertTitle: string, advertDescription: string, advertImageUrl: string, advertEnabled: boolean, advertVideoUrl: string, themeBackgroundColor: string) => void, onApprovePayout: (reqId: string) => void, onCreateBranch: (name: string, address: string) => void, onUpdateBranch: (id: string, name: string, address: string) => void, onDeleteBranch: (id: string) => void, onCreateStaff: (name: string, phone: string, email: string, branchId: string, password: string) => void, onUpdateStaff: (id: string, name: string, phone: string, email: string, branchId: string) => void, onDeleteStaff: (id: string) => void, onRegisterCustomer: (data: any) => void,
-  onDeleteCustomer: (id: string) => void, onUpdateCustomer: (id: string, name: string, phone: string, email: string, dailyAmount: number, branchId: string, allowAnytimeChange: boolean) => void, onToggleCustomerActive: (id: string, is_active: boolean) => void, onUpdateLoanStatus: (id: string, loan_status: 'No Loan' | 'Pending Approval' | 'Active Loan' | 'Loan Cleared') => void, onTriggerManualPayout: (customerId: string, bank: string, acctNum: string, acctName: string) => void, onApproveTransaction: (id: string) => void, onApproveWithdrawal: (id: string, bankName: string, accountNumber: string, accountName: string) => void, routeTarget?: AdminTab | null, onRouteHandled?: () => void, onRejectPayout?: (reqId: string) => void, triggerToast?: (message: string, type?: 'success' | 'error') => void, onResetPasswordToDefault?: (customerId: string) => void,
+  onDeleteCustomer: (id: string) => void, onUpdateCustomer: (id: string, name: string, phone: string, email: string, dailyAmount: number, branchId: string, allowAnytimeChange: boolean) => void, onToggleCustomerActive: (id: string, is_active: boolean) => void, onUpdateLoanStatus: (id: string, loan_status: 'No Loan' | 'Pending Approval' | 'Active Loan' | 'Loan Cleared') => void, onTriggerManualPayout: (customerId: string, method: 'Transfer' | 'Cash', bank: string, acctNum: string, acctName: string) => void, onApproveTransaction: (id: string) => void, onApproveWithdrawal: (id: string, bankName: string, accountNumber: string, accountName: string) => void, routeTarget?: AdminTab | null, onRouteHandled?: () => void, onRejectPayout?: (reqId: string) => void, triggerToast?: (message: string, type?: 'success' | 'error') => void, onResetPasswordToDefault?: (customerId: string) => void,
   loans: Loan[], loanRequests: LoanRequest[], loanHistory: any[], onApproveLoanRequest: (requestId: string) => void, onRejectLoanRequest: (requestId: string, reason: string) => void, onAssignLoan: (customerId: string, approvedAmount: number, remarks: string, disbursementDate: string) => void
 }) {
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
@@ -1632,6 +1634,7 @@ function AdminDashboard({
 
   // Manual Payout states
   const [manualPayoutCustomerId, setManualPayoutCustomerId] = useState('');
+  const [manualPayoutMethod, setManualPayoutMethod] = useState<'Transfer' | 'Cash'>('Transfer');
   const [manualBankName, setManualBankName] = useState('');
   const [manualAccountNumber, setManualAccountNumber] = useState('');
   const [manualAccountName, setManualAccountName] = useState('');
@@ -1912,9 +1915,11 @@ function AdminDashboard({
 
   const handleTriggerManualPayoutSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!manualPayoutCustomerId || !manualBankName || !manualAccountNumber || !manualAccountName) return;
-    onTriggerManualPayout(manualPayoutCustomerId, manualBankName, manualAccountNumber, manualAccountName);
+    if (!manualPayoutCustomerId) return;
+    if (manualPayoutMethod === 'Transfer' && (!manualBankName || !manualAccountNumber || !manualAccountName)) return;
+    onTriggerManualPayout(manualPayoutCustomerId, manualPayoutMethod, manualBankName, manualAccountNumber, manualAccountName);
     setManualPayoutCustomerId('');
+    setManualPayoutMethod('Transfer');
     setManualBankName('');
     setManualAccountNumber('');
     setManualAccountName('');
@@ -3122,51 +3127,73 @@ function AdminDashboard({
                 )}
 
                 <div>
-                  <label className="block text-xs font-black text-emerald-800 mb-1 font-bold">Bank Name *</label>
-                  <select 
-                    required
-                    value={manualBankName}
-                    onChange={(e) => setManualBankName(e.target.value)}
-                    className="w-full px-3 py-2 border border-emerald-200 rounded-xl bg-white"
-                  >
-                    <option value="">-- Choose Recipient Bank --</option>
-                    {nigerianBanks.map(b => (
-                      <option key={b} value={b}>{b}</option>
+                  <label className="block text-xs font-black text-emerald-800 mb-1 font-bold">Payout Method</label>
+                  <div className="flex gap-2">
+                    {(['Transfer', 'Cash'] as const).map(m => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setManualPayoutMethod(m)}
+                        className={`flex-1 py-2 rounded-xl text-[11px] font-black uppercase transition ${
+                          manualPayoutMethod === m ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                        }`}
+                      >
+                        {m}
+                      </button>
                     ))}
-                  </select>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-black text-emerald-800 mb-1 font-bold">Account Number *</label>
-                  <input 
-                    type="text" 
-                    required
-                    placeholder="e.g. 0123456789"
-                    maxLength={10}
-                    value={manualAccountNumber}
-                    onChange={(e) => setManualAccountNumber(e.target.value.replace(/\D/g, ''))}
-                    className="w-full px-3 py-2 border border-emerald-200 rounded-xl"
-                  />
-                </div>
+                {manualPayoutMethod === 'Transfer' && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-black text-emerald-800 mb-1 font-bold">Bank Name *</label>
+                      <select 
+                        required
+                        value={manualBankName}
+                        onChange={(e) => setManualBankName(e.target.value)}
+                        className="w-full px-3 py-2 border border-emerald-200 rounded-xl bg-white"
+                      >
+                        <option value="">-- Choose Recipient Bank --</option>
+                        {nigerianBanks.map(b => (
+                          <option key={b} value={b}>{b}</option>
+                        ))}
+                      </select>
+                    </div>
 
-                <div>
-                  <label className="block text-xs font-black text-emerald-800 mb-1 font-bold">Account Name *</label>
-                  <input 
-                    type="text" 
-                    required
-                    placeholder="e.g. John Doe"
-                    value={manualAccountName}
-                    onChange={(e) => setManualAccountName(e.target.value)}
-                    className="w-full px-3 py-2 border border-emerald-200 rounded-xl"
-                  />
-                </div>
+                    <div>
+                      <label className="block text-xs font-black text-emerald-800 mb-1 font-bold">Account Number *</label>
+                      <input 
+                        type="text" 
+                        required
+                        placeholder="e.g. 0123456789"
+                        maxLength={10}
+                        value={manualAccountNumber}
+                        onChange={(e) => setManualAccountNumber(e.target.value.replace(/\D/g, ''))}
+                        className="w-full px-3 py-2 border border-emerald-200 rounded-xl"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-black text-emerald-800 mb-1 font-bold">Account Name *</label>
+                      <input 
+                        type="text" 
+                        required
+                        placeholder="e.g. John Doe"
+                        value={manualAccountName}
+                        onChange={(e) => setManualAccountName(e.target.value)}
+                        className="w-full px-3 py-2 border border-emerald-200 rounded-xl"
+                      />
+                    </div>
+                  </>
+                )}
 
                 <button 
                   type="submit"
                   disabled={!manualPayoutCalculation || manualPayoutCalculation.payoutAmount === 0}
                   className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl transition shadow-md"
                 >
-                  Archive & Pay Out Uncollected Months
+                  {manualPayoutMethod === 'Cash' ? 'Pay Out in Cash' : 'Archive & Pay Out Uncollected Months'}
                 </button>
               </form>
             </div>
@@ -3187,7 +3214,7 @@ function AdminDashboard({
                     <div key={h.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 rounded-2xl border border-amber-100 bg-amber-50/40">
                       <div className="text-xs">
                         <p className="font-black text-slate-800">{h.customer_name || 'Customer'} <span className="text-slate-400 font-semibold">• {h.month_paid || 'Saved month'}</span></p>
-                        <p className="text-slate-500 font-semibold">{h.bank_name} • {h.account_number} ({h.account_name})</p>
+                        <p className="text-slate-500 font-semibold">{h.payout_method === 'Cash' ? 'Cash Payment' : `${h.bank_name} • ${h.account_number} (${h.account_name})`}</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="font-black text-emerald-800 text-sm">₦{h.payout_amount.toLocaleString()}</span>
@@ -3248,8 +3275,14 @@ function AdminDashboard({
                             {h.customer_name || 'System Customer'}
                           </td>
                           <td className="p-3 font-medium text-slate-700">
-                            <strong className="block text-slate-700 font-bold">{h.account_name}</strong>
-                            {h.bank_name} • {h.account_number}
+                            {h.payout_method === 'Cash' ? (
+                              <strong className="block text-slate-700 font-bold">Cash Payment</strong>
+                            ) : (
+                              <>
+                                <strong className="block text-slate-700 font-bold">{h.account_name}</strong>
+                                {h.bank_name} • {h.account_number}
+                              </>
+                            )}
                           </td>
                           <td className="p-3 font-semibold text-emerald-800">{h.month_paid || 'N/A'}</td>
                           <td className="p-3">₦{h.amount.toLocaleString()}</td>
@@ -3323,7 +3356,7 @@ function AdminDashboard({
                           <td className="p-3 font-semibold text-emerald-800">{h.month_label}</td>
                           <td className="p-3">₦{h.total_amount.toLocaleString()}</td>
                           <td className="p-3 font-bold text-emerald-800">₦{h.payout_amount.toLocaleString()}</td>
-                          <td className="p-3 font-medium text-slate-700">{h.bank_name} • {h.account_number}</td>
+                          <td className="p-3 font-medium text-slate-700">{h.payout_method === 'Cash' ? 'Cash Payment' : `${h.bank_name} • ${h.account_number}`}</td>
                         </tr>
                       ))
                     )}
@@ -5160,8 +5193,14 @@ function CustomerDashboard({
                             {new Date(h.created_at).toLocaleDateString()}
                           </td>
                           <td className="p-3 text-slate-700 font-bold">
-                            <strong className="block">{h.account_name}</strong>
-                            {h.bank_name} • {h.account_number}
+                            {h.payout_method === 'Cash' ? (
+                              <strong className="block">Cash Payment</strong>
+                            ) : (
+                              <>
+                                <strong className="block">{h.account_name}</strong>
+                                {h.bank_name} • {h.account_number}
+                              </>
+                            )}
                           </td>
                           <td className="p-3 font-bold text-amber-800">{h.month_paid || 'N/A'}</td>
                           <td className="p-3">₦{h.amount.toLocaleString()}</td>
@@ -7169,7 +7208,7 @@ export default function App() {
   // real Approve & Payout flow does: archive uncollected `contributions`
   // into `payout_history` and remove them from the active ledger. It no
   // longer ever touches marked_days or transactions.
-  const handleTriggerManualPayout = async (customerId: string, bank: string, acctNum: string, acctName: string) => {
+  const handleTriggerManualPayout = async (customerId: string, method: 'Transfer' | 'Cash', bank: string, acctNum: string, acctName: string) => {
     setIsLoading(true);
 
     const targetCustomer = profiles.find(p => p.id === customerId);
@@ -7211,9 +7250,10 @@ export default function App() {
 
     const payoutPayload: any = {
       customer_id: customerId,
-      account_name: acctName,
-      account_number: acctNum,
-      bank_name: bank,
+      account_name: method === 'Cash' ? null : acctName,
+      account_number: method === 'Cash' ? null : acctNum,
+      bank_name: method === 'Cash' ? null : bank,
+      payout_method: method,
       amount: totalAmount,
       payout_amount: payoutAmount,
       status: 'Successful',
@@ -7251,9 +7291,10 @@ export default function App() {
         month_label: monthPaidText,
         total_amount: totalAmount,
         payout_amount: payoutAmount,
-        bank_name: bank,
-        account_number: acctNum,
-        account_name: acctName,
+        bank_name: method === 'Cash' ? null : bank,
+        account_number: method === 'Cash' ? null : acctNum,
+        account_name: method === 'Cash' ? null : acctName,
+        payout_method: method,
         approved_at: new Date().toISOString()
       }]);
       if (archiveError) {
@@ -7279,9 +7320,10 @@ export default function App() {
         month_label: m.month_label,
         total_amount: m.total_amount,
         payout_amount: Math.max(0, m.total_amount - targetCustomer.daily_amount),
-        bank_name: bank,
-        account_number: acctNum,
-        account_name: acctName,
+        bank_name: method === 'Cash' ? null : bank,
+        account_number: method === 'Cash' ? null : acctNum,
+        account_name: method === 'Cash' ? null : acctName,
+        payout_method: method,
         approved_at: new Date().toISOString()
       }));
 
