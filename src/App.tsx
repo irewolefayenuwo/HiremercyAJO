@@ -3237,7 +3237,7 @@ function AdminDashboard({
                   {payoutRequests.filter(p => p.status === 'Pending').map(h => (
                     <div key={h.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 rounded-2xl border border-amber-100 bg-amber-50/40">
                       <div className="text-xs">
-                        <p className="font-black text-slate-800">{h.customer_name || 'Customer'} <span className="text-slate-400 font-semibold">• {h.month_paid || 'Saved month'}</span></p>
+                        <p className="font-black text-slate-800">{profiles.find(p => p.id === h.customer_id)?.name || h.customer_name || h.customer_id} <span className="text-slate-400 font-semibold">• {h.month_paid || 'Saved month'}</span></p>
                         <p className="text-slate-500 font-semibold">{h.payout_method === 'Cash' ? 'Cash Payment' : `${h.bank_name} • ${h.account_number} (${h.account_name})`}</p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -3289,14 +3289,18 @@ function AdminDashboard({
                         <td colSpan={8} className="p-4 text-center text-slate-400 font-medium">No previous payout logs.</td>
                       </tr>
                     ) : (
-                      payoutRequests.slice().sort((a, b) => a.customer_name?.localeCompare(b.customer_name || '') || 0).map(h => (
+                      payoutRequests.slice().sort((a, b) => {
+                        const nameA = profiles.find(p => p.id === a.customer_id)?.name || a.customer_name || '';
+                        const nameB = profiles.find(p => p.id === b.customer_id)?.name || b.customer_name || '';
+                        return nameA.localeCompare(nameB);
+                      }).map(h => (
                         <tr key={h.id}>
                           <td className="p-3 text-slate-505">
                             {new Date(h.created_at).toLocaleDateString()}
                             <span className="block text-[9px] text-slate-400">{new Date(h.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                           </td>
                           <td className="p-3 font-bold text-slate-700">
-                            {h.customer_name || 'System Customer'}
+                            {profiles.find(p => p.id === h.customer_id)?.name || h.customer_name || h.customer_id}
                           </td>
                           <td className="p-3 font-medium text-slate-700">
                             {h.payout_method === 'Cash' ? (
@@ -3376,7 +3380,7 @@ function AdminDashboard({
                       payoutHistory.slice(0, 25).map(h => (
                         <tr key={h.id}>
                           <td className="p-3 text-slate-505">{new Date(h.approved_at).toLocaleDateString()}</td>
-                          <td className="p-3 font-bold text-slate-700">{h.customer_name || 'Customer'}</td>
+                          <td className="p-3 font-bold text-slate-700">{profiles.find(p => p.id === h.customer_id)?.name || h.customer_name || h.customer_id}</td>
                           <td className="p-3 font-semibold text-emerald-800">{h.month_label}</td>
                           <td className="p-3">₦{h.total_amount.toLocaleString()}</td>
                           <td className="p-3 font-bold text-emerald-800">₦{h.payout_amount.toLocaleString()}</td>
@@ -6151,14 +6155,10 @@ export default function App() {
 
     const { data } = await query;
     if (data) {
-      const formatted: PayoutRequest[] = data.map(item => {
-        const matchingProfile = profiles.find(p => p.id === item.customer_id);
-        return {
-          ...item,
-          customer_name: matchingProfile?.name || item.customer_name || item.customer_id
-        };
-      });
-      setPayoutRequests(formatted);
+      // Store raw data - customer names are resolved at display time from
+      // live profiles state, avoiding the race condition where profiles
+      // hasn't loaded yet when this fetch completes on initial page load.
+      setPayoutRequests(data as PayoutRequest[]);
     }
   };
 
@@ -6181,12 +6181,8 @@ export default function App() {
     if (data) {
       const grouped: Record<string, SavedMonth[]> = {};
       data.forEach((item: any) => {
-        const matchingProfile = profiles.find(p => p.id === item.customer_id);
         if (!grouped[item.customer_id]) grouped[item.customer_id] = [];
-        grouped[item.customer_id].push({
-          ...item,
-          customer_name: matchingProfile ? matchingProfile.name : 'Customer'
-        });
+        grouped[item.customer_id].push(item);
       });
       setSavedMonths(grouped);
     }
@@ -6208,11 +6204,8 @@ export default function App() {
     }
 
     if (data) {
-      const formatted: PayoutHistoryRecord[] = data.map((item: any) => {
-        const matchingProfile = profiles.find(p => p.id === item.customer_id);
-        return { ...item, customer_name: matchingProfile?.name || item.customer_name || item.customer_id };
-      });
-      setPayoutHistory(formatted);
+      // Store raw data - names resolved at display time from live profiles state
+      setPayoutHistory(data as PayoutHistoryRecord[]);
     }
   };
 
