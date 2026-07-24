@@ -1681,6 +1681,30 @@ function AdminDashboard({
   const [advertDescription, setAdvertDescription] = useState(supportDetails.advert_description || 'Join the smart daily savings circle with HireMercyAJO.');
   const [advertImageUrl, setAdvertImageUrl] = useState(supportDetails.advert_image_url || '');
   const [advertVideoUrl, setAdvertVideoUrl] = useState(supportDetails.advert_video_url || '');
+  const [advertImageUploading, setAdvertImageUploading] = useState(false);
+  const [advertVideoUploading, setAdvertVideoUploading] = useState(false);
+  const [advertImageError, setAdvertImageError] = useState('');
+  const [advertVideoError, setAdvertVideoError] = useState('');
+
+  const handleAdvertFileUpload = async (
+    file: File,
+    type: 'image' | 'video',
+    setUrl: (url: string) => void,
+    setUploading: (v: boolean) => void,
+    setError: (msg: string) => void
+  ) => {
+    const maxBytes = 50 * 1024 * 1024;
+    if (file.size > maxBytes) { setError(`File too large — maximum is 50 MB.`); return; }
+    setUploading(true);
+    setError('');
+    const ext = file.name.split('.').pop() || (type === 'image' ? 'jpg' : 'mp4');
+    const path = `${type}s/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error: uploadError } = await supabase.storage.from('adverts').upload(path, file, { upsert: false, contentType: file.type });
+    if (uploadError) { setUploading(false); setError(uploadError.message); return; }
+    const { data: { publicUrl } } = supabase.storage.from('adverts').getPublicUrl(path);
+    setUrl(publicUrl);
+    setUploading(false);
+  };
   const [advertEnabled, setAdvertEnabled] = useState(Boolean(supportDetails.advert_enabled));
   const [themeBackgroundColor, setThemeBackgroundColor] = useState(supportDetails.theme_background_color || '#f0fdf4');
   const [selectedWithdrawalRequest, setSelectedWithdrawalRequest] = useState<WithdrawalRequest | null>(null);
@@ -4320,24 +4344,99 @@ function AdminDashboard({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-emerald-800 mb-1">Advertisement Image URL</label>
+                  <label className="block text-xs font-bold text-emerald-800 mb-1">Advertisement Image</label>
+                  <p className="text-[10px] text-slate-400 mb-2">Upload from your device (JPEG, PNG, WebP, GIF — max 50 MB), or paste a URL below.</p>
+                  <label className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-xl p-4 cursor-pointer transition ${advertImageUploading ? 'border-emerald-300 bg-emerald-50' : 'border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50/50'}`}>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+                      className="hidden"
+                      disabled={advertImageUploading}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleAdvertFileUpload(file, 'image', setAdvertImageUrl, setAdvertImageUploading, setAdvertImageError);
+                        e.target.value = '';
+                      }}
+                    />
+                    {advertImageUploading ? (
+                      <span className="text-xs text-emerald-700 font-bold animate-pulse">Uploading image...</span>
+                    ) : advertImageUrl ? (
+                      <div className="w-full space-y-2">
+                        <img src={advertImageUrl} alt="Preview" className="w-full h-28 object-cover rounded-lg" />
+                        <span className="text-[10px] text-emerald-700 font-bold block text-center">Tap to replace</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                          <FileText className="w-5 h-5 text-emerald-600" />
+                        </div>
+                        <span className="text-xs font-bold text-emerald-700">Tap to choose image</span>
+                        <span className="text-[10px] text-slate-400">or drag and drop here</span>
+                      </>
+                    )}
+                  </label>
+                  {advertImageError && <p className="text-[10px] text-red-600 mt-1">{advertImageError}</p>}
                   <input
                     type="url"
-                    placeholder="https://example.com/banner.jpg"
+                    placeholder="Or paste image URL here"
                     value={advertImageUrl}
                     onChange={(e) => setAdvertImageUrl(e.target.value)}
-                    className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-sm font-medium"
+                    className="w-full mt-2 px-3 py-2 border border-emerald-200 rounded-xl text-xs font-medium"
                   />
+                  {advertImageUrl && (
+                    <button type="button" onClick={() => setAdvertImageUrl('')}
+                      className="mt-1 text-[10px] text-red-500 hover:text-red-700 font-bold">
+                      Remove image
+                    </button>
+                  )}
                 </div>
+
                 <div>
-                  <label className="block text-xs font-bold text-emerald-800 mb-1">Advertisement Video URL (plays instead of the image if set)</label>
+                  <label className="block text-xs font-bold text-emerald-800 mb-1">Advertisement Video <span className="font-normal text-slate-400">(plays instead of image when set)</span></label>
+                  <p className="text-[10px] text-slate-400 mb-2">Upload from your device (MP4, WebM, MOV — max 50 MB), or paste a URL below.</p>
+                  <label className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-xl p-4 cursor-pointer transition ${advertVideoUploading ? 'border-emerald-300 bg-emerald-50' : 'border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50/50'}`}>
+                    <input
+                      type="file"
+                      accept="video/mp4,video/webm,video/quicktime"
+                      className="hidden"
+                      disabled={advertVideoUploading}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleAdvertFileUpload(file, 'video', setAdvertVideoUrl, setAdvertVideoUploading, setAdvertVideoError);
+                        e.target.value = '';
+                      }}
+                    />
+                    {advertVideoUploading ? (
+                      <span className="text-xs text-emerald-700 font-bold animate-pulse">Uploading video...</span>
+                    ) : advertVideoUrl ? (
+                      <div className="w-full space-y-2">
+                        <video src={advertVideoUrl} className="w-full h-28 object-cover rounded-lg" muted controls />
+                        <span className="text-[10px] text-emerald-700 font-bold block text-center">Tap to replace</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                          <FileText className="w-5 h-5 text-emerald-600" />
+                        </div>
+                        <span className="text-xs font-bold text-emerald-700">Tap to choose video</span>
+                        <span className="text-[10px] text-slate-400">or drag and drop here</span>
+                      </>
+                    )}
+                  </label>
+                  {advertVideoError && <p className="text-[10px] text-red-600 mt-1">{advertVideoError}</p>}
                   <input
                     type="url"
-                    placeholder="https://example.com/ad-animation.mp4"
+                    placeholder="Or paste video URL here"
                     value={advertVideoUrl}
                     onChange={(e) => setAdvertVideoUrl(e.target.value)}
-                    className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-sm font-medium"
+                    className="w-full mt-2 px-3 py-2 border border-emerald-200 rounded-xl text-xs font-medium"
                   />
+                  {advertVideoUrl && (
+                    <button type="button" onClick={() => setAdvertVideoUrl('')}
+                      className="mt-1 text-[10px] text-red-500 hover:text-red-700 font-bold">
+                      Remove video
+                    </button>
+                  )}
                 </div>
                 <h4 className="text-xs font-black text-emerald-955 uppercase tracking-wider">App Theme</h4>
                 <div>
@@ -6056,7 +6155,7 @@ export default function App() {
         const matchingProfile = profiles.find(p => p.id === item.customer_id);
         return {
           ...item,
-          customer_name: matchingProfile ? matchingProfile.name : 'Customer'
+          customer_name: matchingProfile?.name || item.customer_name || item.customer_id
         };
       });
       setPayoutRequests(formatted);
@@ -6111,7 +6210,7 @@ export default function App() {
     if (data) {
       const formatted: PayoutHistoryRecord[] = data.map((item: any) => {
         const matchingProfile = profiles.find(p => p.id === item.customer_id);
-        return { ...item, customer_name: matchingProfile ? matchingProfile.name : 'Customer' };
+        return { ...item, customer_name: matchingProfile?.name || item.customer_name || item.customer_id };
       });
       setPayoutHistory(formatted);
     }
@@ -6654,9 +6753,11 @@ export default function App() {
 
     const payoutPayload: any = {
       customer_id: currentUser.id,
+      customer_name: currentUser.name,
       account_name: acctName,
       account_number: acctNum,
       bank_name: bank,
+      payout_method: 'Transfer',
       amount: totalAmount,
       payout_amount: payoutAmount,
       status: 'Pending',
@@ -7250,6 +7351,7 @@ export default function App() {
 
     const payoutPayload: any = {
       customer_id: customerId,
+      customer_name: targetCustomer.name,
       account_name: method === 'Cash' ? null : acctName,
       account_number: method === 'Cash' ? null : acctNum,
       bank_name: method === 'Cash' ? null : bank,
@@ -7287,6 +7389,7 @@ export default function App() {
     if (isPartialPayout) {
       const { error: archiveError } = await supabase.from('payout_history').insert([{
         customer_id: customerId,
+        customer_name: targetCustomer.name,
         payout_request_id: newRequest?.id,
         month_label: monthPaidText,
         total_amount: totalAmount,
@@ -7315,6 +7418,7 @@ export default function App() {
       // Approve & Payout flow, then remove them from the active ledger.
       const archiveRows = uncollectedMonths.map(m => ({
         customer_id: customerId,
+        customer_name: targetCustomer.name,
         contribution_id: m.id,
         payout_request_id: newRequest?.id,
         month_label: m.month_label,
