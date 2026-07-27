@@ -23,6 +23,9 @@ export interface Profile {
   allow_anytime_change?: boolean;
   admin_note?: string;
   loan_status: 'No Loan' | 'Pending Approval' | 'Active Loan' | 'Loan Cleared';
+  savings_type: 'daily' | 'monthly' | 'both';
+  monthly_savings_terms_accepted: boolean;
+  monthly_savings_terms_accepted_at?: string;
 }
 
 export interface Loan {
@@ -72,6 +75,32 @@ export interface Branch {
   address?: string;
   phone?: string;
   manager?: string;
+}
+
+export interface MonthlySavingsPlan {
+  id: string;
+  customer_id: string;
+  year: number;
+  status: 'Active' | 'Completed' | 'Withdrawn';
+  total_saved: number;
+  created_at: string;
+  created_by?: string;
+}
+
+export interface MonthlySavingsMonth {
+  id: string;
+  plan_id: string;
+  customer_id: string;
+  month_number: number;
+  total_deposited: number;
+  is_complete: boolean;
+  completed_at?: string;
+}
+
+export interface CustomerCreditBalance {
+  customer_id: string;
+  credit_amount: number;
+  updated_at: string;
 }
 
 export interface Transaction {
@@ -607,7 +636,7 @@ const nigerianBanks = [
   'United Bank for Africa (UBA)', 'Unity Bank', 'Wema Bank', 'Zenith Bank'
 ];
 
-type AdminTab = 'overview' | 'customers' | 'branches' | 'staff' | 'payouts' | 'records' | 'transactions' | 'settings' | 'reports' | 'cashsheet' | 'loans';
+type AdminTab = 'overview' | 'customers' | 'branches' | 'staff' | 'payouts' | 'records' | 'transactions' | 'settings' | 'reports' | 'cashsheet' | 'loans' | 'monthly-savings';
 
 export interface CashReconciliation {
   id: string;
@@ -1034,15 +1063,26 @@ function RegisterScreen({ onBack, onRegister, branches }: { onBack: () => void, 
   const [dailyAmount, setDailyAmount] = useState('1000');
   const [branchId, setBranchId] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [savingsType, setSavingsType] = useState<'daily' | 'monthly' | 'both'>('daily');
+  const [showTerms, setShowTerms] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [pendingSubmit, setPendingSubmit] = useState(false);
+
+  const needsTerms = savingsType === 'monthly' || savingsType === 'both';
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !phone || !password) return;
-    if (Number(dailyAmount) < 300) {
+    if ((savingsType === 'daily' || savingsType === 'both') && Number(dailyAmount) < 300) {
       alert("Daily Contribution must be a minimum of ₦300.");
       return;
     }
-    onRegister({ name, email: email || '', phone, password, daily_amount: Number(dailyAmount), branch_id: branchId });
+    if (needsTerms && !termsAccepted) {
+      setPendingSubmit(true);
+      setShowTerms(true);
+      return;
+    }
+    onRegister({ name, email: email || '', phone, password, daily_amount: Number(dailyAmount), branch_id: branchId, savings_type: savingsType, monthly_savings_terms_accepted: termsAccepted });
   };
 
   return (
@@ -1053,105 +1093,133 @@ function RegisterScreen({ onBack, onRegister, branches }: { onBack: () => void, 
         </button>
         <div className="text-center mt-4">
           <h2 className="text-2xl font-extrabold">Register Customer</h2>
-          <p className="text-xs text-emerald-200 mt-1">Set target daily contribution metrics</p>
+          <p className="text-xs text-emerald-200 mt-1">Choose your savings plan and set contribution target</p>
         </div>
       </div>
 
       <form onSubmit={handleSubmit} className="p-8 space-y-4 text-slate-800">
         <div>
           <label className="block text-xs font-black uppercase text-emerald-800 mb-1">Full Name *</label>
-          <input 
-            type="text" 
-            required
-            placeholder="Chinedu Osei"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full px-4 py-2.5 border border-emerald-200 rounded-xl text-sm"
-          />
+          <input type="text" required placeholder="Chinedu Osei" value={name} onChange={(e) => setName(e.target.value)} className="w-full px-4 py-2.5 border border-emerald-200 rounded-xl text-sm" />
         </div>
-
         <div>
           <label className="block text-xs font-black uppercase text-emerald-800 mb-1">Phone Number *</label>
-          <input 
-            type="text" 
-            required
-            placeholder="e.g. 08012345678"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            className="w-full px-4 py-2.5 border border-emerald-200 rounded-xl text-sm"
-          />
+          <input type="text" required placeholder="e.g. 08012345678" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full px-4 py-2.5 border border-emerald-200 rounded-xl text-sm" />
           <span className="text-[10px] text-slate-400 block mt-1">Accepts local formats (e.g. 080...) or international (+234...)</span>
         </div>
-
         <div>
           <label className="block text-xs font-black uppercase text-emerald-800 mb-1">Email Address</label>
-          <input 
-            type="email"
-            placeholder="chinedu@domain.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-4 py-2.5 border border-emerald-200 rounded-xl text-sm"
-          />
-          <span className="text-[10px] text-slate-400 block mt-1">Optional. Phone and password are enough.</span>
+          <input type="email" placeholder="chinedu@domain.com" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-4 py-2.5 border border-emerald-200 rounded-xl text-sm" />
+          <span className="text-[10px] text-slate-400 block mt-1">Optional.</span>
         </div>
-
         <div>
           <label className="block text-xs font-black uppercase text-emerald-800 mb-1">Password *</label>
           <div className="relative">
-            <input 
-              type={showPassword ? 'text' : 'password'} 
-              required
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2.5 border border-emerald-200 rounded-xl text-sm pr-10"
-            />
-            <button 
-              type="button" 
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
-            >
+            <input type={showPassword ? 'text' : 'password'} required placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-2.5 border border-emerald-200 rounded-xl text-sm pr-10" />
+            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
               {showPassword ? <EyeOff className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
             </button>
           </div>
         </div>
 
+        {/* Savings Plan Selection */}
         <div>
-          <label className="block text-xs font-black uppercase text-emerald-800 mb-1">Daily Contribution Target (₦) *</label>
-          <input 
-            type="number" 
-            required
-            min={300}
-            placeholder="Minimum ₦300"
-            value={dailyAmount}
-            onChange={(e) => setDailyAmount(e.target.value)}
-            className="w-full px-4 py-2.5 border border-emerald-200 rounded-xl text-sm font-semibold"
-          />
-          <span className="text-[10px] text-slate-400 block mt-1">Acceptable limit: Minimum ₦300 (Please type your plan value)</span>
+          <label className="block text-xs font-black uppercase text-emerald-800 mb-2">Savings Plan *</label>
+          <div className="grid grid-cols-3 gap-2">
+            {(['daily', 'monthly', 'both'] as const).map(type => (
+              <button key={type} type="button" onClick={() => { setSavingsType(type); setTermsAccepted(false); }}
+                className={`py-2.5 px-2 rounded-xl text-[11px] font-black uppercase border-2 transition ${savingsType === type ? 'bg-emerald-700 border-emerald-700 text-white' : 'bg-white border-emerald-200 text-emerald-800 hover:border-emerald-400'}`}>
+                {type === 'daily' ? '32-Day Daily' : type === 'monthly' ? 'Monthly Salary' : 'Both Plans'}
+              </button>
+            ))}
+          </div>
+          {savingsType === 'daily' && <p className="text-[10px] text-slate-500 mt-1.5 font-semibold">32-day rotating daily contribution cycle.</p>}
+          {savingsType === 'monthly' && <p className="text-[10px] text-slate-500 mt-1.5 font-semibold">Monthly salary savings — Jan to Dec, minimum ₦5,000/month.</p>}
+          {savingsType === 'both' && <p className="text-[10px] text-slate-500 mt-1.5 font-semibold">Both plans run simultaneously and independently.</p>}
         </div>
 
+        {(savingsType === 'daily' || savingsType === 'both') && (
+          <div>
+            <label className="block text-xs font-black uppercase text-emerald-800 mb-1">Daily Contribution Target (₦) *</label>
+            <input type="number" required min={300} placeholder="Minimum ₦300" value={dailyAmount} onChange={(e) => setDailyAmount(e.target.value)} className="w-full px-4 py-2.5 border border-emerald-200 rounded-xl text-sm font-semibold" />
+            <span className="text-[10px] text-slate-400 block mt-1">Minimum ₦300 per day.</span>
+          </div>
+        )}
+
         <div>
-          <label className="block text-xs font-black uppercase text-emerald-800 mb-1">Assign Home Branch *</label>
-          <select 
-            required
-            value={branchId} 
-            onChange={(e) => setBranchId(e.target.value)}
-            className="w-full px-4 py-2.5 border border-emerald-200 rounded-xl bg-white text-sm"
-          >
+          <label className="block text-xs font-black uppercase text-emerald-800 mb-1">Assign Home Branch</label>
+          <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className="w-full px-4 py-2.5 border border-emerald-200 rounded-xl bg-white text-sm">
             <option value="">-- Choose Branch --</option>
-            {branches.map(b => (
-              <option key={b.id} value={b.id}>{b.name}</option>
-            ))}
+            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         </div>
 
-        <button 
-          type="submit" 
-          className="w-full bg-amber-500 hover:bg-amber-600 text-emerald-955 font-black py-3 rounded-xl transition duration-150 shadow-md mt-6"
-        >
+        {needsTerms && (
+          <div className={`rounded-xl border-2 p-3 flex items-start gap-2 cursor-pointer ${termsAccepted ? 'border-emerald-500 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}
+            onClick={() => setShowTerms(true)}>
+            <div className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 mt-0.5 ${termsAccepted ? 'bg-emerald-600 text-white' : 'border-2 border-amber-400'}`}>
+              {termsAccepted && <span className="text-[10px] font-black">✓</span>}
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-700">{termsAccepted ? 'Terms & Conditions accepted ✓' : 'Read & Accept Terms and Conditions'}</p>
+              <p className="text-[10px] text-slate-500">Monthly Salary Savings Plan terms apply. Tap to read.</p>
+            </div>
+          </div>
+        )}
+
+        <button type="submit" className="w-full bg-amber-500 hover:bg-amber-600 text-emerald-955 font-black py-3 rounded-xl transition duration-150 shadow-md mt-2">
           Activate Savings Cycle
         </button>
       </form>
+
+      {/* Terms and Conditions Modal */}
+      {showTerms && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowTerms(false)}>
+          <div className="bg-white rounded-3xl max-w-lg w-full max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="bg-emerald-800 text-white p-5 rounded-t-3xl">
+              <h3 className="text-base font-black">Monthly Salary Savings Plan</h3>
+              <p className="text-emerald-200 text-xs mt-0.5">Terms and Conditions — Please read carefully</p>
+            </div>
+            <div className="overflow-y-auto p-5 space-y-3 text-xs text-slate-700 flex-1">
+              {[
+                { title: '1. Plan Duration', text: 'The Monthly Salary Savings Plan runs for a full calendar year (January to December). Your plan begins in the month you enroll and covers all 12 months of that year.' },
+                { title: '2. Minimum Monthly Contribution', text: 'You are required to save a minimum of ₦5,000 per month. Deposits can be made in multiple installments throughout the month. A month is marked complete once ₦5,000 has been deposited.' },
+                { title: '3. Company Profit Month', text: 'One month\'s savings (1 out of 12) is retained by HireMercyAJO as a service charge. This is the agreed compensation for managing and securing your savings throughout the year.' },
+                { title: '4. Withdrawal Policy — Customers', text: 'Customers CANNOT make self-service withdrawal requests from this plan. Withdrawals are processed exclusively by the Admin or authorized staff. You may only request your savings after December of the plan year.' },
+                { title: '5. Withdrawal Policy — Admin', text: 'The Admin or authorized staff may process withdrawals on your behalf at any time during the year, where necessary and in your interest.' },
+                { title: '6. No Loan on This Plan', text: 'The Monthly Salary Savings Plan does not support loan applications. Loans are only available on the 32-Day Daily Savings Plan.' },
+                { title: '7. Account Conduct', text: 'Your account must remain active throughout the year. Suspended or inactive accounts will not be eligible for withdrawals.' },
+                { title: '8. Independent Plan', text: 'The Monthly Salary Savings Plan is completely separate from the 32-Day Daily Savings Plan. If you enroll in Both Plans, each plan operates independently with its own balance, deposits, and rules.' },
+                { title: '9. Record and Transparency', text: 'All deposits, month completions, and withdrawals are recorded and visible on your dashboard. HireMercyAJO maintains full records of your savings at all times.' },
+                { title: '10. Agreement', text: 'By accepting these terms, you confirm that you have read, understood, and agreed to all conditions of the HireMercyAJO Monthly Salary Savings Plan. These terms are binding from the moment of enrollment.' },
+              ].map(item => (
+                <div key={item.title}>
+                  <p className="font-black text-emerald-800 mb-0.5">{item.title}</p>
+                  <p className="text-slate-600 leading-relaxed">{item.text}</p>
+                </div>
+              ))}
+            </div>
+            <div className="p-4 border-t border-slate-100 flex gap-2">
+              <button type="button" onClick={() => setShowTerms(false)}
+                className="flex-1 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50">
+                Close
+              </button>
+              <button type="button" onClick={() => {
+                setTermsAccepted(true);
+                setShowTerms(false);
+                if (pendingSubmit) {
+                  setPendingSubmit(false);
+                  const syntheticData = { name, email: email || '', phone, password, daily_amount: Number(dailyAmount), branch_id: branchId, savings_type: savingsType, monthly_savings_terms_accepted: true };
+                  onRegister(syntheticData);
+                }
+              }}
+                className="flex-1 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black uppercase">
+                I Accept These Terms
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1274,14 +1342,252 @@ function AdvertisementBanner({ details }: { details: SupportSettings }) {
 // 2. ADMIN DASHBOARD COMPONENT
 // =========================================================================
 
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+function MonthlySavingsAdminTab({ monthlySavingsPlans, monthlySavingsMonths, profiles, branches, customers, msSelectedCustomer, setMsSelectedCustomer, msSelectedYear, setMsSelectedYear, msDepositMonth, setMsDepositMonth, msDepositAmount, setMsDepositAmount, msDepositMethod, setMsDepositMethod, msShowDepositModal, setMsShowDepositModal, onEnrollMonthlySavings, onRecordMonthlyDeposit }: {
+  monthlySavingsPlans: MonthlySavingsPlan[], monthlySavingsMonths: MonthlySavingsMonth[],
+  profiles: Profile[], branches: Branch[], customers: Profile[],
+  msSelectedCustomer: string, setMsSelectedCustomer: (v: string) => void,
+  msSelectedYear: number, setMsSelectedYear: (v: number) => void,
+  msDepositMonth: number, setMsDepositMonth: (v: number) => void,
+  msDepositAmount: string, setMsDepositAmount: (v: string) => void,
+  msDepositMethod: 'Cash' | 'Bank Transfer' | 'Mobile Money', setMsDepositMethod: (v: any) => void,
+  msShowDepositModal: boolean, setMsShowDepositModal: (v: boolean) => void,
+  onEnrollMonthlySavings: (customerId: string, year: number) => void,
+  onRecordMonthlyDeposit: (customerId: string, year: number, month: number, amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => void
+}) {
+  const currentYear = new Date().getFullYear();
+  const customerPlan = msSelectedCustomer
+    ? monthlySavingsPlans.find(p => p.customer_id === msSelectedCustomer && p.year === msSelectedYear)
+    : null;
+  const planMonths = customerPlan ? monthlySavingsMonths.filter(m => m.plan_id === customerPlan.id) : [];
+  const getMonthData = (monthNum: number) => planMonths.find(m => m.month_number === monthNum) || null;
+  const completedCount = planMonths.filter(m => m.is_complete).length;
+  const totalSaved = customerPlan?.total_saved || 0;
+  const enrolled = monthlySavingsPlans.filter(p => p.year === msSelectedYear);
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Enrolled Customers', value: enrolled.length },
+          { label: 'Completed Plans', value: monthlySavingsPlans.filter(p => p.status === 'Completed').length },
+          { label: 'Total Saved (All)', value: '₦' + enrolled.reduce((s, p) => s + Number(p.total_saved), 0).toLocaleString() },
+          { label: 'Min Monthly', value: '₦5,000' }
+        ].map(c => (
+          <div key={c.label} className="bg-white border border-emerald-100 rounded-2xl p-4 shadow-sm">
+            <p className="text-[10px] font-black uppercase text-emerald-800">{c.label}</p>
+            <p className="text-xl font-black text-emerald-955 mt-1">{c.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4">
+        <div className="flex flex-wrap justify-between items-center gap-3">
+          <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider">Monthly Salary Savings</h3>
+          <select value={msSelectedYear} onChange={e => setMsSelectedYear(Number(e.target.value))}
+            className="border border-emerald-200 rounded-xl px-2 py-1.5 text-xs font-bold">
+            {[currentYear - 1, currentYear, currentYear + 1].map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+
+        <div>
+          <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">Select Customer</label>
+          <SearchableCustomerSelect customers={customers} selectedId={msSelectedCustomer} onSelect={setMsSelectedCustomer} placeholder="Search customer..." />
+        </div>
+
+        {msSelectedCustomer && !customerPlan && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold text-amber-800">Not enrolled in {msSelectedYear} Monthly Savings Plan.</p>
+              <p className="text-[10px] text-amber-600">Click Enroll to create their plan for this year.</p>
+            </div>
+            <button type="button" onClick={() => onEnrollMonthlySavings(msSelectedCustomer, msSelectedYear)}
+              className="bg-emerald-700 hover:bg-emerald-800 text-white font-black px-4 py-2 rounded-xl text-xs uppercase whitespace-nowrap">
+              Enroll Now
+            </button>
+          </div>
+        )}
+
+        {customerPlan && (
+          <>
+            <div className="flex flex-wrap justify-between items-center gap-2 text-xs">
+              <span className="font-bold text-slate-600">
+                {completedCount}/12 months complete —
+                Total saved: <span className="text-emerald-700 font-black">₦{totalSaved.toLocaleString()}</span>
+              </span>
+              <button type="button"
+                onClick={() => { setMsDepositMonth(new Date().getMonth() + 1); setMsDepositAmount(''); setMsShowDepositModal(true); }}
+                className="bg-amber-500 hover:bg-amber-600 text-emerald-955 font-black px-3 py-1.5 rounded-xl text-xs uppercase">
+                + Record Deposit
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-emerald-50/50 text-emerald-900 font-extrabold border-b border-emerald-200">
+                    <th className="p-2.5">Month</th>
+                    <th className="p-2.5">Deposited</th>
+                    <th className="p-2.5">Remaining</th>
+                    <th className="p-2.5">Status</th>
+                    <th className="p-2.5 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-emerald-50">
+                  {MONTH_NAMES.map((name, idx) => {
+                    const monthNum = idx + 1;
+                    const md = getMonthData(monthNum);
+                    const isCurrentMonth = monthNum === new Date().getMonth() + 1 && msSelectedYear === currentYear;
+                    const remaining = md ? Math.max(0, 5000 - md.total_deposited) : 5000;
+                    return (
+                      <tr key={monthNum} className={`transition ${isCurrentMonth ? 'bg-emerald-50/40' : 'hover:bg-slate-50/30'}`}>
+                        <td className="p-2.5 font-bold text-slate-800">
+                          {name}
+                          {isCurrentMonth && <span className="ml-1 text-[9px] bg-emerald-200 text-emerald-800 rounded-full px-1.5 py-0.5 font-black">Now</span>}
+                        </td>
+                        <td className="p-2.5 font-semibold">
+                          {md && md.total_deposited > 0 ? `₦${md.total_deposited.toLocaleString()}` : <span className="text-slate-300">—</span>}
+                        </td>
+                        <td className="p-2.5 text-amber-700 font-semibold">
+                          {md?.is_complete ? <span className="text-emerald-600">✓ Done</span> : `₦${remaining.toLocaleString()}`}
+                        </td>
+                        <td className="p-2.5">
+                          {md?.is_complete ? (
+                            <span className="bg-emerald-100 text-emerald-800 rounded-full px-2 py-0.5 text-[10px] font-black">Complete</span>
+                          ) : md && md.total_deposited > 0 ? (
+                            <span className="bg-amber-100 text-amber-800 rounded-full px-2 py-0.5 text-[10px] font-black">Partial</span>
+                          ) : (
+                            <span className="text-slate-300 text-[10px] font-bold">Not paid</span>
+                          )}
+                        </td>
+                        <td className="p-2.5 text-right">
+                          <button type="button"
+                            onClick={() => { setMsDepositMonth(monthNum); setMsDepositAmount(''); setMsShowDepositModal(true); }}
+                            className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-2.5 py-1 rounded-lg text-[10px] uppercase">
+                            {md?.is_complete ? 'Top Up' : 'Pay'}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {!msSelectedCustomer && (
+          <div className="py-10 text-center text-slate-400 text-xs font-semibold">
+            Search and select a customer above to view their Monthly Savings Plan.
+          </div>
+        )}
+      </div>
+
+      {/* All enrolled this year */}
+      <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
+        <h4 className="text-xs font-black uppercase text-emerald-800 mb-3">All Enrolled — {msSelectedYear}</h4>
+        {enrolled.length === 0 ? (
+          <p className="text-xs text-slate-400">No customers enrolled for {msSelectedYear} yet. Register a customer with Monthly or Both plan to get started.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead><tr className="text-slate-500 font-bold border-b">
+                <th className="p-2">Customer</th><th className="p-2">Total Saved</th>
+                <th className="p-2">Months Complete</th><th className="p-2">Status</th>
+              </tr></thead>
+              <tbody className="divide-y">
+                {enrolled.map(plan => {
+                  const cust = profiles.find(p => p.id === plan.customer_id);
+                  const done = monthlySavingsMonths.filter(m => m.plan_id === plan.id && m.is_complete).length;
+                  return (
+                    <tr key={plan.id} className="cursor-pointer hover:bg-emerald-50/30"
+                      onClick={() => { setMsSelectedCustomer(plan.customer_id); setMsSelectedYear(plan.year); }}>
+                      <td className="p-2 font-bold">{cust?.name || plan.customer_id}</td>
+                      <td className="p-2">₦{Number(plan.total_saved).toLocaleString()}</td>
+                      <td className="p-2">{done}/12</td>
+                      <td className="p-2">
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${plan.status === 'Completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'}`}>
+                          {plan.status}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Deposit modal */}
+      {msShowDepositModal && msSelectedCustomer && customerPlan && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setMsShowDepositModal(false)}>
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="text-md font-black text-emerald-955 mb-1">Record Monthly Deposit</h3>
+            <p className="text-xs text-slate-500 mb-3">{MONTH_NAMES[msDepositMonth - 1]} {msSelectedYear} — {profiles.find(p => p.id === msSelectedCustomer)?.name}</p>
+            {(() => {
+              const existing = getMonthData(msDepositMonth);
+              const remaining = existing ? Math.max(0, 5000 - existing.total_deposited) : 5000;
+              return (
+                <div className="bg-emerald-50 rounded-xl p-3 text-xs mb-4 space-y-0.5 font-semibold">
+                  <p>Already paid: <span className="font-black">₦{existing?.total_deposited.toLocaleString() || '0'}</span></p>
+                  <p>Minimum target: <span className="font-black">₦5,000</span></p>
+                  {remaining > 0 && <p className="text-amber-700 font-black">Still needed: ₦{remaining.toLocaleString()}</p>}
+                  {existing?.is_complete && <p className="text-emerald-700 font-black">✓ Month complete — any extra adds to total.</p>}
+                </div>
+              );
+            })()}
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">Month</label>
+                <select value={msDepositMonth} onChange={e => setMsDepositMonth(Number(e.target.value))}
+                  className="w-full border rounded-xl px-3 py-2 text-xs">
+                  {MONTH_NAMES.map((m, i) => <option key={i+1} value={i+1}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">Amount (₦)</label>
+                <input type="number" min="1" value={msDepositAmount} onChange={e => setMsDepositAmount(e.target.value)}
+                  placeholder="e.g. 5000" className="w-full border rounded-xl px-3 py-2 text-xs" />
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">Payment Method</label>
+                <select value={msDepositMethod} onChange={e => setMsDepositMethod(e.target.value as any)}
+                  className="w-full border rounded-xl px-3 py-2 text-xs">
+                  <option>Cash</option><option>Bank Transfer</option><option>Mobile Money</option>
+                </select>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setMsShowDepositModal(false)}
+                  className="flex-1 border border-slate-200 rounded-xl py-2.5 text-xs font-bold text-slate-600">Cancel</button>
+                <button type="button"
+                  disabled={!msDepositAmount || Number(msDepositAmount) < 1}
+                  onClick={async () => {
+                    await onRecordMonthlyDeposit(msSelectedCustomer, msSelectedYear, msDepositMonth, Number(msDepositAmount), msDepositMethod);
+                    setMsShowDepositModal(false); setMsDepositAmount('');
+                  }}
+                  className="flex-1 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 text-white font-black py-2.5 rounded-xl text-xs uppercase">
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AdminDashboard({ 
   profiles, branches, transactions, markedDays, supportDetails, payoutRequests, savedMonths, payoutHistory, withdrawalRequests, onApprovePayout, onCreateBranch, onUpdateBranch, onDeleteBranch, onCreateStaff, onUpdateStaff, onDeleteStaff, onRegisterCustomer,
   onDeleteTransaction, onAddTransaction, onUpdateSupport, onDeleteCustomer, onUpdateCustomer, onToggleCustomerActive, onUpdateLoanStatus, onTriggerManualPayout, onApproveTransaction, onApproveWithdrawal, routeTarget, onRouteHandled, onRejectPayout, triggerToast, onResetPasswordToDefault,
-  loans, loanRequests, loanHistory, onApproveLoanRequest, onRejectLoanRequest, onAssignLoan
+  loans, loanRequests, loanHistory, onApproveLoanRequest, onRejectLoanRequest, onAssignLoan,
+  monthlySavingsPlans, monthlySavingsMonths, onEnrollMonthlySavings, onRecordMonthlyDeposit
 }: { 
   profiles: Profile[], branches: Branch[], transactions: Transaction[], markedDays: Record<string, MarkedDay[]>, supportDetails: SupportSettings, payoutRequests: PayoutRequest[], savedMonths: Record<string, SavedMonth[]>, payoutHistory: PayoutHistoryRecord[], withdrawalRequests: WithdrawalRequest[], onDeleteTransaction: (id: string) => void, onAddTransaction: (cId: string, amt: number, method: any, sId: string) => void, onUpdateSupport: (phone: string, whatsapp: string, email: string, bankName: string, acctNum: string, acctName: string, advertTitle: string, advertDescription: string, advertImageUrl: string, advertEnabled: boolean, advertVideoUrl: string, themeBackgroundColor: string) => void, onApprovePayout: (reqId: string) => void, onCreateBranch: (name: string, address: string) => void, onUpdateBranch: (id: string, name: string, address: string) => void, onDeleteBranch: (id: string) => void, onCreateStaff: (name: string, phone: string, email: string, branchId: string, password: string) => void, onUpdateStaff: (id: string, name: string, phone: string, email: string, branchId: string) => void, onDeleteStaff: (id: string) => void, onRegisterCustomer: (data: any) => void,
   onDeleteCustomer: (id: string) => void, onUpdateCustomer: (id: string, name: string, phone: string, email: string, dailyAmount: number, branchId: string, allowAnytimeChange: boolean) => void, onToggleCustomerActive: (id: string, is_active: boolean) => void, onUpdateLoanStatus: (id: string, loan_status: 'No Loan' | 'Pending Approval' | 'Active Loan' | 'Loan Cleared') => void, onTriggerManualPayout: (customerId: string, method: 'Transfer' | 'Cash', bank: string, acctNum: string, acctName: string) => void, onApproveTransaction: (id: string) => void, onApproveWithdrawal: (id: string, bankName: string, accountNumber: string, accountName: string) => void, routeTarget?: AdminTab | null, onRouteHandled?: () => void, onRejectPayout?: (reqId: string) => void, triggerToast?: (message: string, type?: 'success' | 'error') => void, onResetPasswordToDefault?: (customerId: string) => void,
-  loans: Loan[], loanRequests: LoanRequest[], loanHistory: any[], onApproveLoanRequest: (requestId: string) => void, onRejectLoanRequest: (requestId: string, reason: string) => void, onAssignLoan: (customerId: string, approvedAmount: number, remarks: string, disbursementDate: string) => void
+  loans: Loan[], loanRequests: LoanRequest[], loanHistory: any[], onApproveLoanRequest: (requestId: string) => void, onRejectLoanRequest: (requestId: string, reason: string) => void, onAssignLoan: (customerId: string, approvedAmount: number, remarks: string, disbursementDate: string) => void,
+  monthlySavingsPlans: MonthlySavingsPlan[], monthlySavingsMonths: MonthlySavingsMonth[], onEnrollMonthlySavings: (customerId: string, year: number) => void, onRecordMonthlyDeposit: (customerId: string, year: number, month: number, amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => void
 }) {
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [loanSubView, setLoanSubView] = useState<'pending' | 'active' | 'completed' | 'history'>('pending');
@@ -1296,6 +1602,13 @@ function AdminDashboard({
   const [loanHistoryBranchFilter, setLoanHistoryBranchFilter] = useState('');
   const [loanHistoryStatusFilter, setLoanHistoryStatusFilter] = useState('');
   const [expandedOutstandingCustomerId, setExpandedOutstandingCustomerId] = useState<string | null>(null);
+  const [previewCreditBalance, setPreviewCreditBalance] = useState<number>(0);
+  const [msSelectedCustomer, setMsSelectedCustomer] = useState('');
+  const [msSelectedYear, setMsSelectedYear] = useState(new Date().getFullYear());
+  const [msDepositMonth, setMsDepositMonth] = useState(1);
+  const [msDepositAmount, setMsDepositAmount] = useState('');
+  const [msDepositMethod, setMsDepositMethod] = useState<'Cash' | 'Bank Transfer' | 'Mobile Money'>('Cash');
+  const [msShowDepositModal, setMsShowDepositModal] = useState(false);
 
   // --- Cash Balance Sheet state ---
   const [cashSheetView, setCashSheetView] = useState<'entry' | 'archive'>('entry');
@@ -1632,6 +1945,16 @@ function AdminDashboard({
   const [viewingDayDetail, setViewingDayDetail] = useState<MarkedDay | null>(null);
   const [editingCustomer, setEditingCustomer] = useState<Profile | null>(null);
 
+  // Fetch credit balance whenever selected customer changes in the post-
+  // contribution form, so staff always see the latest overpayment credit
+  // before recording the next payment.
+  useEffect(() => {
+    if (!selectedCustomerId) { setPreviewCreditBalance(0); return; }
+    supabase.from('customer_credit_balances')
+      .select('credit_amount').eq('customer_id', selectedCustomerId).maybeSingle()
+      .then(({ data }) => setPreviewCreditBalance((data as any)?.credit_amount || 0));
+  }, [selectedCustomerId]);
+
   // Manual Payout states
   const [manualPayoutCustomerId, setManualPayoutCustomerId] = useState('');
   const [manualPayoutMethod, setManualPayoutMethod] = useState<'Transfer' | 'Cash'>('Transfer');
@@ -1669,6 +1992,9 @@ function AdminDashboard({
   const [custBranch, setCustBranch] = useState('');
   const [custPassword, setCustPassword] = useState('');
   const [showCustPass, setShowCustPass] = useState(false);
+  const [custSavingsType, setCustSavingsType] = useState<'daily' | 'monthly' | 'both'>('daily');
+  const [custTermsAccepted, setCustTermsAccepted] = useState(false);
+  const [showCustTerms, setShowCustTerms] = useState(false);
 
   // Support details state variables managed by Admin
   const [supportPhone, setSupportPhone] = useState(supportDetails.support_phone);
@@ -1885,8 +2211,14 @@ function AdminDashboard({
   const handleAdminRegisterCustomer = (e: React.FormEvent) => {
     e.preventDefault();
     if (!custName || !custPhone || !custBranch || !custPassword) return;
-    if (Number(custDailyAmount) < 300) {
+    const needsDailyAmount = custSavingsType === 'daily' || custSavingsType === 'both';
+    if (needsDailyAmount && Number(custDailyAmount) < 300) {
       alert("Daily Contribution must be at least ₦300.");
+      return;
+    }
+    const needsTerms = custSavingsType === 'monthly' || custSavingsType === 'both';
+    if (needsTerms && !custTermsAccepted) {
+      setShowCustTerms(true);
       return;
     }
     onRegisterCustomer({
@@ -1895,13 +2227,13 @@ function AdminDashboard({
       email: custEmail || `${custPhone}@hiremercy.com`,
       password: custPassword,
       daily_amount: Number(custDailyAmount),
-      branch_id: custBranch
+      branch_id: custBranch,
+      savings_type: custSavingsType,
+      monthly_savings_terms_accepted: custTermsAccepted
     });
-    setCustName('');
-    setCustPhone('');
-    setCustEmail('');
-    setCustPassword('');
-    setCustBranch('');
+    setCustName(''); setCustPhone(''); setCustEmail('');
+    setCustPassword(''); setCustBranch('');
+    setCustSavingsType('daily'); setCustTermsAccepted(false);
   };
 
   const handleSaveEditBranch = (e: React.FormEvent) => {
@@ -2126,7 +2458,7 @@ function AdminDashboard({
             Analysis
           </button>
           <LiveTransactionCounter count={successfulTransactions.filter(tx => tx.date === new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' }) && tx.status === 'Successful').length} label="Today's work" />
-          {(['overview', 'customers', 'branches', 'staff', 'payouts', 'records', 'transactions', 'cashsheet', 'loans', 'settings', 'reports'] as const).map(tab => (
+          {(['overview', 'customers', 'branches', 'staff', 'payouts', 'records', 'transactions', 'cashsheet', 'loans', 'monthly-savings', 'settings', 'reports'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -2136,7 +2468,7 @@ function AdminDashboard({
                   : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
               }`}
             >
-              {tab === 'cashsheet' ? 'Cash Sheet' : tab === 'loans' ? 'Loan Management' : tab}
+              {tab === 'cashsheet' ? 'Cash Sheet' : tab === 'loans' ? 'Loan Management' : tab === 'monthly-savings' ? 'Monthly Savings' : tab}
             </button>
           ))}
         </div>
@@ -2440,6 +2772,12 @@ function AdminDashboard({
                         </span>
                       </div>
                     </div>
+                    {previewCreditBalance > 0 && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 text-xs">
+                        <p className="font-black text-blue-800">Credit Balance: ₦{previewCreditBalance.toLocaleString()}</p>
+                        <p className="text-blue-600 font-semibold mt-0.5">This customer has ₦{previewCreditBalance.toLocaleString()} credit from a previous overpayment. Applied automatically on the next contribution — they only need to pay ₦{Math.max(0, cust.daily_amount - previewCreditBalance).toLocaleString()} more to mark the next day.</p>
+                      </div>
+                    )}
                     <Grid32 trackingDays={markedDays[cust.id] || []} dailyAmount={cust.daily_amount} />
                   </div>
                 );
@@ -2527,36 +2865,76 @@ function AdminDashboard({
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-black text-emerald-800 mb-1">Daily Contribution (₦) *</label>
-                <input 
-                  type="number" 
-                  required
-                  min={300}
-                  placeholder="Minimum ₦300"
-                  value={custDailyAmount}
-                  onChange={(e) => setCustDailyAmount(e.target.value)}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-xs font-semibold"
-                />
-                <span className="text-[9px] text-slate-400 block mt-1">Acceptable limit: Minimum ₦300/day</span>
+                <label className="block text-xs font-black text-emerald-800 mb-2">Savings Plan *</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(['daily', 'monthly', 'both'] as const).map(type => (
+                    <button key={type} type="button" onClick={() => { setCustSavingsType(type); setCustTermsAccepted(false); }}
+                      className={`py-2 px-1 rounded-xl text-[10px] font-black uppercase border-2 transition ${custSavingsType === type ? 'bg-emerald-700 border-emerald-700 text-white' : 'bg-white border-emerald-200 text-emerald-800 hover:border-emerald-400'}`}>
+                      {type === 'daily' ? '32-Day' : type === 'monthly' ? 'Monthly' : 'Both'}
+                    </button>
+                  ))}
+                </div>
               </div>
+              {(custSavingsType === 'daily' || custSavingsType === 'both') && (
+              <div>
+                <label className="block text-xs font-black text-emerald-800 mb-1">Daily Contribution (₦) *</label>
+                <input type="number" required={(custSavingsType as string) !== 'monthly'} min={300} placeholder="Minimum ₦300" value={custDailyAmount} onChange={(e) => setCustDailyAmount(e.target.value)} className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-xs font-semibold" />
+                <span className="text-[9px] text-slate-400 block mt-1">Minimum ₦300/day</span>
+              </div>
+              )}
+              {(custSavingsType === 'monthly' || custSavingsType === 'both') && (
+                <div className={`rounded-xl border-2 p-2.5 flex items-start gap-2 cursor-pointer ${custTermsAccepted ? 'border-emerald-500 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}
+                  onClick={() => setShowCustTerms(true)}>
+                  <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 mt-0.5 ${custTermsAccepted ? 'bg-emerald-600 text-white' : 'border-2 border-amber-400'}`}>
+                    {custTermsAccepted && <span className="text-[8px] font-black">✓</span>}
+                  </div>
+                  <p className="text-[10px] font-bold text-slate-700">{custTermsAccepted ? 'Terms accepted ✓' : 'Read & Accept Monthly Savings Terms'}</p>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-black text-emerald-800 mb-1">Assign Home Branch *</label>
-                <select 
-                  required
-                  value={custBranch} 
-                  onChange={(e) => setCustBranch(e.target.value)}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl bg-white text-xs"
-                >
+                <select required value={custBranch} onChange={(e) => setCustBranch(e.target.value)} className="w-full px-3 py-2 border border-emerald-200 rounded-xl bg-white text-xs">
                   <option value="">-- Choose Branch --</option>
-                  {branches.map(b => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
+                  {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
               </div>
-              <button type="submit" className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl text-sm shadow-md font-bold uppercase text-xs">
+              <button type="submit" className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl text-sm shadow-md uppercase text-xs">
                 Register Customer Account
               </button>
             </form>
+
+            {/* Shared Terms Modal for Admin registration */}
+            {showCustTerms && (
+              <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowCustTerms(false)}>
+                <div className="bg-white rounded-3xl max-w-lg w-full max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                  <div className="bg-emerald-800 text-white p-5 rounded-t-3xl">
+                    <h3 className="text-base font-black">Monthly Salary Savings Plan</h3>
+                    <p className="text-emerald-200 text-xs mt-0.5">Terms and Conditions</p>
+                  </div>
+                  <div className="overflow-y-auto p-5 space-y-3 text-xs text-slate-700 flex-1">
+                    {[
+                      { t: '1. Plan Duration', b: 'Runs January to December. Plan begins the month of enrollment and covers all 12 months of that year.' },
+                      { t: '2. Minimum Monthly Contribution', b: 'Minimum ₦5,000 per month. Multiple deposits allowed. Month is complete once ₦5,000 is deposited.' },
+                      { t: '3. Company Profit Month', b: 'One month\'s savings (1 of 12) is retained by HireMercyAJO as a service charge for managing and securing the savings.' },
+                      { t: '4. Withdrawal Policy — Customers', b: 'Customers CANNOT self-request withdrawals. Only Admin/Staff can process withdrawals, and only after December of the plan year.' },
+                      { t: '5. Withdrawal Policy — Admin', b: 'Admin or authorized staff may process withdrawals on the customer\'s behalf at any time.' },
+                      { t: '6. No Loan on Monthly Plan', b: 'Loans are not available on the Monthly Salary Savings Plan. Loans are only on the 32-Day Daily plan.' },
+                      { t: '7. Independent Plan', b: 'Monthly and Daily plans run independently when both are selected. Each has its own balance and rules.' },
+                      { t: '8. Agreement', b: 'Accepting these terms confirms full understanding and agreement to all conditions of the HireMercyAJO Monthly Salary Savings Plan.' },
+                    ].map(item => (
+                      <div key={item.t}>
+                        <p className="font-black text-emerald-800 mb-0.5">{item.t}</p>
+                        <p className="text-slate-600 leading-relaxed">{item.b}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="p-4 border-t border-slate-100 flex gap-2">
+                    <button type="button" onClick={() => setShowCustTerms(false)} className="flex-1 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600">Close</button>
+                    <button type="button" onClick={() => { setCustTermsAccepted(true); setShowCustTerms(false); }} className="flex-1 py-2 bg-emerald-700 text-white rounded-xl text-xs font-black uppercase">I Accept</button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm lg:col-span-2 h-fit">
@@ -3237,7 +3615,7 @@ function AdminDashboard({
                   {payoutRequests.filter(p => p.status === 'Pending').map(h => (
                     <div key={h.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 rounded-2xl border border-amber-100 bg-amber-50/40">
                       <div className="text-xs">
-                        <p className="font-black text-slate-800">{h.customer_name || 'Customer'} <span className="text-slate-400 font-semibold">• {h.month_paid || 'Saved month'}</span></p>
+                        <p className="font-black text-slate-800">{profiles.find(p => p.id === h.customer_id)?.name || h.customer_name || h.customer_id} <span className="text-slate-400 font-semibold">• {h.month_paid || 'Saved month'}</span></p>
                         <p className="text-slate-500 font-semibold">{h.payout_method === 'Cash' ? 'Cash Payment' : `${h.bank_name} • ${h.account_number} (${h.account_name})`}</p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -3289,14 +3667,18 @@ function AdminDashboard({
                         <td colSpan={8} className="p-4 text-center text-slate-400 font-medium">No previous payout logs.</td>
                       </tr>
                     ) : (
-                      payoutRequests.slice().sort((a, b) => a.customer_name?.localeCompare(b.customer_name || '') || 0).map(h => (
+                      payoutRequests.slice().sort((a, b) => {
+                        const nameA = profiles.find(p => p.id === a.customer_id)?.name || a.customer_name || '';
+                        const nameB = profiles.find(p => p.id === b.customer_id)?.name || b.customer_name || '';
+                        return nameA.localeCompare(nameB);
+                      }).map(h => (
                         <tr key={h.id}>
                           <td className="p-3 text-slate-505">
                             {new Date(h.created_at).toLocaleDateString()}
                             <span className="block text-[9px] text-slate-400">{new Date(h.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                           </td>
                           <td className="p-3 font-bold text-slate-700">
-                            {h.customer_name || 'System Customer'}
+                            {profiles.find(p => p.id === h.customer_id)?.name || h.customer_name || h.customer_id}
                           </td>
                           <td className="p-3 font-medium text-slate-700">
                             {h.payout_method === 'Cash' ? (
@@ -3376,7 +3758,7 @@ function AdminDashboard({
                       payoutHistory.slice(0, 25).map(h => (
                         <tr key={h.id}>
                           <td className="p-3 text-slate-505">{new Date(h.approved_at).toLocaleDateString()}</td>
-                          <td className="p-3 font-bold text-slate-700">{h.customer_name || 'Customer'}</td>
+                          <td className="p-3 font-bold text-slate-700">{profiles.find(p => p.id === h.customer_id)?.name || h.customer_name || h.customer_id}</td>
                           <td className="p-3 font-semibold text-emerald-800">{h.month_label}</td>
                           <td className="p-3">₦{h.total_amount.toLocaleString()}</td>
                           <td className="p-3 font-bold text-emerald-800">₦{h.payout_amount.toLocaleString()}</td>
@@ -4091,6 +4473,32 @@ function AdminDashboard({
           </div>
         );
       })()}
+
+      {/* Monthly Savings Management tab */}
+      {activeTab === 'monthly-savings' && (
+        <MonthlySavingsAdminTab
+          monthlySavingsPlans={monthlySavingsPlans}
+          monthlySavingsMonths={monthlySavingsMonths}
+          profiles={profiles}
+          branches={branches}
+          customers={customers}
+          msSelectedCustomer={msSelectedCustomer}
+          setMsSelectedCustomer={setMsSelectedCustomer}
+          msSelectedYear={msSelectedYear}
+          setMsSelectedYear={setMsSelectedYear}
+          msDepositMonth={msDepositMonth}
+          setMsDepositMonth={setMsDepositMonth}
+          msDepositAmount={msDepositAmount}
+          setMsDepositAmount={setMsDepositAmount}
+          msDepositMethod={msDepositMethod}
+          setMsDepositMethod={setMsDepositMethod}
+          msShowDepositModal={msShowDepositModal}
+          setMsShowDepositModal={setMsShowDepositModal}
+          onEnrollMonthlySavings={onEnrollMonthlySavings}
+          onRecordMonthlyDeposit={onRecordMonthlyDeposit}
+        />
+      )}
+
 
       {/* Corporate Profit & Earnings Reporting tab */}
       {activeTab === 'reports' && (
@@ -4861,13 +5269,16 @@ function StaffDashboard({
 
 function CustomerDashboard({ 
   customer, transactions, markedDays, supportDetails, onAddPayoutRequest, payoutRequests, savedMonths, cycleArchives, onAddCustomerPendingTransaction, onUpdateCustomerSettings,
-  activeLoan, myLoans, myLoanRequests, onRequestLoan, profiles
+  activeLoan, myLoans, myLoanRequests, onRequestLoan, profiles,
+  myMonthlySavingsPlan, myMonthlySavingsMonths, creditBalance, onSelfEnrollMonthly
 }: { 
   customer: Profile, transactions: Transaction[], markedDays: MarkedDay[], supportDetails: SupportSettings, payoutRequests: PayoutRequest[], savedMonths: SavedMonth[], cycleArchives: any[], onAddPayoutRequest: (bank: string, acctNum: string, acctName: string, contributionIds: string[]) => void,
   onAddCustomerPendingTransaction: (amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => void, onUpdateCustomerSettings: (phone: string, dailyAmount: number) => void,
-  activeLoan: Loan | null, myLoans: Loan[], myLoanRequests: LoanRequest[], onRequestLoan: (customerId: string) => void, profiles: Profile[]
+  activeLoan: Loan | null, myLoans: Loan[], myLoanRequests: LoanRequest[], onRequestLoan: (customerId: string) => void, profiles: Profile[],
+  myMonthlySavingsPlan: MonthlySavingsPlan | null, myMonthlySavingsMonths: MonthlySavingsMonth[], creditBalance: CustomerCreditBalance | null,
+  onSelfEnrollMonthly: () => void
 }) {
-  const [customerTab, setCustomerTab] = useState<'tracker' | 'transactions' | 'deposit' | 'settings' | 'history'>('tracker');
+  const [customerTab, setCustomerTab] = useState<'tracker' | 'transactions' | 'deposit' | 'settings' | 'history' | 'monthly-savings'>('tracker');
 
   const myTransactions = transactions.filter(t => t.customer_id === customer.id);
   // The customer's ACTIVE, still-running cycle (whatever's currently open in marked_days)
@@ -4889,6 +5300,7 @@ function CustomerDashboard({
   const pendingLoanRequest = myLoanRequests.find(r => r.status === 'Pending Approval');
   const canRequestLoan = customer.is_active && customer.loan_status !== 'Active Loan' && customer.loan_status !== 'Pending Approval';
   const [showLoanRequestModal, setShowLoanRequestModal] = useState(false);
+  const [showMsTermsModal, setShowMsTermsModal] = useState(false);
 
   // Modal / Form state for Payout Request
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
@@ -5035,7 +5447,7 @@ function CustomerDashboard({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {(['tracker', 'history', 'transactions', 'deposit', 'settings'] as const).map(tab => (
+            {(['tracker', 'history', 'transactions', 'deposit', 'settings', ...(myMonthlySavingsPlan ? ['monthly-savings'] : [])] as const).map((tab: any) => (
               <button
                 key={tab}
                 onClick={() => setCustomerTab(tab)}
@@ -5050,6 +5462,7 @@ function CustomerDashboard({
                 {tab === 'transactions' && 'Statement History'}
                 {tab === 'deposit' && 'Deposit Funds'}
                 {tab === 'settings' && 'Plan Settings'}
+                {tab === 'monthly-savings' && '📅 Monthly Savings'}
               </button>
             ))}
           </div>
@@ -5130,6 +5543,16 @@ function CustomerDashboard({
               {!activeLoan && justClearedLoan && (
                 <div className="pt-4 border-t border-emerald-50">
                   <p className="text-sm font-black text-green-600">Loan Repayment Complete</p>
+                </div>
+              )}
+
+              {creditBalance && creditBalance.credit_amount > 0 && (
+                <div className="pt-4 border-t border-emerald-50">
+                  <span className="text-slate-400 block font-bold text-[10px] uppercase">Credit Balance</span>
+                  <p className="text-xl font-black mt-0.5 text-blue-600">₦{creditBalance.credit_amount.toLocaleString()}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5 font-semibold">
+                    You have ₦{creditBalance.credit_amount.toLocaleString()} credit from an earlier overpayment. This will be applied to your next contribution automatically — you only need to pay ₦{Math.max(0, customer.daily_amount - creditBalance.credit_amount).toLocaleString()} more to mark the next day.
+                  </p>
                 </div>
               )}
 
@@ -5230,6 +5653,53 @@ function CustomerDashboard({
                     Submit Loan Request
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* Monthly Salary Savings Plan */}
+            {myMonthlySavingsPlan ? (
+              <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider">Monthly Savings Plan</h3>
+                  <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">{myMonthlySavingsPlan.year}</span>
+                </div>
+                <div className="flex gap-4 text-xs mb-3 font-semibold text-slate-600">
+                  <span>Total Saved: <span className="font-black text-emerald-700">₦{myMonthlySavingsPlan.total_saved.toLocaleString()}</span></span>
+                  <span>Completed: <span className="font-black">{myMonthlySavingsMonths.filter(m => m.plan_id === myMonthlySavingsPlan.id && m.is_complete).length}/12</span></span>
+                </div>
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((name, idx) => {
+                    const monthNum = idx + 1;
+                    const md = myMonthlySavingsMonths.find(m => m.plan_id === myMonthlySavingsPlan!.id && m.month_number === monthNum);
+                    const isCurrentMonth = monthNum === new Date().getMonth() + 1;
+                    return (
+                      <div key={monthNum} className={`rounded-xl p-2 text-center border ${
+                        md?.is_complete ? 'bg-emerald-600 border-emerald-600 text-white' :
+                        md && md.total_deposited > 0 ? 'bg-amber-50 border-amber-300' :
+                        isCurrentMonth ? 'bg-blue-50 border-blue-200' :
+                        'bg-slate-50 border-slate-100'
+                      }`}>
+                        <p className={`text-[10px] font-black ${md?.is_complete ? 'text-white' : 'text-slate-600'}`}>{name}</p>
+                        {md ? (
+                          <p className={`text-[10px] font-bold mt-0.5 ${md.is_complete ? 'text-emerald-100' : 'text-amber-700'}`}>
+                            {md.is_complete ? '✓' : `₦${md.total_deposited.toLocaleString()}`}
+                          </p>
+                        ) : (
+                          <p className="text-[10px] text-slate-300 mt-0.5">—</p>
+                        )}
+                        {md && !md.is_complete && md.total_deposited > 0 && (
+                          <p className="text-[9px] text-amber-600 font-bold">₦{(5000 - md.total_deposited).toLocaleString()} left</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-3 font-semibold">Minimum ₦5,000 per month. Green = complete. Contact your agent to make a deposit.</p>
+              </div>
+            ) : (
+              <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                <h3 className="text-md font-black text-slate-400 uppercase tracking-wider mb-1">Monthly Savings Plan</h3>
+                <p className="text-xs text-slate-400 font-semibold">You are not currently enrolled in the Monthly Salary Savings Plan. Contact your agent to get started.</p>
               </div>
             )}
 
@@ -5521,6 +5991,26 @@ function CustomerDashboard({
                 Update Settings & Targets
               </button>
             </form>
+
+            {/* Monthly Savings self-enroll */}
+            {!myMonthlySavingsPlan && (customer.savings_type === 'daily' || !customer.savings_type) && (
+              <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 space-y-2">
+                <p className="text-xs font-black text-blue-800">Monthly Salary Savings Plan</p>
+                <p className="text-[10px] text-blue-600 font-semibold leading-relaxed">
+                  You are currently on the 32-Day Daily plan. You can also enroll in the Monthly Salary Savings Plan (₦5,000 minimum per month, Jan–Dec). Both plans run independently.
+                </p>
+                <button type="button" onClick={() => setShowMsTermsModal(true)}
+                  className="w-full bg-blue-700 hover:bg-blue-800 text-white font-black py-2 rounded-xl text-xs uppercase">
+                  Enroll in Monthly Savings Plan
+                </button>
+              </div>
+            )}
+            {myMonthlySavingsPlan && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3">
+                <p className="text-xs font-black text-emerald-800">✓ Enrolled in Monthly Savings Plan ({myMonthlySavingsPlan.year})</p>
+                <p className="text-[10px] text-emerald-600 font-semibold mt-0.5">View your Jan–Dec progress in the Monthly Savings tab above.</p>
+              </div>
+            )}
           </div>
 
           {/* Secure change password widget for Customers */}
@@ -5551,6 +6041,123 @@ function CustomerDashboard({
           </div>
         </div>
       )}
+
+      {/* Monthly Savings Dashboard Tab */}
+      {customerTab === 'monthly-savings' && myMonthlySavingsPlan && (
+        <div className="space-y-6 animate-fade-in">
+          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider">My Monthly Savings</h3>
+                <p className="text-xs text-slate-500 mt-0.5 font-semibold">{myMonthlySavingsPlan.year} Plan • Minimum ₦5,000/month</p>
+              </div>
+              <div className="text-right">
+                <p className="text-2xl font-black text-emerald-700">₦{Number(myMonthlySavingsPlan.total_saved).toLocaleString()}</p>
+                <p className="text-[10px] text-slate-400 font-bold">Total saved this year</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 mb-5">
+              {[
+                { label: 'Months Complete', value: myMonthlySavingsMonths.filter(m => m.plan_id === myMonthlySavingsPlan!.id && m.is_complete).length + '/12' },
+                { label: 'Plan Status', value: myMonthlySavingsPlan.status },
+                { label: 'Withdrawal', value: 'December only' }
+              ].map(c => (
+                <div key={c.label} className="bg-emerald-50 rounded-2xl p-3 text-center">
+                  <p className="text-[10px] font-black uppercase text-emerald-700">{c.label}</p>
+                  <p className="text-sm font-black text-emerald-955 mt-1">{c.value}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Jan-Dec grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {['January','February','March','April','May','June','July','August','September','October','November','December'].map((name, idx) => {
+                const monthNum = idx + 1;
+                const md = myMonthlySavingsMonths.find(m => m.plan_id === myMonthlySavingsPlan!.id && m.month_number === monthNum);
+                const isCurrentMonth = monthNum === new Date().getMonth() + 1;
+                const isPast = monthNum < new Date().getMonth() + 1;
+                return (
+                  <div key={monthNum} className={`rounded-2xl p-3 border-2 ${
+                    md?.is_complete ? 'bg-emerald-600 border-emerald-600' :
+                    md && md.total_deposited > 0 ? 'bg-amber-50 border-amber-300' :
+                    isCurrentMonth ? 'bg-blue-50 border-blue-300' :
+                    isPast ? 'bg-red-50 border-red-200' :
+                    'bg-slate-50 border-slate-100'
+                  }`}>
+                    <p className={`text-xs font-black ${md?.is_complete ? 'text-white' : 'text-slate-700'}`}>{name}</p>
+                    {md?.is_complete ? (
+                      <p className="text-lg font-black text-white mt-1">✓</p>
+                    ) : md && md.total_deposited > 0 ? (
+                      <>
+                        <p className="text-xs font-bold text-amber-800 mt-1">₦{md.total_deposited.toLocaleString()}</p>
+                        <p className="text-[9px] text-amber-600 font-bold">₦{(5000 - md.total_deposited).toLocaleString()} left</p>
+                      </>
+                    ) : isCurrentMonth ? (
+                      <p className="text-[10px] text-blue-600 font-bold mt-1">Current month</p>
+                    ) : isPast ? (
+                      <p className="text-[10px] text-red-500 font-bold mt-1">Missed</p>
+                    ) : (
+                      <p className="text-[10px] text-slate-300 font-bold mt-1">Upcoming</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+            <p className="text-xs font-black text-amber-800 mb-1">Important Reminders</p>
+            <ul className="text-[11px] text-amber-700 font-semibold space-y-1 list-disc list-inside">
+              <li>Minimum ₦5,000 deposit required per month to mark it complete.</li>
+              <li>Withdrawals are processed by Admin only — you cannot self-withdraw from this plan.</li>
+              <li>Savings are only available for withdrawal after December of this year.</li>
+              <li>One month's savings is retained as a company service charge.</li>
+              <li>Contact your field agent to make a deposit for any month.</li>
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {/* Monthly Savings Terms Modal (self-enroll) */}
+      {showMsTermsModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowMsTermsModal(false)}>
+          <div className="bg-white rounded-3xl max-w-lg w-full max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="bg-emerald-800 text-white p-5 rounded-t-3xl">
+              <h3 className="text-base font-black">Monthly Salary Savings Plan</h3>
+              <p className="text-emerald-200 text-xs mt-0.5">Terms and Conditions — Please read carefully before enrolling</p>
+            </div>
+            <div className="overflow-y-auto p-5 space-y-3 text-xs text-slate-700 flex-1">
+              {[
+                { t: '1. Plan Duration', b: 'The Monthly Salary Savings Plan runs for a full calendar year (January to December). Your plan begins in the month you enroll and covers all 12 months of that year.' },
+                { t: '2. Minimum Monthly Contribution', b: 'You are required to save a minimum of ₦5,000 per month. Deposits can be made in multiple installments. A month is complete once ₦5,000 has been deposited.' },
+                { t: '3. Company Profit Month', b: 'One month&apos;s savings (1 out of 12) is retained by HireMercyAJO as a service charge for managing and securing your savings throughout the year.' },
+                { t: '4. Withdrawal Policy — Customers', b: 'You CANNOT make self-service withdrawal requests from this plan. Withdrawals are processed exclusively by Admin or authorized staff, and only after December of the plan year.' },
+                { t: '5. Withdrawal Policy — Admin', b: 'The Admin or authorized staff may process withdrawals on your behalf at any time during the year where necessary.' },
+                { t: '6. No Loan on This Plan', b: 'The Monthly Salary Savings Plan does not support loan applications. Loans are only available on the 32-Day Daily Savings Plan.' },
+                { t: '7. Independent Plan', b: 'This plan runs completely separately from your 32-Day Daily Savings Plan. Each has its own balance, deposits, and rules.' },
+                { t: '8. Agreement', b: 'By accepting these terms, you confirm that you have read, understood, and agreed to all conditions of the HireMercyAJO Monthly Salary Savings Plan.' },
+              ].map(item => (
+                <div key={item.t}>
+                  <p className="font-black text-emerald-800 mb-0.5">{item.t}</p>
+                  <p className="text-slate-600 leading-relaxed">{item.b}</p>
+                </div>
+              ))}
+            </div>
+            <div className="p-4 border-t border-slate-100 flex gap-2">
+              <button type="button" onClick={() => setShowMsTermsModal(false)}
+                className="flex-1 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50">
+                Cancel
+              </button>
+              <button type="button" onClick={() => { setShowMsTermsModal(false); onSelfEnrollMonthly(); }}
+                className="flex-1 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black uppercase">
+                I Accept — Enroll Me
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* Withdrawal Form Modal */}
       {showWithdrawModal && (
@@ -5682,6 +6289,9 @@ export default function App() {
   const [loanRequests, setLoanRequests] = useState<LoanRequest[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [loanHistory, setLoanHistory] = useState<any[]>([]);
+  const [monthlySavingsPlans, setMonthlySavingsPlans] = useState<MonthlySavingsPlan[]>([]);
+  const [monthlySavingsMonths, setMonthlySavingsMonths] = useState<MonthlySavingsMonth[]>([]);
+  const [customerCreditBalance, setCustomerCreditBalance] = useState<CustomerCreditBalance | null>(null);
   const [supportDetails, setSupportDetails] = useState<SupportSettings>({
     id: 1,
     support_phone: '+234 803 461 2345',
@@ -5759,6 +6369,8 @@ export default function App() {
         await fetchLoans(latestUser);
         await fetchLoanRequests(latestUser);
         await fetchLoanHistory(latestUser);
+        await fetchMonthlySavings(latestUser);
+        await fetchCreditBalance(latestUser);
       } catch (err) {
         console.error("Background sync failed:", err);
       }
@@ -5767,7 +6379,7 @@ export default function App() {
     // 1. Set up live Realtime postgres listeners for tables
     const channel = supabase.channel('schema-db-changes');
 
-    const tableNames = ['transactions', 'marked_days', 'payout_requests', 'profiles', 'notifications', 'contributions', 'payout_history', 'cycle_archives', 'loans', 'loan_requests', 'loan_repayments', 'loan_history'] as const;
+    const tableNames = ['transactions', 'marked_days', 'payout_requests', 'profiles', 'notifications', 'contributions', 'payout_history', 'cycle_archives', 'loans', 'loan_requests', 'loan_repayments', 'loan_history', 'monthly_savings_plans', 'monthly_savings_months', 'customer_credit_balances'] as const;
     const events = ['INSERT', 'UPDATE', 'DELETE'] as const;
 
     tableNames.forEach((table) => {
@@ -6022,7 +6634,9 @@ export default function App() {
         fetchCycleArchives(profile),
         fetchLoans(profile),
         fetchLoanRequests(profile),
-        fetchLoanHistory(profile)
+        fetchLoanHistory(profile),
+        fetchMonthlySavings(profile),
+        fetchCreditBalance(profile)
       ]);
     }
     setIsLoading(false);
@@ -6151,14 +6765,10 @@ export default function App() {
 
     const { data } = await query;
     if (data) {
-      const formatted: PayoutRequest[] = data.map(item => {
-        const matchingProfile = profiles.find(p => p.id === item.customer_id);
-        return {
-          ...item,
-          customer_name: matchingProfile?.name || item.customer_name || item.customer_id
-        };
-      });
-      setPayoutRequests(formatted);
+      // Store raw data - customer names are resolved at display time from
+      // live profiles state, avoiding the race condition where profiles
+      // hasn't loaded yet when this fetch completes on initial page load.
+      setPayoutRequests(data as PayoutRequest[]);
     }
   };
 
@@ -6181,12 +6791,8 @@ export default function App() {
     if (data) {
       const grouped: Record<string, SavedMonth[]> = {};
       data.forEach((item: any) => {
-        const matchingProfile = profiles.find(p => p.id === item.customer_id);
         if (!grouped[item.customer_id]) grouped[item.customer_id] = [];
-        grouped[item.customer_id].push({
-          ...item,
-          customer_name: matchingProfile ? matchingProfile.name : 'Customer'
-        });
+        grouped[item.customer_id].push(item);
       });
       setSavedMonths(grouped);
     }
@@ -6208,11 +6814,8 @@ export default function App() {
     }
 
     if (data) {
-      const formatted: PayoutHistoryRecord[] = data.map((item: any) => {
-        const matchingProfile = profiles.find(p => p.id === item.customer_id);
-        return { ...item, customer_name: matchingProfile?.name || item.customer_name || item.customer_id };
-      });
-      setPayoutHistory(formatted);
+      // Store raw data - names resolved at display time from live profiles state
+      setPayoutHistory(data as PayoutHistoryRecord[]);
     }
   };
 
@@ -6282,6 +6885,28 @@ export default function App() {
       return;
     }
     if (data) setLoanHistory(data);
+  };
+
+  const fetchMonthlySavings = async (userProfile: Profile) => {
+    let plansQuery = supabase.from('monthly_savings_plans').select('*').order('year', { ascending: false });
+    let monthsQuery = supabase.from('monthly_savings_months').select('*');
+    if (userProfile.role === 'Customer') {
+      plansQuery = plansQuery.eq('customer_id', userProfile.id);
+      monthsQuery = monthsQuery.eq('customer_id', userProfile.id);
+    }
+    const [{ data: plansData }, { data: monthsData }] = await Promise.all([plansQuery, monthsQuery]);
+    if (plansData) setMonthlySavingsPlans(plansData as MonthlySavingsPlan[]);
+    if (monthsData) setMonthlySavingsMonths(monthsData as MonthlySavingsMonth[]);
+  };
+
+  const fetchCreditBalance = async (userProfile: Profile) => {
+    if (userProfile.role !== 'Customer') return;
+    const { data } = await supabase
+      .from('customer_credit_balances')
+      .select('*')
+      .eq('customer_id', userProfile.id)
+      .maybeSingle();
+    setCustomerCreditBalance(data as CustomerCreditBalance || null);
   };
 
   // Resets a customer's password directly to '123456' via a server-side
@@ -6495,7 +7120,9 @@ export default function App() {
           daily_amount: Number(data.daily_amount),
           branch_id: data.branch_id,
           is_active: true,
-          email: data.email || fallbackEmail
+          email: data.email || fallbackEmail,
+          savings_type: data.savings_type || 'daily',
+          monthly_savings_terms_accepted: data.monthly_savings_terms_accepted || false
         }
       }
     });
@@ -6630,6 +7257,7 @@ export default function App() {
     await fetchCycleArchives(userProfile);
     await fetchLoans(userProfile);
     await fetchLoanRequests(userProfile);
+    await fetchCreditBalance(userProfile);
   };
 
   const createTransaction = async (customerId: string, amount: number, paymentMethod: 'Cash' | 'Bank Transfer' | 'Mobile Money', staffId: string) => {
@@ -7026,6 +7654,111 @@ export default function App() {
     } else {
       triggerToast(is_active ? 'Customer activated.' : 'Customer suspended.', 'success');
       fetchGlobalConfiguration();
+    }
+  };
+
+  // Enroll a customer in the monthly salary savings plan for the given year.
+  // Creates the plan row; months are created on-demand by the deposit trigger.
+  const handleEnrollMonthlySavings = async (customerId: string, year: number) => {
+    if (!currentUser) return;
+    setIsLoading(true);
+    const existing = monthlySavingsPlans.find(p => p.customer_id === customerId && p.year === year);
+    if (existing) {
+      triggerToast('This customer is already enrolled for ' + year + '.', 'error');
+      setIsLoading(false);
+      return;
+    }
+    const { error } = await supabase.from('monthly_savings_plans').insert([{
+      customer_id: customerId,
+      year,
+      created_by: currentUser.id
+    }]);
+    setIsLoading(false);
+    if (error) {
+      triggerToast('Enrollment failed: ' + error.message, 'error');
+    } else {
+      triggerToast('Customer enrolled in ' + year + ' Monthly Savings Plan.', 'success');
+      await fetchMonthlySavings(currentUser);
+    }
+  };
+
+  // Customer self-enrolls in monthly savings. Updates their profile
+  // savings_type and terms acceptance, then creates the plan for this year.
+  const handleCustomerSelfEnrollMonthly = async () => {
+    if (!currentUser) return;
+    setIsLoading(true);
+    const year = new Date().getFullYear();
+    const existing = monthlySavingsPlans.find(p => p.customer_id === currentUser.id && p.year === year);
+
+    // Update profile savings_type and record terms acceptance
+    const newType = currentUser.savings_type === 'daily' ? 'both' : currentUser.savings_type;
+    const { error: profileError } = await supabase.from('profiles').update({
+      savings_type: newType,
+      monthly_savings_terms_accepted: true,
+      monthly_savings_terms_accepted_at: new Date().toISOString()
+    }).eq('id', currentUser.id);
+
+    if (profileError) {
+      triggerToast('Enrollment failed: ' + profileError.message, 'error');
+      setIsLoading(false);
+      return;
+    }
+
+    if (!existing) {
+      const { error: planError } = await supabase.from('monthly_savings_plans').insert([{
+        customer_id: currentUser.id,
+        year,
+        created_by: currentUser.id
+      }]);
+      if (planError) {
+        triggerToast('Plan creation failed: ' + planError.message, 'error');
+        setIsLoading(false);
+        return;
+      }
+    }
+
+    setIsLoading(false);
+    triggerToast('You are now enrolled in the ' + year + ' Monthly Savings Plan!', 'success');
+    await fetchMonthlySavings(currentUser);
+    await fetchGlobalConfiguration();
+  };
+
+  // Record a monthly savings deposit. The DB trigger handles updating the
+  // month total and marking the month complete when ≥ ₦5,000 is reached.
+  const handleRecordMonthlyDeposit = async (
+    customerId: string, year: number, monthNumber: number,
+    amount: number, paymentMethod: 'Cash' | 'Bank Transfer' | 'Mobile Money'
+  ) => {
+    if (!currentUser) return;
+    if (amount < 1) { triggerToast('Amount must be at least ₦1.', 'error'); return; }
+    setIsLoading(true);
+    let plan = monthlySavingsPlans.find(p => p.customer_id === customerId && p.year === year);
+    if (!plan) {
+      const { data: newPlan, error: planError } = await supabase
+        .from('monthly_savings_plans').insert([{ customer_id: customerId, year, created_by: currentUser.id }])
+        .select().single();
+      if (planError || !newPlan) {
+        triggerToast('Failed to create savings plan: ' + planError?.message, 'error');
+        setIsLoading(false);
+        return;
+      }
+      plan = newPlan as MonthlySavingsPlan;
+    }
+    const { error } = await supabase.from('monthly_savings_deposits').insert([{
+      plan_id: plan.id,
+      customer_id: customerId,
+      month_number: monthNumber,
+      amount,
+      payment_method: paymentMethod,
+      deposited_by: currentUser.id
+    }]);
+    setIsLoading(false);
+    if (error) {
+      triggerToast('Deposit failed: ' + error.message, 'error');
+    } else {
+      const monthName = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][monthNumber - 1];
+      triggerToast('₦' + amount.toLocaleString() + ' recorded for ' + monthName + ' ' + year + '.', 'success');
+      await fetchMonthlySavings(currentUser);
     }
   };
 
@@ -7854,6 +8587,10 @@ export default function App() {
                 onApproveLoanRequest={handleApproveLoanRequest}
                 onRejectLoanRequest={handleRejectLoanRequest}
                 onAssignLoan={handleAssignLoan}
+                monthlySavingsPlans={monthlySavingsPlans}
+                monthlySavingsMonths={monthlySavingsMonths}
+                onEnrollMonthlySavings={handleEnrollMonthlySavings}
+                onRecordMonthlyDeposit={handleRecordMonthlyDeposit}
                 onTriggerManualPayout={handleTriggerManualPayout}
                 onApproveTransaction={handleApproveTransaction}
                 onApproveWithdrawal={handleApproveWithdrawal}
@@ -7890,6 +8627,10 @@ export default function App() {
                 myLoanRequests={loanRequests.filter(r => r.customer_id === currentUser.id)}
                 onRequestLoan={handleRequestLoan}
                 profiles={profiles}
+                myMonthlySavingsPlan={monthlySavingsPlans.find(p => p.customer_id === currentUser.id && p.year === new Date().getFullYear()) || null}
+                myMonthlySavingsMonths={monthlySavingsMonths.filter(m => m.customer_id === currentUser.id)}
+                creditBalance={customerCreditBalance}
+                onSelfEnrollMonthly={handleCustomerSelfEnrollMonthly}
               />
             )}
           </div>
