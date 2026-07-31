@@ -229,7 +229,18 @@ const getNigerianMonthName = () => {
 // Unique key (YYYY-MM) identifying the calendar month a 32-day cycle was frozen/saved in
 const getCurrentPeriodKey = () => new Date().toISOString().slice(0, 7);
 
-// --- FEATURE 1: 32-Day Tracking History (Running / Uncollected / Collected) ---
+// Mirrors the DB function next_period_key(text) — advances a 'YYYY-MM'
+// string by exactly one calendar month. Used client-side to calculate
+// the next cycle label without a round-trip to the DB.
+const nextPeriodKey = (periodKey: string): string => {
+  const [year, month] = periodKey.split('-').map(Number);
+  if (!year || !month) return getCurrentPeriodKey();
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const nextYear = month === 12 ? year + 1 : year;
+  return `${nextYear}-${String(nextMonth).padStart(2, '0')}`;
+};
+
+
 export interface TrackingHistoryEntry {
   key: string;
   period_key: string;
@@ -2762,7 +2773,13 @@ function AdminDashboard({
                           Balance/Amount: ₦{((markedDays[cust.id] || []).reduce((s, d) => s + d.amount, 0)).toLocaleString()}
                         </p>
                         <p className="text-[11px] text-slate-550 font-bold">
-                          Month: {periodLabelFromKey((markedDays[cust.id]?.[0] as any)?.period_key || getCurrentPeriodKey())}
+                          Month: {(() => {
+                            const days = markedDays[cust.id] || [];
+                            if (days.length > 0) return periodLabelFromKey((days[0] as any)?.period_key);
+                            const archived = (savedMonths[cust.id] || []).map(m => m.period_key).filter(Boolean).sort().reverse();
+                            if (archived.length > 0) return periodLabelFromKey(nextPeriodKey(archived[0]));
+                            return periodLabelFromKey(getCurrentPeriodKey());
+                          })()}
                         </p>
                       </div>
                       <div className="text-right">
@@ -5281,6 +5298,27 @@ function CustomerDashboard({
   const [customerTab, setCustomerTab] = useState<'tracker' | 'transactions' | 'deposit' | 'settings' | 'history' | 'monthly-savings'>('tracker');
 
   const myTransactions = transactions.filter(t => t.customer_id === customer.id);
+
+  // Determine the customer's current active contribution period correctly:
+  // 1. If they have marked_days rows → use that period_key (mid-cycle).
+  // 2. If marked_days is empty (just completed Day 32 and freeze_period ran) →
+  //    derive the NEXT period from the most recently archived savedMonths,
+  //    so the display advances automatically to August after July completes.
+  // 3. Fallback to real calendar month for brand-new customers.
+  const activePeriodKey: string = (() => {
+    if (markedDays.length > 0) {
+      const k = (markedDays[0] as any)?.period_key;
+      if (k) return k;
+    }
+    const archivedKeys = savedMonths
+      .map(m => m.period_key)
+      .filter(Boolean)
+      .sort()
+      .reverse();
+    if (archivedKeys.length > 0) return nextPeriodKey(archivedKeys[0]);
+    return getCurrentPeriodKey();
+  })();
+
   // The customer's ACTIVE, still-running cycle (whatever's currently open in marked_days)
   const totalActiveCycle = markedDays.reduce((sum, item) => sum + item.amount, 0);
   // Frozen 32-day (or expired) cycles that have been saved but not yet paid out -
@@ -5722,12 +5760,22 @@ function CustomerDashboard({
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider font-bold">My 32-Day Contribution Grid</h3>
                   <span className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-[11px] font-black text-emerald-800">
-                    {periodLabelFromKey((markedDays[0] as any)?.period_key) !== 'Unknown period'
-                      ? periodLabelFromKey((markedDays[0] as any)?.period_key)
-                      : periodLabelFromKey(getCurrentPeriodKey())}
+                    {periodLabelFromKey(activePeriodKey)}
                   </span>
                 </div>
-                <p className="text-xs text-slate-505 mt-0.5 font-bold">Stars indicate approved/marked allocations corresponding to confirmed payments.</p>
+                {markedDays.length === 0 && savedMonths.length > 0 ? (
+                  <div className="mt-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
+                    <p className="text-xs font-black text-emerald-800">
+                      ✓ Previous cycle complete — {periodLabelFromKey(activePeriodKey)} is ready
+                    </p>
+                    <p className="text-[11px] text-emerald-600 font-semibold mt-0.5">
+                      Your next contribution will automatically start Day 1 of {periodLabelFromKey(activePeriodKey)}.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-505 mt-0.5 font-bold">Stars indicate approved/marked allocations corresponding to confirmed payments.</p>
+                )}
+                <p className="text-xs font-bold text-slate-500 mt-1">{markedDays.length} / 32 Days</p>
               </div>
               <Grid32 trackingDays={markedDays} dailyAmount={customer.daily_amount} />
             </div>
