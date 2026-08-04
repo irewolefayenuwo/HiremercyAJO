@@ -700,6 +700,17 @@ const sumCurrencyValues = (values: number[]) => {
   return cents / 100;
 };
 
+// The company fee deducted from a payout must reflect the rate that was
+// ACTUALLY in effect when that specific month was saved - never the
+// customer's current daily_amount. If a customer's daily contribution is
+// changed later, already-saved/past months must be completely unaffected;
+// only the presently-running cycle should ever use the current rate. Since
+// each saved month's total_amount/total_days already reflects whatever was
+// really collected at the time, dividing them back out gives the exact
+// historical per-day rate for that month without needing any new column.
+const monthHistoricalDailyRate = (m: { total_amount: number; total_days: number }) =>
+  m.total_days > 0 ? Math.round(m.total_amount / m.total_days) : 0;
+
 // Single source of truth for the loan formula, per business rule:
 // Maximum Loan = Daily Contribution x 30, Repayment = Daily Contribution x 32.
 // Used identically by both the customer Request Loan flow and the Admin
@@ -1613,6 +1624,8 @@ function AdminDashboard({
   const [loanHistoryBranchFilter, setLoanHistoryBranchFilter] = useState('');
   const [loanHistoryStatusFilter, setLoanHistoryStatusFilter] = useState('');
   const [expandedOutstandingCustomerId, setExpandedOutstandingCustomerId] = useState<string | null>(null);
+  const [outstandingLedgerSearch, setOutstandingLedgerSearch] = useState('');
+  const [expandedSettlementMonth, setExpandedSettlementMonth] = useState<string | null>(null);
   const [previewCreditBalance, setPreviewCreditBalance] = useState<number>(0);
   const [msSelectedCustomer, setMsSelectedCustomer] = useState('');
   const [msSelectedYear, setMsSelectedYear] = useState(new Date().getFullYear());
@@ -1941,6 +1954,12 @@ function AdminDashboard({
       .filter(row => row.uncollectedMonths.length > 0)
       .sort((a, b) => b.totalOutstanding - a.totalOutstanding);
   }, [savedMonths, profiles]);
+
+  const filteredOutstandingPayoutCustomers = useMemo(() => {
+    const term = outstandingLedgerSearch.trim().toLowerCase();
+    if (!term) return outstandingPayoutCustomers;
+    return outstandingPayoutCustomers.filter(row => row.customerName.toLowerCase().includes(term));
+  }, [outstandingPayoutCustomers, outstandingLedgerSearch]);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [depositAmount, setDepositAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Bank Transfer' | 'Mobile Money'>('Cash');
@@ -2168,9 +2187,34 @@ function AdminDashboard({
 
     const completedPayouts = payoutRequests.filter(p => p.status === 'Successful');
 
+    // Archive completed payouts by month, most recent month first. Grouped
+    // by the settled month label already shown per-row (falls back to the
+    // request's created_at month if month_paid is missing), so an admin can
+    // collapse the log down to just the months they care about.
+    const groupKey = (p: PayoutRequest) =>
+      p.month_paid || new Date(p.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const byMonth = new Map<string, PayoutRequest[]>();
+    completedPayouts.forEach(p => {
+      const key = groupKey(p);
+      if (!byMonth.has(key)) byMonth.set(key, []);
+      byMonth.get(key)!.push(p);
+    });
+    const completedPayoutsByMonth = Array.from(byMonth.entries())
+      .map(([month, records]) => ({
+        month,
+        records,
+        totalPayout: sumCurrencyValues(records.map(r => r.payout_amount))
+      }))
+      .sort((a, b) => {
+        const aDate = a.records[0] ? new Date(a.records[0].created_at).getTime() : 0;
+        const bDate = b.records[0] ? new Date(b.records[0].created_at).getTime() : 0;
+        return bDate - aDate;
+      });
+
     return {
       yetToWithdraw: activeSaversYetToWithdraw,
-      completedPayouts
+      completedPayouts,
+      completedPayoutsByMonth
     };
   }, [customers, markedDays, payoutRequests]);
 
@@ -2330,12 +2374,19 @@ function AdminDashboard({
     const totalAmount = isPartialPayout
       ? sumCurrencyValues(runningDays.map(d => d.amount))
       : sumCurrencyValues(uncollectedMonths.map(m => m.total_amount));
-    const feeCount = isPartialPayout ? 1 : uncollectedMonths.length;
-    const payoutAmount = Math.max(0, totalAmount - feeCount * target.daily_amount);
+    // Partial payout (current running cycle, not yet saved) uses the
+    // customer's current daily_amount, since that cycle is actively using
+    // it right now. Completed/saved months use their OWN historical rate,
+    // unaffected by any later daily_amount change.
+    const totalFee = isPartialPayout
+      ? target.daily_amount
+      : sumCurrencyValues(uncollectedMonths.map(monthHistoricalDailyRate));
+    const payoutAmount = Math.max(0, totalAmount - totalFee);
     return {
       uncollectedMonths,
       totalDays: isPartialPayout ? runningDays.length : uncollectedMonths.reduce((s, m) => s + m.total_days, 0),
       totalAmount,
+      totalFee,
       payoutAmount,
       target,
       isPartialPayout
@@ -3465,11 +3516,23 @@ function AdminDashboard({
           <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
             <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider mb-1 font-bold">Outstanding Payout Ledger</h3>
             <p className="text-xs text-slate-505 mb-4 font-medium">Customers with at least one fully-frozen, uncollected 32-day cycle. Click a name to see exactly which months.</p>
-            {outstandingPayoutCustomers.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-emerald-200 p-4 text-center text-slate-400">No customers currently have an uncollected saved month.</div>
+            <div className="relative mb-4">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                value={outstandingLedgerSearch}
+                onChange={(e) => setOutstandingLedgerSearch(e.target.value)}
+                placeholder="Search by customer name..."
+                className="w-full pl-9 pr-3 py-2.5 border border-emerald-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              />
+            </div>
+            {filteredOutstandingPayoutCustomers.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-emerald-200 p-4 text-center text-slate-400">
+                {outstandingLedgerSearch.trim() ? 'No customers match that search.' : 'No customers currently have an uncollected saved month.'}
+              </div>
             ) : (
               <div className="space-y-2">
-                {outstandingPayoutCustomers.map(row => {
+                {filteredOutstandingPayoutCustomers.map(row => {
                   const isOpen = expandedOutstandingCustomerId === row.customerId;
                   return (
                     <div key={row.customerId} className="rounded-2xl border border-slate-100 overflow-hidden">
@@ -3538,7 +3601,7 @@ function AdminDashboard({
                       <p>Uncollected Months: {manualPayoutCalculation.uncollectedMonths.length} ({manualPayoutCalculation.totalDays} days total)</p>
                     )}
                     <p>Saved Accumulation: ₦{manualPayoutCalculation.totalAmount.toLocaleString()}</p>
-                    <p>Company Fee ({manualPayoutCalculation.isPartialPayout ? 1 : manualPayoutCalculation.uncollectedMonths.length} × 1 Day): - ₦{((manualPayoutCalculation.isPartialPayout ? 1 : manualPayoutCalculation.uncollectedMonths.length) * manualPayoutCalculation.target.daily_amount).toLocaleString()}</p>
+                    <p>Company Fee ({manualPayoutCalculation.isPartialPayout ? 1 : manualPayoutCalculation.uncollectedMonths.length} × 1 Day, at each month's own saved rate): - ₦{manualPayoutCalculation.totalFee.toLocaleString()}</p>
                     <p className="text-emerald-800 border-t border-amber-200 pt-1 font-black">
                       Expected Payout: ₦{manualPayoutCalculation.payoutAmount.toLocaleString()}
                     </p>
@@ -4082,34 +4145,57 @@ function AdminDashboard({
                 <CheckCircle2 className="w-4 h-4" />
                 Settled Savers (Paid Out Logs)
               </h4>
-              <div className="overflow-x-auto border border-emerald-100 rounded-2xl font-semibold">
-                <table className="w-full text-left text-[11px] border-collapse">
-                  <thead>
-                    <tr className="bg-emerald-50 text-emerald-900 font-extrabold border-b border-emerald-200">
-                      <th className="p-3">Customer</th>
-                      <th className="p-3">Cleared Period</th>
-                      <th className="p-3">Cleared Sum</th>
-                      <th className="p-3 font-semibold text-emerald-800">Payout Issued</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-emerald-50 bg-white text-slate-800">
-                    {recordSheet.completedPayouts.length === 0 ? (
-                      <tr>
-                        <td colSpan={4} className="p-3 text-center text-slate-400 font-medium">No previous payouts completed.</td>
-                      </tr>
-                    ) : (
-                      recordSheet.completedPayouts.map(p => (
-                        <tr key={p.id}>
-                          <td className="p-3 font-bold">{p.customer_name}</td>
-                          <td className="p-3 font-extrabold text-amber-800 text-[10px]">{p.month_paid || 'N/A'}</td>
-                          <td className="p-3 font-medium">₦{p.amount.toLocaleString()}</td>
-                          <td className="p-3 font-bold text-emerald-800">₦{p.payout_amount.toLocaleString()}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              {recordSheet.completedPayoutsByMonth.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-emerald-200 p-4 text-center text-slate-400 text-xs">No previous payouts completed.</div>
+              ) : (
+                <div className="space-y-2">
+                  {recordSheet.completedPayoutsByMonth.map(group => {
+                    const isOpen = expandedSettlementMonth === group.month;
+                    return (
+                      <div key={group.month} className="rounded-2xl border border-slate-100 overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedSettlementMonth(isOpen ? null : group.month)}
+                          className="w-full flex items-center justify-between gap-3 p-3.5 bg-emerald-50/60 hover:bg-emerald-100/60 transition text-left"
+                        >
+                          <span className="text-xs font-black text-emerald-900">{group.month}</span>
+                          <span className="flex items-center gap-2 text-[11px]">
+                            <span className="rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 font-black">
+                              {group.records.length} settled
+                            </span>
+                            <span className="font-black text-emerald-800">₦{group.totalPayout.toLocaleString()}</span>
+                            {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                          </span>
+                        </button>
+                        {isOpen && (
+                          <div className="overflow-x-auto bg-white">
+                            <table className="w-full text-left text-[11px] border-collapse">
+                              <thead>
+                                <tr className="bg-emerald-50 text-emerald-900 font-extrabold border-b border-emerald-200">
+                                  <th className="p-3">Customer</th>
+                                  <th className="p-3">Cleared Period</th>
+                                  <th className="p-3">Cleared Sum</th>
+                                  <th className="p-3 font-semibold text-emerald-800">Payout Issued</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-emerald-50 text-slate-800">
+                                {group.records.map(p => (
+                                  <tr key={p.id}>
+                                    <td className="p-3 font-bold">{p.customer_name}</td>
+                                    <td className="p-3 font-extrabold text-amber-800 text-[10px]">{p.month_paid || 'N/A'}</td>
+                                    <td className="p-3 font-medium">₦{p.amount.toLocaleString()}</td>
+                                    <td className="p-3 font-bold text-emerald-800">₦{p.payout_amount.toLocaleString()}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -5375,11 +5461,17 @@ function CustomerDashboard({
     return sumCurrencyValues(selectedMonths.map(m => m.total_amount));
   }, [selectedMonths]);
 
+  const selectedTotalFee = useMemo(() => {
+    // 1-day company fee deducted per saved month, at THAT month's own
+    // historical rate - never the customer's current daily_amount, so a
+    // later rate change can never affect an already-saved past month.
+    return sumCurrencyValues(selectedMonths.map(monthHistoricalDailyRate));
+  }, [selectedMonths]);
+
   const expectedPayoutAmount = useMemo(() => {
     if (selectedMonths.length === 0) return 0;
-    // 1-day company fee deducted per saved month included in the request
-    return Math.max(0, selectedTotalAmount - selectedMonths.length * customer.daily_amount);
-  }, [selectedMonths, selectedTotalAmount, customer.daily_amount]);
+    return Math.max(0, selectedTotalAmount - selectedTotalFee);
+  }, [selectedMonths, selectedTotalAmount, selectedTotalFee]);
 
   const toggleMonthSelection = (id: string) => {
     setSelectedMonthIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -6253,7 +6345,7 @@ function CustomerDashboard({
               <p>⚖️ Payout Calculations:</p>
               <p>• Selected Months: <strong>{selectedMonths.length}</strong></p>
               <p>• Total Accumulation: <strong>₦{selectedTotalAmount.toLocaleString()}</strong></p>
-              <p>• Company Profit Deduction: <strong>- ₦{(selectedMonths.length * customer.daily_amount).toLocaleString()}</strong> ({selectedMonths.length} × 1 contribution day)</p>
+              <p>• Company Profit Deduction: <strong>- ₦{selectedTotalFee.toLocaleString()}</strong> ({selectedMonths.length} × 1 contribution day, at each month's own saved rate)</p>
               <p className="text-emerald-800 border-t border-amber-200 pt-1 text-xs">
                 • Final Settlement: <strong>₦{expectedPayoutAmount.toLocaleString()}</strong>
               </p>
@@ -7423,8 +7515,11 @@ export default function App() {
     }
 
     const totalAmount = sumCurrencyValues(eligibleMonths.map(m => m.total_amount));
-    // Company fee: 1 contribution day deducted per saved month included in this request
-    const payoutAmount = Math.max(0, totalAmount - eligibleMonths.length * currentUser.daily_amount);
+    // Company fee: 1 contribution day deducted per saved month included in
+    // this request, at EACH month's own historical rate - never the
+    // customer's current daily_amount, so past saved months are never
+    // affected by a later rate change.
+    const payoutAmount = Math.max(0, totalAmount - sumCurrencyValues(eligibleMonths.map(monthHistoricalDailyRate)));
     const monthPaidText = eligibleMonths.map(m => m.month_label).join(', ');
 
     const payoutPayload: any = {
@@ -7536,8 +7631,8 @@ export default function App() {
         payout_request_id: reqId,
         month_label: m.month_label || req.month_paid || getNigerianMonthName(),
         total_amount: m.total_amount ?? req.amount,
-        payout_amount: m.total_amount != null
-          ? Math.max(0, m.total_amount - (profiles.find(p => p.id === req.customer_id)?.daily_amount || 0))
+        payout_amount: m.total_amount != null && m.total_days != null
+          ? Math.max(0, m.total_amount - monthHistoricalDailyRate(m))
           : req.payout_amount,
         bank_name: req.bank_name,
         account_number: req.account_number,
@@ -8124,8 +8219,15 @@ export default function App() {
     const totalAmount = isPartialPayout
       ? sumCurrencyValues(runningDays.map(d => d.amount))
       : sumCurrencyValues(uncollectedMonths.map(m => m.total_amount));
-    const feeCount = isPartialPayout ? 1 : uncollectedMonths.length;
-    const payoutAmount = Math.max(0, totalAmount - feeCount * targetCustomer.daily_amount);
+    // Matches manualPayoutCalculation's preview logic exactly: a partial
+    // payout of the still-running cycle uses the current daily_amount
+    // (it's the live rate), but completed/saved months each use their OWN
+    // historical rate so a later daily_amount change can never retroactively
+    // affect an already-saved past month.
+    const totalFee = isPartialPayout
+      ? targetCustomer.daily_amount
+      : sumCurrencyValues(uncollectedMonths.map(monthHistoricalDailyRate));
+    const payoutAmount = Math.max(0, totalAmount - totalFee);
     const monthPaidText = isPartialPayout
       ? `${getNigerianMonthName()} (early payout - ${runningDays.length}/32 days)`
       : uncollectedMonths.map(m => m.month_label).join(', ');
@@ -8204,7 +8306,7 @@ export default function App() {
         payout_request_id: newRequest?.id,
         month_label: m.month_label,
         total_amount: m.total_amount,
-        payout_amount: Math.max(0, m.total_amount - targetCustomer.daily_amount),
+        payout_amount: Math.max(0, m.total_amount - monthHistoricalDailyRate(m)),
         bank_name: method === 'Cash' ? null : bank,
         account_number: method === 'Cash' ? null : acctNum,
         account_name: method === 'Cash' ? null : acctName,
