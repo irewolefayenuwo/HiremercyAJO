@@ -6487,11 +6487,19 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // REALTIME SYNCHRONIZATION HOOK: Listens to all Postgres events & fallbacks to 3-second background polling
+  // REALTIME SYNCHRONIZATION HOOK: Listens to Postgres events on the tables
+  // that have Realtime enabled, with a 20-second background poll used only
+  // as a fallback while Realtime is not connected.
   const currentUserRef = useRef(currentUser);
   useEffect(() => {
     currentUserRef.current = currentUser;
   }, [currentUser]);
+
+  // Tracks whether the Realtime websocket is currently connected. The
+  // background polling interval below checks this before firing, so it
+  // only ever acts as a true fallback rather than running unconditionally
+  // alongside a working Realtime connection.
+  const isRealtimeConnectedRef = useRef(false);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -6516,10 +6524,15 @@ export default function App() {
       }
     };
 
-    // 1. Set up live Realtime postgres listeners for tables
+    // 1. Set up live Realtime postgres listeners - only for the tables that
+    //    are actually in the Supabase `supabase_realtime` publication
+    //    (Database > Replication). Listening for a table that isn't
+    //    published is harmless but pointless, so this list is kept in sync
+    //    with that configuration: transactions, marked_days, notifications,
+    //    loans, loan_requests, payout_requests.
     const channel = supabase.channel('schema-db-changes');
 
-    const tableNames = ['transactions', 'marked_days', 'payout_requests', 'profiles', 'notifications', 'contributions', 'payout_history', 'cycle_archives', 'loans', 'loan_requests', 'loan_repayments', 'loan_history', 'monthly_savings_plans', 'monthly_savings_months', 'customer_credit_balances'] as const;
+    const tableNames = ['transactions', 'marked_days', 'notifications', 'loans', 'loan_requests', 'payout_requests'] as const;
     const events = ['INSERT', 'UPDATE', 'DELETE'] as const;
 
     tableNames.forEach((table) => {
@@ -6531,10 +6544,28 @@ export default function App() {
       });
     });
 
-    channel.subscribe();
+    // Track whether the Realtime websocket is actually connected, so the
+    // fallback poll below only ever runs when Realtime genuinely isn't
+    // delivering events - not unconditionally alongside it.
+    channel.subscribe((status) => {
+      isRealtimeConnectedRef.current = status === 'SUBSCRIBED';
+      console.debug('Realtime channel status:', status);
+    });
 
-    // 2. Set up fallback background polling interval (every 3 seconds)
-    const pollingTimer = setInterval(triggerSync, 3000);
+    // 2. Fallback polling - now a true fallback instead of running
+    //    unconditionally. Previously this fired every 3 seconds no matter
+    //    what, re-fetching ~10 tables in full every 3 seconds, 24/7, even
+    //    while Realtime was connected and already pushing live updates -
+    //    this was the main driver of the excess Supabase egress. It now
+    //    only fires while Realtime is not connected (e.g. during the
+    //    RealtimeDisabledForTenant outage, or while briefly reconnecting),
+    //    and at a much slower 20-second cadence rather than 3 seconds.
+    const FALLBACK_POLL_MS = 20000;
+    const pollingTimer = setInterval(() => {
+      if (!isRealtimeConnectedRef.current) {
+        triggerSync();
+      }
+    }, FALLBACK_POLL_MS);
 
     return () => {
       supabase.removeChannel(channel);
@@ -8018,28 +8049,31 @@ export default function App() {
     const today = new Date();
     const newLoanId = crypto.randomUUID();
 
-    // Insert the loan FIRST (uncredited placeholder state), since
-    // computeRetroactiveLoanCredit writes loan_repayments rows that
-    // reference this loan_id via a foreign key - it must already exist.
+    const { amountAlreadyCounted, daysAlreadyCounted } = await computeRetroactiveLoanCredit(
+      request.customer_id, newLoanId, request.repayment_amount
+    );
+    const remainingAfterCredit = Math.max(0, request.repayment_amount - amountAlreadyCounted);
+    const clearedImmediately = remainingAfterCredit <= 0;
+
     const { error: loanError } = await supabase.from('loans').insert([{
       id: newLoanId,
       customer_id: request.customer_id,
-      status: 'Active Loan',
+      status: clearedImmediately ? 'Loan Cleared' : 'Active Loan',
       loan_amount: request.loan_amount,
       repayment_amount: request.repayment_amount,
       service_charge: request.service_charge,
       daily_amount_snapshot: request.daily_amount_snapshot,
-      outstanding_balance: request.repayment_amount,
-      amount_already_counted: 0,
-      amount_repaid: 0,
-      amount_remaining: request.repayment_amount,
-      days_repaid: 0,
+      outstanding_balance: remainingAfterCredit,
+      amount_already_counted: amountAlreadyCounted,
+      amount_repaid: amountAlreadyCounted,
+      amount_remaining: remainingAfterCredit,
+      days_repaid: daysAlreadyCounted,
       total_days: 32,
       approved_by: currentUser.id,
       source: 'customer_request',
       loan_request_id: request.id,
       date_issued: today.toISOString().slice(0, 10),
-      completed_at: null
+      completed_at: clearedImmediately ? new Date().toISOString() : null
     }]);
 
     if (loanError) {
@@ -8047,22 +8081,6 @@ export default function App() {
       triggerToast(`Loan approval failed: ${loanError.message}`, 'error');
       return;
     }
-
-    const { amountAlreadyCounted, daysAlreadyCounted } = await computeRetroactiveLoanCredit(
-      request.customer_id, newLoanId, request.repayment_amount
-    );
-    const remainingAfterCredit = Math.max(0, request.repayment_amount - amountAlreadyCounted);
-    const clearedImmediately = remainingAfterCredit <= 0;
-
-    await supabase.from('loans').update({
-      status: clearedImmediately ? 'Loan Cleared' : 'Active Loan',
-      outstanding_balance: remainingAfterCredit,
-      amount_already_counted: amountAlreadyCounted,
-      amount_repaid: amountAlreadyCounted,
-      amount_remaining: remainingAfterCredit,
-      days_repaid: daysAlreadyCounted,
-      completed_at: clearedImmediately ? new Date().toISOString() : null
-    }).eq('id', newLoanId);
 
     await supabase.from('loan_requests').update({
       status: 'Approved', decided_at: new Date().toISOString(), decided_by: currentUser.id
@@ -8138,31 +8156,31 @@ export default function App() {
     const newLoanId = crypto.randomUUID();
 
     setIsLoading(true);
+    const { amountAlreadyCounted, daysAlreadyCounted } = await computeRetroactiveLoanCredit(
+      customerId, newLoanId, repaymentAmount
+    );
+    const remainingAfterCredit = Math.max(0, repaymentAmount - amountAlreadyCounted);
+    const clearedImmediately = remainingAfterCredit <= 0;
 
-    // Insert the loan FIRST (uncredited placeholder state), since
-    // computeRetroactiveLoanCredit writes loan_repayments rows that
-    // reference this loan_id via a foreign key - it must already exist,
-    // otherwise the insert fails with a foreign key violation whenever the
-    // customer already has marked_days at assignment time.
     const { error: loanError } = await supabase.from('loans').insert([{
       id: newLoanId,
       customer_id: customerId,
-      status: 'Active Loan',
+      status: clearedImmediately ? 'Loan Cleared' : 'Active Loan',
       loan_amount: approvedAmount,
       repayment_amount: repaymentAmount,
       service_charge: serviceCharge,
       daily_amount_snapshot: customer.daily_amount,
-      outstanding_balance: repaymentAmount,
-      amount_already_counted: 0,
-      amount_repaid: 0,
-      amount_remaining: repaymentAmount,
-      days_repaid: 0,
+      outstanding_balance: remainingAfterCredit,
+      amount_already_counted: amountAlreadyCounted,
+      amount_repaid: amountAlreadyCounted,
+      amount_remaining: remainingAfterCredit,
+      days_repaid: daysAlreadyCounted,
       total_days: 32,
       approved_by: currentUser.id,
       remarks,
       source: 'admin_assigned',
       date_issued: issuedDate,
-      completed_at: null
+      completed_at: clearedImmediately ? new Date().toISOString() : null
     }]);
 
     if (loanError) {
@@ -8170,22 +8188,6 @@ export default function App() {
       triggerToast(`Loan assignment failed: ${loanError.message}`, 'error');
       return;
     }
-
-    const { amountAlreadyCounted, daysAlreadyCounted } = await computeRetroactiveLoanCredit(
-      customerId, newLoanId, repaymentAmount
-    );
-    const remainingAfterCredit = Math.max(0, repaymentAmount - amountAlreadyCounted);
-    const clearedImmediately = remainingAfterCredit <= 0;
-
-    await supabase.from('loans').update({
-      status: clearedImmediately ? 'Loan Cleared' : 'Active Loan',
-      outstanding_balance: remainingAfterCredit,
-      amount_already_counted: amountAlreadyCounted,
-      amount_repaid: amountAlreadyCounted,
-      amount_remaining: remainingAfterCredit,
-      days_repaid: daysAlreadyCounted,
-      completed_at: clearedImmediately ? new Date().toISOString() : null
-    }).eq('id', newLoanId);
 
     await supabase.from('profiles').update({ loan_status: clearedImmediately ? 'Loan Cleared' : 'Active Loan' }).eq('id', customerId);
     await supabase.from('loan_history').insert([{
