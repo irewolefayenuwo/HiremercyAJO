@@ -6501,6 +6501,13 @@ export default function App() {
   // alongside a working Realtime connection.
   const isRealtimeConnectedRef = useRef(false);
 
+  // Admin-only: tracks whether the tab/screen is currently visible, and
+  // when the Admin Dashboard last polled while hidden. Used only to
+  // throttle background polling for Admin - Staff and Customer polling
+  // behavior is untouched by these two refs.
+  const isPageVisibleRef = useRef(typeof document !== 'undefined' ? document.visibilityState === 'visible' : true);
+  const lastAdminPollRef = useRef(Date.now());
+
   useEffect(() => {
     if (!currentUser) return;
 
@@ -6561,15 +6568,54 @@ export default function App() {
     //    RealtimeDisabledForTenant outage, or while briefly reconnecting),
     //    and at a much slower 20-second cadence rather than 3 seconds.
     const FALLBACK_POLL_MS = 20000;
-    const pollingTimer = setInterval(() => {
-      if (!isRealtimeConnectedRef.current) {
+
+    // Admin-only background throttling: when the Admin Dashboard is hidden
+    // (tab inactive, app minimized, or screen off), drop from 20s to a
+    // 5-minute cadence instead of stopping the interval outright - this
+    // keeps the same single timer/cleanup path and is simpler to reason
+    // about than tearing the interval down and recreating it. Staff and
+    // Customer are untouched: isAdmin gates every part of this behavior.
+    const isAdmin = currentUser.role === 'Admin';
+    const ADMIN_HIDDEN_POLL_MS = 5 * 60 * 1000; // 5 minutes
+
+    const handleVisibilityChange = () => {
+      const isVisible = document.visibilityState === 'visible';
+      isPageVisibleRef.current = isVisible;
+      if (isVisible) {
+        // Admin Dashboard just became active again - fetch fresh data
+        // immediately, then let the normal 20s interval resume from here.
+        lastAdminPollRef.current = Date.now();
         triggerSync();
       }
+    };
+
+    if (isAdmin && typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+
+    const pollingTimer = setInterval(() => {
+      if (isRealtimeConnectedRef.current) return;
+
+      if (isAdmin && !isPageVisibleRef.current) {
+        // Hidden Admin Dashboard: only poll once every 5 minutes.
+        const now = Date.now();
+        if (now - lastAdminPollRef.current < ADMIN_HIDDEN_POLL_MS) {
+          return;
+        }
+        lastAdminPollRef.current = now;
+      } else if (isAdmin) {
+        lastAdminPollRef.current = Date.now();
+      }
+
+      triggerSync();
     }, FALLBACK_POLL_MS);
 
     return () => {
       supabase.removeChannel(channel);
       clearInterval(pollingTimer);
+      if (isAdmin && typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
     };
   }, [currentUser?.id, currentUser?.role]);
 
