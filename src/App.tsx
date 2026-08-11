@@ -1838,7 +1838,7 @@ function AdminDashboard({
   const newCustomersList = customers.filter(c => {
     if (!c.created_at) return false;
     return (Date.now() - new Date(c.created_at).getTime()) <= NEW_CUSTOMER_WINDOW_MS;
-  }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }).sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
 
   // --- Total Payout drilldown data (Reports tab, current month) ---
   const currentMonthPayoutRecords = payoutHistory.filter(p => {
@@ -2715,7 +2715,7 @@ function AdminDashboard({
                       {newCustomersList.map(c => (
                         <div key={c.id} className="p-2.5 flex justify-between items-center">
                           <span className="font-bold text-slate-800">{c.name}</span>
-                          <span className="text-slate-500">{new Date(c.created_at).toLocaleDateString()}</span>
+                          <span className="text-slate-500">{c.created_at ? new Date(c.created_at).toLocaleDateString() : '—'}</span>
                         </div>
                       ))}
                     </div>
