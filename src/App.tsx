@@ -1824,6 +1824,42 @@ function AdminDashboard({
 
   const currentPeriodKey = getCurrentPeriodKey();
   const liveMonth = computeMonthMetrics(currentPeriodKey);
+
+  // --- Registered Customers drilldown data (Overview tab) ---
+  const activeCustomersList = customers.filter(c => c.is_active);
+  const notContributingCustomersList = activeCustomersList.filter(c => {
+    const days = markedDays[c.id] || [];
+    return !days.some(d => d.period_key === currentPeriodKey);
+  });
+  // "New" window is a rolling 10 days per customer, computed live from
+  // created_at - it never needs a manual/monthly reset, it just naturally
+  // stops counting a customer once 10 days have passed since they joined.
+  const NEW_CUSTOMER_WINDOW_MS = 10 * 24 * 60 * 60 * 1000;
+  const newCustomersList = customers.filter(c => {
+    if (!c.created_at) return false;
+    return (Date.now() - new Date(c.created_at).getTime()) <= NEW_CUSTOMER_WINDOW_MS;
+  }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  // --- Total Payout drilldown data (Reports tab, current month) ---
+  const currentMonthPayoutRecords = payoutHistory.filter(p => {
+    if (!p.approved_at) return false;
+    const [py, pm] = p.approved_at.split('-').map(Number);
+    const [cy, cm] = currentPeriodKey.split('-').map(Number);
+    return py === cy && pm === cm;
+  });
+  const paidCustomerIdsThisMonth = Array.from(new Set(currentMonthPayoutRecords.map(p => p.customer_id)));
+  const paidOnLoanIds = paidCustomerIdsThisMonth.filter(id => loans.some(l => l.customer_id === id && l.status === 'Active Loan'));
+  const paidNotOnLoanIds = paidCustomerIdsThisMonth.filter(id => !paidOnLoanIds.includes(id));
+  const paidCustomerLabel = (id: string) => profiles.find(p => p.id === id)?.name || 'Unknown customer';
+
+  // --- Total Expenses drilldown data (Reports tab, current month) ---
+  const currentMonthExpenseRecords = cashRecords.filter(r => {
+    if (!r.record_date) return false;
+    const [ry, rm] = r.record_date.split('-').map(Number);
+    const [cy, cm] = currentPeriodKey.split('-').map(Number);
+    return ry === cy && rm === cm && Number(r.total_expenses || 0) > 0;
+  }).sort((a, b) => (a.record_date < b.record_date ? 1 : -1));
+
   // Part 5: Monthly Payout card - a DIFFERENT metric from the "Total Monthly
   // Payout" above (which is real money actually paid out via approved
   // payouts). This one is the formula explicitly requested: what's left of
@@ -1996,6 +2032,16 @@ function AdminDashboard({
   const [showTodayDrilldown, setShowTodayDrilldown] = useState(false);
   const [showCollectionDrilldown, setShowCollectionDrilldown] = useState(false);
   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
+
+  // Registered Customers drilldown (Overview tab)
+  const [showCustomersDrilldown, setShowCustomersDrilldown] = useState(false);
+  const [customersDrilldownView, setCustomersDrilldownView] = useState<'active' | 'not-contributing' | 'new' | null>(null);
+
+  // Total Payout / Total Expenses drilldown (Reports tab)
+  const [showPayoutDrilldown, setShowPayoutDrilldown] = useState(false);
+  const [payoutDrilldownView, setPayoutDrilldownView] = useState<'on-loan' | 'not-on-loan' | null>(null);
+  const [showExpensesDrilldown, setShowExpensesDrilldown] = useState(false);
+
   const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
   const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null);
 
@@ -2570,15 +2616,115 @@ function AdminDashboard({
           </div>
         </button>
 
-        <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm flex items-center gap-4">
+        <button
+          onClick={() => { setShowCustomersDrilldown(true); setCustomersDrilldownView(null); }}
+          className="relative bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm hover:border-emerald-300 text-left transition duration-150 flex items-center gap-4 focus:outline-none w-full text-slate-855"
+        >
+          {newCustomersList.length > 0 && (
+            <span className="absolute -top-2 -right-2 bg-amber-505 text-white text-[10px] font-black px-2 py-1 rounded-full shadow">
+              +{newCustomersList.length} new
+            </span>
+          )}
           <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl">
             <Users className="w-8 h-8" />
           </div>
           <div>
             <p className="text-[10px] text-slate-505 uppercase font-black">Registered Customers</p>
             <p className="text-xl font-black text-slate-900">{stats.totalCustomers}</p>
+            <p className="text-[9px] text-emerald-800 font-bold underline mt-0.5">Click to view breakdown</p>
           </div>
-        </div>
+        </button>
+
+        {showCustomersDrilldown && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-lg w-full p-6 border border-emerald-100 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto">
+              <div className="flex justify-between items-center border-b border-emerald-50 pb-3">
+                <h3 className="text-lg font-black text-emerald-955 uppercase tracking-wider flex items-center gap-2">
+                  <Users className="w-6 h-6 text-emerald-700" />
+                  Customers Breakdown
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => { setShowCustomersDrilldown(false); setCustomersDrilldownView(null); }}
+                  className="p-1 text-slate-400 hover:text-slate-600 font-bold"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                {/* Active customers */}
+                <div className="rounded-2xl border border-emerald-100 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setCustomersDrilldownView(v => v === 'active' ? null : 'active')}
+                    className="w-full flex items-center justify-between p-3 bg-emerald-50/40 hover:bg-emerald-50 text-left"
+                  >
+                    <span className="font-black text-emerald-900">Active Customers</span>
+                    <span className="font-black text-emerald-800">{activeCustomersList.length} {customersDrilldownView === 'active' ? '▲' : '▼'}</span>
+                  </button>
+                  {customersDrilldownView === 'active' && (
+                    <div className="max-h-56 overflow-y-auto divide-y divide-emerald-50">
+                      {activeCustomersList.length === 0 && <p className="p-3 text-slate-500">No active customers.</p>}
+                      {activeCustomersList.map(c => (
+                        <div key={c.id} className="p-2.5 flex justify-between items-center">
+                          <span className="font-bold text-slate-800">{c.name}</span>
+                          <span className="text-slate-500">{c.phone}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Not contributing this month */}
+                <div className="rounded-2xl border border-amber-100 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setCustomersDrilldownView(v => v === 'not-contributing' ? null : 'not-contributing')}
+                    className="w-full flex items-center justify-between p-3 bg-amber-50/40 hover:bg-amber-50 text-left"
+                  >
+                    <span className="font-black text-amber-900">Not Contributing This Month</span>
+                    <span className="font-black text-amber-800">{notContributingCustomersList.length} {customersDrilldownView === 'not-contributing' ? '▲' : '▼'}</span>
+                  </button>
+                  {customersDrilldownView === 'not-contributing' && (
+                    <div className="max-h-56 overflow-y-auto divide-y divide-amber-50">
+                      {notContributingCustomersList.length === 0 && <p className="p-3 text-slate-500">Everyone active has paid something this month.</p>}
+                      {notContributingCustomersList.map(c => (
+                        <div key={c.id} className="p-2.5 flex justify-between items-center">
+                          <span className="font-bold text-slate-800">{c.name}</span>
+                          <span className="text-slate-500">{c.phone}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* New customers (rolling 10-day window) */}
+                <div className="rounded-2xl border border-emerald-100 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setCustomersDrilldownView(v => v === 'new' ? null : 'new')}
+                    className="w-full flex items-center justify-between p-3 bg-emerald-50/40 hover:bg-emerald-50 text-left"
+                  >
+                    <span className="font-black text-emerald-900">New Customers (last 10 days)</span>
+                    <span className="font-black text-emerald-800">{newCustomersList.length} {customersDrilldownView === 'new' ? '▲' : '▼'}</span>
+                  </button>
+                  {customersDrilldownView === 'new' && (
+                    <div className="max-h-56 overflow-y-auto divide-y divide-emerald-50">
+                      {newCustomersList.length === 0 && <p className="p-3 text-slate-500">No new registrations in the last 10 days.</p>}
+                      {newCustomersList.map(c => (
+                        <div key={c.id} className="p-2.5 flex justify-between items-center">
+                          <span className="font-bold text-slate-800">{c.name}</span>
+                          <span className="text-slate-500">{new Date(c.created_at).toLocaleDateString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm flex items-center gap-4">
           <div className="p-3 bg-emerald-50 text-emerald-605 rounded-2xl">
@@ -4619,14 +4765,126 @@ function AdminDashboard({
                 { label: 'Total Expenses', value: liveMonth.expenses, color: 'slate' },
                 { label: 'Total Payout', value: liveMonth.payout, color: 'slate' },
                 { label: 'Remaining Balance', value: liveMonth.remaining, color: 'amber' },
-              ].map(card => (
-                <div key={card.label} className="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-4">
-                  <p className="text-[11px] font-black uppercase tracking-wider text-emerald-800">{card.label}</p>
-                  <p className="text-xl sm:text-2xl font-black text-emerald-955 mt-1">₦{card.value.toLocaleString()}</p>
-                </div>
-              ))}
+              ].map(card => {
+                const isPayout = card.label === 'Total Payout';
+                const isExpenses = card.label === 'Total Expenses';
+                const clickable = isPayout || isExpenses;
+                const Tag = clickable ? 'button' : 'div';
+                return (
+                  <Tag
+                    key={card.label}
+                    {...(clickable ? {
+                      type: 'button',
+                      onClick: () => {
+                        if (isPayout) { setShowPayoutDrilldown(true); setPayoutDrilldownView(null); }
+                        if (isExpenses) { setShowExpensesDrilldown(true); }
+                      },
+                    } : {})}
+                    className={`bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-4 text-left w-full ${clickable ? 'hover:border-emerald-400 transition duration-150 focus:outline-none' : ''}`}
+                  >
+                    <p className="text-[11px] font-black uppercase tracking-wider text-emerald-800">{card.label}</p>
+                    <p className="text-xl sm:text-2xl font-black text-emerald-955 mt-1">₦{card.value.toLocaleString()}</p>
+                    {clickable && <p className="text-[9px] text-emerald-700 font-bold underline mt-0.5">Click for details</p>}
+                  </Tag>
+                );
+              })}
             </div>
           </div>
+
+          {showPayoutDrilldown && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl max-w-lg w-full p-6 border border-emerald-100 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto">
+                <div className="flex justify-between items-center border-b border-emerald-50 pb-3">
+                  <h3 className="text-lg font-black text-emerald-955 uppercase tracking-wider">
+                    Total Payout Breakdown — {periodLabelFromKey(currentPeriodKey)}
+                  </h3>
+                  <button type="button" onClick={() => { setShowPayoutDrilldown(false); setPayoutDrilldownView(null); }} className="p-1 text-slate-400 hover:text-slate-600 font-bold">✕</button>
+                </div>
+
+                <p className="text-xs text-slate-600">
+                  <span className="font-black text-slate-900">{paidCustomerIdsThisMonth.length}</span> customer(s) paid out this month.
+                </p>
+
+                <div className="space-y-3 text-xs">
+                  <div className="rounded-2xl border border-emerald-100 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setPayoutDrilldownView(v => v === 'on-loan' ? null : 'on-loan')}
+                      className="w-full flex items-center justify-between p-3 bg-emerald-50/40 hover:bg-emerald-50 text-left"
+                    >
+                      <span className="font-black text-emerald-900">On Loan</span>
+                      <span className="font-black text-emerald-800">{paidOnLoanIds.length} {payoutDrilldownView === 'on-loan' ? '▲' : '▼'}</span>
+                    </button>
+                    {payoutDrilldownView === 'on-loan' && (
+                      <div className="max-h-56 overflow-y-auto divide-y divide-emerald-50">
+                        {paidOnLoanIds.length === 0 && <p className="p-3 text-slate-500">None of the customers paid out this month are currently on a loan.</p>}
+                        {paidOnLoanIds.map(id => (
+                          <div key={id} className="p-2.5 flex justify-between items-center">
+                            <span className="font-bold text-slate-800">{paidCustomerLabel(id)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-100 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setPayoutDrilldownView(v => v === 'not-on-loan' ? null : 'not-on-loan')}
+                      className="w-full flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 text-left"
+                    >
+                      <span className="font-black text-slate-800">Not on Loan</span>
+                      <span className="font-black text-slate-700">{paidNotOnLoanIds.length} {payoutDrilldownView === 'not-on-loan' ? '▲' : '▼'}</span>
+                    </button>
+                    {payoutDrilldownView === 'not-on-loan' && (
+                      <div className="max-h-56 overflow-y-auto divide-y divide-slate-100">
+                        {paidNotOnLoanIds.length === 0 && <p className="p-3 text-slate-500">None.</p>}
+                        {paidNotOnLoanIds.map(id => (
+                          <div key={id} className="p-2.5 flex justify-between items-center">
+                            <span className="font-bold text-slate-800">{paidCustomerLabel(id)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showExpensesDrilldown && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl max-w-lg w-full p-6 border border-emerald-100 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto">
+                <div className="flex justify-between items-center border-b border-emerald-50 pb-3">
+                  <h3 className="text-lg font-black text-emerald-955 uppercase tracking-wider">
+                    Total Expenses — {periodLabelFromKey(currentPeriodKey)}
+                  </h3>
+                  <button type="button" onClick={() => setShowExpensesDrilldown(false)} className="p-1 text-slate-400 hover:text-slate-600 font-bold">✕</button>
+                </div>
+
+                <div className="divide-y divide-slate-100 text-xs">
+                  {currentMonthExpenseRecords.length === 0 && <p className="p-3 text-slate-500">No expense entries recorded this month.</p>}
+                  {currentMonthExpenseRecords.map(r => (
+                    <div key={r.id} className="py-2.5">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-slate-800">{r.folder_name || r.record_date}</span>
+                        <span className="font-black text-slate-900">₦{Number(r.total_expenses).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-[10px] text-slate-500 mt-0.5">
+                        <span>{r.record_date}</span>
+                        {r.notes && <span className="italic">{r.notes}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="border-t border-emerald-50 pt-3 flex justify-between items-center">
+                  <span className="text-xs text-slate-505 font-bold">Total:</span>
+                  <span className="text-lg font-black text-slate-900">₦{liveMonth.expenses.toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Loan Reports */}
           {(() => {
