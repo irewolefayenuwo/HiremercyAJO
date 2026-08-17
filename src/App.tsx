@@ -3,7 +3,9 @@ import {
   PiggyBank, Phone, Lock, EyeOff, Eye as EyeIcon, Mail, User as UserIcon, 
   ChevronLeft, ChevronRight, ChevronDown, LayoutDashboard, Users, Plus, Search, Trash2, Calendar, 
   CheckCircle2, XCircle, LogOut, Shield, Briefcase, Landmark, Info, Key,
-  Bell, Settings, HelpCircle, MessageSquare, Building2, UserPlus, Coins, Clock, FileText, Edit2, X
+  Bell, Settings, HelpCircle, MessageSquare, Building2, UserPlus, Coins, Clock, FileText, Edit2, X,
+  BarChart3, ArrowLeftRight, Wallet, CalendarRange, HandCoins, PieChart, TrendingUp, ShieldCheck,
+  Sparkles, Headphones, Target, ArrowUpRight, Lock as LockIcon
 } from 'lucide-react';
 import { type Session, type AuthChangeEvent } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
@@ -423,10 +425,10 @@ const CustomerDetailsModal = ({
   const viewingDayTx = viewingDay ? fullTransactions.find((t: any) => t.id === viewingDay.transaction_id) : null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={onClose}>
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-black text-emerald-955">{customer.name}</h2>
+          <h2 className="text-lg font-black text-emerald-950">{customer.name}</h2>
           <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
         </div>
 
@@ -449,7 +451,7 @@ const CustomerDetailsModal = ({
             <div className="flex gap-1 items-center">
               {(['today', 'week', 'month', 'custom'] as const).map(f => (
                 <button key={f} type="button" onClick={() => setDateFilter(f)}
-                  className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase ${dateFilter === f ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                  className={`px-2 py-1 rounded-xl text-[10px] font-black uppercase ${dateFilter === f ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-600'}`}>
                   {f}
                 </button>
               ))}
@@ -457,8 +459,8 @@ const CustomerDetailsModal = ({
           </div>
           {dateFilter === 'custom' && (
             <div className="flex gap-2 mb-2 text-[10px]">
-              <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="border rounded-lg px-2 py-1" />
-              <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className="border rounded-lg px-2 py-1" />
+              <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="border rounded-xl px-2 py-1" />
+              <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className="border rounded-xl px-2 py-1" />
             </div>
           )}
           {loadingTx ? (
@@ -468,7 +470,7 @@ const CustomerDetailsModal = ({
           ) : (
             <div className="overflow-x-auto max-h-56 overflow-y-auto">
               <table className="w-full text-left text-[11px]">
-                <thead><tr className="text-slate-500 font-bold border-b"><th className="p-1.5">Date</th><th className="p-1.5">Time</th><th className="p-1.5">Amount</th><th className="p-1.5">Method</th><th className="p-1.5">Staff</th></tr></thead>
+                <thead><tr className="text-slate-500 font-bold border-b border-slate-100 text-[10px] uppercase tracking-wide"><th className="p-1.5">Date</th><th className="p-1.5">Time</th><th className="p-1.5">Amount</th><th className="p-1.5">Method</th><th className="p-1.5">Staff</th></tr></thead>
                 <tbody className="divide-y">
                   {filteredTx.map((t: any) => (
                     <tr key={t.id}>
@@ -492,7 +494,7 @@ const CustomerDetailsModal = ({
               const day = marked.find(d => d.day_number === dayNum);
               return (
                 <button key={dayNum} type="button" disabled={!day} onClick={() => day && setViewingDay(day)}
-                  className={`aspect-square rounded-lg text-[10px] font-black flex items-center justify-center ${day ? 'bg-emerald-600 text-white cursor-pointer hover:bg-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
+                  className={`aspect-square rounded-xl text-[10px] font-black flex items-center justify-center ${day ? 'bg-emerald-600 text-white cursor-pointer hover:bg-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
                   {dayNum}
                 </button>
               );
@@ -509,35 +511,39 @@ const CustomerDetailsModal = ({
           <h3 className="text-xs font-black uppercase text-emerald-800 mb-2">Savings History</h3>
           <p className="text-[10px] font-black uppercase text-slate-500 mb-1">Completed but Uncollected</p>
           {uncollected.length === 0 ? <p className="text-xs text-slate-400 mb-3">None.</p> : (
-            <table className="w-full text-left text-[11px] mb-3">
-              <thead><tr className="text-slate-500 font-bold border-b"><th className="p-1.5">Month</th><th className="p-1.5">Total Saved</th><th className="p-1.5">Completion Date</th><th className="p-1.5">Status</th></tr></thead>
-              <tbody className="divide-y">
-                {uncollected.map(u => (
-                  <tr key={u.id}>
-                    <td className="p-1.5">{u.month_label}</td>
-                    <td className="p-1.5 font-bold">₦{u.total_amount.toLocaleString()}</td>
-                    <td className="p-1.5">{new Date(u.created_at).toLocaleDateString()}</td>
-                    <td className="p-1.5 capitalize">{u.status}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto mb-3">
+              <table className="w-full text-left text-[11px]">
+                <thead><tr className="text-slate-500 font-bold border-b border-slate-100 text-[10px] uppercase tracking-wide"><th className="p-1.5">Month</th><th className="p-1.5">Total Saved</th><th className="p-1.5">Completion Date</th><th className="p-1.5">Status</th></tr></thead>
+                <tbody className="divide-y">
+                  {uncollected.map(u => (
+                    <tr key={u.id}>
+                      <td className="p-1.5">{u.month_label}</td>
+                      <td className="p-1.5 font-bold">₦{u.total_amount.toLocaleString()}</td>
+                      <td className="p-1.5">{new Date(u.created_at).toLocaleDateString()}</td>
+                      <td className="p-1.5 capitalize">{u.status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
           <p className="text-[10px] font-black uppercase text-slate-500 mb-1">Collected Savings</p>
           {collected.length === 0 ? <p className="text-xs text-slate-400">None.</p> : (
-            <table className="w-full text-left text-[11px]">
-              <thead><tr className="text-slate-500 font-bold border-b"><th className="p-1.5">Month</th><th className="p-1.5">Total Saved</th><th className="p-1.5">Collection Date</th><th className="p-1.5">Amount Collected</th></tr></thead>
-              <tbody className="divide-y">
-                {collected.map(c => (
-                  <tr key={c.id}>
-                    <td className="p-1.5">{c.month_label}</td>
-                    <td className="p-1.5">₦{c.total_amount.toLocaleString()}</td>
-                    <td className="p-1.5">{new Date(c.approved_at).toLocaleDateString()}</td>
-                    <td className="p-1.5 font-bold">₦{c.payout_amount.toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-[11px]">
+                <thead><tr className="text-slate-500 font-bold border-b border-slate-100 text-[10px] uppercase tracking-wide"><th className="p-1.5">Month</th><th className="p-1.5">Total Saved</th><th className="p-1.5">Collection Date</th><th className="p-1.5">Amount Collected</th></tr></thead>
+                <tbody className="divide-y">
+                  {collected.map(c => (
+                    <tr key={c.id}>
+                      <td className="p-1.5">{c.month_label}</td>
+                      <td className="p-1.5">₦{c.total_amount.toLocaleString()}</td>
+                      <td className="p-1.5">{new Date(c.approved_at).toLocaleDateString()}</td>
+                      <td className="p-1.5 font-bold">₦{c.payout_amount.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </section>
 
@@ -564,7 +570,7 @@ const CustomerDetailsModal = ({
         {viewingDay && (
           <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4" onClick={() => setViewingDay(null)}>
             <div className="bg-white rounded-2xl p-5 max-w-xs w-full" onClick={e => e.stopPropagation()}>
-              <h4 className="text-sm font-black text-emerald-955 mb-3">Day {viewingDay.day_number} Payment</h4>
+              <h4 className="text-sm font-black text-emerald-950 mb-3">Day {viewingDay.day_number} Payment</h4>
               <div className="space-y-1.5 text-xs">
                 <p><span className="text-slate-500 font-bold">Date:</span> {new Date(viewingDay.date).toLocaleDateString()}</p>
                 <p><span className="text-slate-500 font-bold">Time:</span> {viewingDayTx?.created_at ? new Date(viewingDayTx.created_at).toLocaleTimeString() : '—'}</p>
@@ -731,6 +737,23 @@ function LiveTransactionCounter({ count, label = 'Live transactions' }: { count:
   );
 }
 
+// Purely decorative mini trend line for stat cards. This does NOT represent
+// a real historical data series (no such time-series is tracked anywhere in
+// the app) - it is a visual flourish only, in the spirit of the reference
+// design. `positive` just picks an upward- or flat/soft-leaning shape so it
+// doesn't visually contradict a real, adjacent honest stat (e.g. a computed
+// % change) shown next to it.
+function MiniSparkline({ color = '#059669', positive = true }: { color?: string; positive?: boolean }) {
+  const points = positive
+    ? '0,28 12,24 24,26 36,18 48,20 60,12 72,14 84,6 96,8 108,2'
+    : '0,10 12,14 24,11 36,16 48,14 60,18 72,15 84,20 96,17 108,20';
+  return (
+    <svg viewBox="0 0 108 32" className="w-full h-8" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points={points} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.85" />
+    </svg>
+  );
+}
+
 // Reusable Autocomplete Searchable Customer Select Component
 function SearchableCustomerSelect({ 
   customers, 
@@ -755,7 +778,7 @@ function SearchableCustomerSelect({
   return (
     <div className="relative w-full text-slate-800">
       <div 
-        className="w-full px-3 py-2 border border-emerald-200 rounded-xl bg-white text-sm cursor-pointer flex justify-between items-center"
+        className="input-green bg-white text-sm cursor-pointer flex justify-between items-center"
         onClick={() => setIsOpen(!isOpen)}
       >
         <span className={selected ? "text-slate-800 font-bold text-xs" : "text-slate-400 text-xs"}>
@@ -772,7 +795,7 @@ function SearchableCustomerSelect({
             placeholder="Type name or phone number..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full px-3 py-1.5 border border-emerald-100 rounded-lg text-xs outline-none focus:ring-2 focus:ring-emerald-500"
+            className="w-full px-3 py-1.5 border border-emerald-100 rounded-xl text-xs outline-none focus:ring-2 focus:ring-emerald-500"
             onClick={(e) => e.stopPropagation()}
           />
           <div className="max-h-40 overflow-y-auto divide-y divide-emerald-50 text-xs">
@@ -787,7 +810,7 @@ function SearchableCustomerSelect({
                 }}
               >
                 <p className="font-bold text-slate-800">{c.name}</p>
-                <p className="text-[10px] text-slate-505">{c.phone} • ₦{c.daily_amount.toLocaleString()}/day</p>
+                <p className="text-[10px] text-slate-500">{c.phone} • ₦{c.daily_amount.toLocaleString()}/day</p>
               </div>
             ))}
             {filtered.length === 0 && (
@@ -812,12 +835,14 @@ function WelcomeScreen({ onComplete }: { onComplete: () => void }) {
   }, [onComplete]);
 
   return (
-    <div className="fixed inset-0 bg-gradient-to-br from-emerald-900 via-emerald-800 to-teal-950 flex items-center justify-center z-50">
-      <div className="text-center space-y-4">
-        <div className="w-28 h-28 mx-auto bg-gradient-to-br from-amber-400 to-amber-500 rounded-3xl flex items-center justify-center shadow-2xl animate-bounce">
-          <PiggyBank className="w-14 h-14 text-emerald-955" />
+    <div className="fixed inset-0 bg-gradient-to-br from-emerald-900 via-emerald-800 to-teal-950 flex items-center justify-center z-50 overflow-hidden">
+      <div className="floating-shape shape-1" />
+      <div className="floating-shape shape-2" />
+      <div className="text-center space-y-5 fade-in px-6">
+        <div className="w-24 h-24 sm:w-28 sm:h-28 mx-auto bg-gradient-to-br from-amber-400 to-amber-500 rounded-3xl flex items-center justify-center shadow-xl">
+          <PiggyBank className="w-12 h-12 sm:w-14 sm:h-14 text-emerald-950" />
         </div>
-        <h1 className="text-4xl font-black text-white tracking-widest">HIREMERCY AJO</h1>
+        <h1 className="text-3xl sm:text-4xl font-black text-white tracking-widest">HIREMERCY AJO</h1>
         <p className="text-emerald-300 font-semibold tracking-wider uppercase text-xs">Continuous Daily Target Thrift Tracker</p>
         <div className="w-24 h-1 bg-amber-500 mx-auto rounded-full mt-4" />
       </div>
@@ -843,55 +868,55 @@ function AdminSetupScreen({ onCreate }: { onCreate: (data: any) => void }) {
   };
 
   return (
-    <div className="max-w-md mx-auto my-12 bg-white rounded-3xl shadow-xl border border-amber-300 overflow-hidden">
-      <div className="bg-gradient-to-r from-emerald-800 to-emerald-900 text-white p-6 text-center">
-        <div className="inline-flex p-2 bg-amber-505 rounded-xl mb-2 text-emerald-955">
+    <div className="max-w-md mx-auto my-8 sm:my-12 mx-4 sm:mx-auto bg-white rounded-3xl shadow-xl border border-amber-200/70 overflow-hidden">
+      <div className="bg-gradient-to-r from-emerald-800 to-emerald-900 text-white p-6 sm:p-7 text-center">
+        <div className="inline-flex p-2.5 bg-amber-400 rounded-xl mb-3 text-emerald-950 shadow-sm">
           <Key className="w-6 h-6" />
         </div>
-        <h2 className="text-2xl font-extrabold text-amber-400">First-Time Setup</h2>
+        <h2 className="text-xl sm:text-2xl font-extrabold text-amber-400">First-Time Setup</h2>
         <p className="text-xs text-emerald-200 mt-1">Configure your primary master Admin account below</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="p-8 space-y-4 text-slate-800">
+      <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-4 text-slate-800">
         <div>
-          <label className="block text-xs font-black uppercase text-emerald-800 mb-1">Owner / Director Name *</label>
+          <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Owner / Director Name *</label>
           <input 
             type="text" 
             required
             placeholder="Mercy Paul"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full px-4 py-2.5 border border-emerald-200 rounded-xl text-sm"
+            className="input-green text-sm"
           />
         </div>
 
         <div>
-          <label className="block text-xs font-black uppercase text-emerald-800 mb-1">Email Address</label>
+          <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Email Address</label>
           <input 
             type="email"
             placeholder="admin@hiremercy.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-4 py-2.5 border border-emerald-200 rounded-xl text-sm"
+            className="input-green text-sm"
           />
-          <span className="text-[10px] text-slate-400 block mt-1">Optional. You can register with phone and password only.</span>
+          <span className="text-[11px] text-slate-400 block mt-1.5">Optional. You can register with phone and password only.</span>
         </div>
 
         <div>
-          <label className="block text-xs font-black uppercase text-emerald-800 mb-1">Direct Phone Line *</label>
+          <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Direct Phone Line *</label>
           <input 
             type="text" 
             required
             placeholder="08012345678"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            className="w-full px-4 py-2.5 border border-emerald-200 rounded-xl text-sm"
+            className="input-green text-sm"
           />
-          <span className="text-[10px] text-slate-400 block mt-1">Accepts local formats (e.g. 080...) or international (+234...)</span>
+          <span className="text-[11px] text-slate-400 block mt-1.5">Accepts local formats (e.g. 080...) or international (+234...)</span>
         </div>
 
         <div>
-          <label className="block text-xs font-black uppercase text-emerald-800 mb-1">Secure Password *</label>
+          <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Secure Password *</label>
           <div className="relative">
             <input 
               type={showPassword ? 'text' : 'password'} 
@@ -899,12 +924,12 @@ function AdminSetupScreen({ onCreate }: { onCreate: (data: any) => void }) {
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2.5 border border-emerald-200 rounded-xl text-sm pr-10"
+              className="input-green text-sm pr-11"
             />
             <button 
               type="button" 
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-emerald-700 focus:outline-none p-1"
             >
               {showPassword ? <EyeOff className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
             </button>
@@ -912,20 +937,20 @@ function AdminSetupScreen({ onCreate }: { onCreate: (data: any) => void }) {
         </div>
 
         <div>
-          <label className="block text-xs font-black uppercase text-emerald-800 mb-1">Confirm Password *</label>
+          <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Confirm Password *</label>
           <input 
             type="password" 
             required
             placeholder="••••••••"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
-            className="w-full px-4 py-2.5 border border-emerald-200 rounded-xl text-sm"
+            className="input-green text-sm"
           />
         </div>
 
         <button 
           type="submit" 
-          className="w-full bg-amber-500 hover:bg-amber-600 text-emerald-955 font-black py-3 rounded-xl transition duration-150 shadow-md mt-4"
+          className="w-full bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-emerald-950 font-bold py-3.5 rounded-xl transition-all duration-200 shadow-md mt-4"
         >
           Initialize Administration
         </button>
@@ -968,27 +993,27 @@ function LoginScreen({ onLogin, onSwitch }: { onLogin: (phone: string, pass: str
 
   if (forgotPasswordMode) {
     return (
-      <div className="max-w-md mx-auto my-12 bg-white rounded-3xl shadow-xl border border-emerald-100 overflow-hidden">
-        <div className="bg-gradient-to-r from-emerald-800 to-emerald-900 text-white p-6 text-center">
+      <div className="w-full max-w-md mx-auto my-8 sm:my-12 bg-white rounded-3xl shadow-xl border border-emerald-100 overflow-hidden fade-in">
+        <div className="bg-gradient-to-br from-emerald-800 to-emerald-900 text-white p-7 sm:p-8 text-center">
           <h2 className="text-xl font-extrabold">Forgot Password</h2>
-          <p className="text-xs text-emerald-200 mt-1">Receive secure reset link to your account email address</p>
+          <p className="text-xs text-emerald-200 mt-1.5">We'll send a secure reset link to your account email address</p>
         </div>
-        <form onSubmit={handleForgotPasswordSubmit} className="p-8 space-y-4">
+        <form onSubmit={handleForgotPasswordSubmit} className="p-6 sm:p-8 space-y-4">
           <div>
-            <label className="block text-xs font-black uppercase text-emerald-800 mb-1">Registered Email Address</label>
+            <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Registered Email Address</label>
             <input 
               type="email" 
               required
               placeholder="e.g. name@domain.com"
               value={recoveryEmail}
               onChange={(e) => setRecoveryEmail(e.target.value)}
-              className="w-full px-4 py-3 border border-emerald-200 rounded-xl text-sm"
+              className="input-green text-sm"
             />
           </div>
           <button 
             type="submit" 
             disabled={isResetting}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold transition duration-150 disabled:opacity-50"
+            className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white py-3.5 rounded-xl font-bold transition-all duration-200 disabled:opacity-50"
           >
             {isResetting ? 'Sending Reset Email...' : 'Request Password Reset Link'}
           </button>
@@ -1007,72 +1032,81 @@ function LoginScreen({ onLogin, onSwitch }: { onLogin: (phone: string, pass: str
   }
 
   return (
-    <div className="max-w-md mx-auto my-12 bg-white rounded-3xl shadow-xl border border-emerald-100 overflow-hidden">
-      <div className="bg-gradient-to-r from-emerald-800 to-emerald-900 text-white p-6 text-center">
-        <h2 className="text-2xl font-extrabold">Welcome back to HireMercyAJO</h2>
-        <p className="text-xs text-emerald-200 mt-1">Authenticate with your phone number and password to access your dashboard</p>
+    <div className="w-full flex items-center justify-center px-4 py-6 sm:py-10">
+      <div className="w-full max-w-md bg-white rounded-3xl shadow-xl border border-emerald-100 overflow-hidden fade-in">
+        <div className="bg-gradient-to-br from-emerald-800 to-emerald-900 text-white p-7 sm:p-8 text-center">
+          <div className="w-14 h-14 mx-auto mb-3 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center">
+            <PiggyBank className="w-7 h-7 text-amber-400" />
+          </div>
+          <h2 className="text-xl sm:text-2xl font-extrabold">Welcome back</h2>
+          <p className="text-xs text-emerald-200 mt-1.5">Sign in with your phone number and password</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-5 text-slate-800">
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Phone Number</label>
+            <div className="relative">
+              <Phone className="w-4 h-4 text-emerald-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input 
+                type="text" 
+                required
+                placeholder="e.g. 08012345678"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="input-green text-sm pl-10"
+              />
+            </div>
+            <span className="text-[11px] text-slate-400 block mt-1.5">Accepts local formats (e.g. 080...) or international (+234...)</span>
+          </div>
+
+          <div>
+            <div className="flex justify-between items-center mb-1.5">
+              <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800">Password</label>
+              <button 
+                type="button" 
+                onClick={() => setForgotPasswordMode(true)}
+                className="text-[11px] text-emerald-700 font-bold hover:underline"
+              >
+                Forgot Password?
+              </button>
+            </div>
+            <div className="relative">
+              <Lock className="w-4 h-4 text-emerald-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input 
+                type={showPassword ? 'text' : 'password'} 
+                required
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="input-green text-sm pl-10 pr-11"
+              />
+              <button 
+                type="button" 
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-emerald-700 focus:outline-none p-1"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          <button 
+            type="submit" 
+            className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white py-3.5 rounded-xl font-bold transition-all duration-200 shadow-md"
+          >
+            Verify & Sign In
+          </button>
+
+          <div className="text-center pt-1">
+            <p className="text-xs text-slate-500">
+              Don't have a Customer profile yet?{' '}
+              <button type="button" onClick={onSwitch} className="text-emerald-700 font-bold hover:underline">
+                Register as Customer
+              </button>
+            </p>
+          </div>
+        </form>
       </div>
-
-      <form onSubmit={handleSubmit} className="p-8 space-y-6 text-slate-800">
-        <div>
-          <label className="block text-xs font-black uppercase text-emerald-800 mb-1">Phone Number</label>
-          <input 
-            type="text" 
-            required
-            placeholder="e.g. 08012345678"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            className="w-full px-4 py-3 border border-emerald-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-emerald-50/20 text-sm"
-          />
-          <span className="text-[10px] text-slate-400 block mt-1">Accepts local formats (e.g. 080...) or international (+234...)</span>
-        </div>
-
-        <div>
-          <div className="flex justify-between items-center mb-1">
-            <label className="block text-xs font-black uppercase text-emerald-800">Password</label>
-            <button 
-              type="button" 
-              onClick={() => setForgotPasswordMode(true)}
-              className="text-[10px] text-emerald-700 font-bold hover:underline"
-            >
-              Forgot Password?
-            </button>
-          </div>
-          <div className="relative">
-            <input 
-              type={showPassword ? 'text' : 'password'} 
-              required
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 border border-emerald-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-emerald-50/20 text-sm pr-10"
-            />
-            <button 
-              type="button" 
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
-            >
-              {showPassword ? <EyeOff className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
-            </button>
-          </div>
-        </div>
-
-        <button 
-          type="submit" 
-          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold transition duration-150 shadow-md"
-        >
-          Verify & Sign In
-        </button>
-
-        <div className="text-center">
-          <p className="text-xs text-slate-505">
-            Don't have a Customer profile yet?{' '}
-            <button type="button" onClick={onSwitch} className="text-emerald-700 font-bold hover:underline">
-              Register as Customer
-            </button>
-          </p>
-        </div>
-      </form>
     </div>
   );
 }
@@ -1108,37 +1142,37 @@ function RegisterScreen({ onBack, onRegister, branches }: { onBack: () => void, 
   };
 
   return (
-    <div className="max-w-md mx-auto my-12 bg-white rounded-3xl shadow-xl border border-emerald-100 overflow-hidden">
-      <div className="bg-gradient-to-r from-emerald-800 to-emerald-900 text-white p-6 relative">
-        <button onClick={onBack} className="absolute left-4 top-6 text-emerald-200 hover:text-white flex items-center gap-1 text-xs">
+    <div className="w-full max-w-md mx-auto my-6 sm:my-12 bg-white rounded-3xl shadow-xl border border-emerald-100 overflow-hidden fade-in">
+      <div className="bg-gradient-to-br from-emerald-800 to-emerald-900 text-white p-6 sm:p-7 relative">
+        <button onClick={onBack} className="absolute left-4 top-6 text-emerald-200 hover:text-white flex items-center gap-1 text-xs font-semibold">
           <ChevronLeft className="w-4 h-4" /> Back
         </button>
         <div className="text-center mt-4">
-          <h2 className="text-2xl font-extrabold">Register Customer</h2>
-          <p className="text-xs text-emerald-200 mt-1">Choose your savings plan and set contribution target</p>
+          <h2 className="text-xl sm:text-2xl font-extrabold">Register Customer</h2>
+          <p className="text-xs text-emerald-200 mt-1.5">Choose your savings plan and set your contribution target</p>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="p-8 space-y-4 text-slate-800">
+      <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-4 text-slate-800">
         <div>
-          <label className="block text-xs font-black uppercase text-emerald-800 mb-1">Full Name *</label>
-          <input type="text" required placeholder="Chinedu Osei" value={name} onChange={(e) => setName(e.target.value)} className="w-full px-4 py-2.5 border border-emerald-200 rounded-xl text-sm" />
+          <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Full Name *</label>
+          <input type="text" required placeholder="Chinedu Osei" value={name} onChange={(e) => setName(e.target.value)} className="input-green text-sm" />
         </div>
         <div>
-          <label className="block text-xs font-black uppercase text-emerald-800 mb-1">Phone Number *</label>
-          <input type="text" required placeholder="e.g. 08012345678" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full px-4 py-2.5 border border-emerald-200 rounded-xl text-sm" />
-          <span className="text-[10px] text-slate-400 block mt-1">Accepts local formats (e.g. 080...) or international (+234...)</span>
+          <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Phone Number *</label>
+          <input type="text" required placeholder="e.g. 08012345678" value={phone} onChange={(e) => setPhone(e.target.value)} className="input-green text-sm" />
+          <span className="text-[11px] text-slate-400 block mt-1.5">Accepts local formats (e.g. 080...) or international (+234...)</span>
         </div>
         <div>
-          <label className="block text-xs font-black uppercase text-emerald-800 mb-1">Email Address</label>
-          <input type="email" placeholder="chinedu@domain.com" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-4 py-2.5 border border-emerald-200 rounded-xl text-sm" />
-          <span className="text-[10px] text-slate-400 block mt-1">Optional.</span>
+          <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Email Address</label>
+          <input type="email" placeholder="chinedu@domain.com" value={email} onChange={(e) => setEmail(e.target.value)} className="input-green text-sm" />
+          <span className="text-[11px] text-slate-400 block mt-1.5">Optional.</span>
         </div>
         <div>
-          <label className="block text-xs font-black uppercase text-emerald-800 mb-1">Password *</label>
+          <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Password *</label>
           <div className="relative">
-            <input type={showPassword ? 'text' : 'password'} required placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-2.5 border border-emerald-200 rounded-xl text-sm pr-10" />
-            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+            <input type={showPassword ? 'text' : 'password'} required placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} className="input-green text-sm pr-11" />
+            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-emerald-700 p-1">
               {showPassword ? <EyeOff className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
             </button>
           </div>
@@ -1146,59 +1180,59 @@ function RegisterScreen({ onBack, onRegister, branches }: { onBack: () => void, 
 
         {/* Savings Plan Selection */}
         <div>
-          <label className="block text-xs font-black uppercase text-emerald-800 mb-2">Savings Plan *</label>
+          <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-2">Savings Plan *</label>
           <div className="grid grid-cols-3 gap-2">
             {(['daily', 'monthly', 'both'] as const).map(type => (
               <button key={type} type="button" onClick={() => { setSavingsType(type); setTermsAccepted(false); }}
-                className={`py-2.5 px-2 rounded-xl text-[11px] font-black uppercase border-2 transition ${savingsType === type ? 'bg-emerald-700 border-emerald-700 text-white' : 'bg-white border-emerald-200 text-emerald-800 hover:border-emerald-400'}`}>
+                className={`py-2.5 px-2 rounded-xl text-[11px] font-bold uppercase border-2 transition-all duration-200 ${savingsType === type ? 'bg-emerald-700 border-emerald-700 text-white shadow-sm' : 'bg-white border-emerald-200 text-emerald-800 hover:border-emerald-400'}`}>
                 {type === 'daily' ? '32-Day Daily' : type === 'monthly' ? 'Monthly Salary' : 'Both Plans'}
               </button>
             ))}
           </div>
-          {savingsType === 'daily' && <p className="text-[10px] text-slate-500 mt-1.5 font-semibold">32-day rotating daily contribution cycle.</p>}
-          {savingsType === 'monthly' && <p className="text-[10px] text-slate-500 mt-1.5 font-semibold">Monthly salary savings — Jan to Dec, minimum ₦5,000/month.</p>}
-          {savingsType === 'both' && <p className="text-[10px] text-slate-500 mt-1.5 font-semibold">Both plans run simultaneously and independently.</p>}
+          {savingsType === 'daily' && <p className="text-[11px] text-slate-500 mt-1.5 font-medium">32-day rotating daily contribution cycle.</p>}
+          {savingsType === 'monthly' && <p className="text-[11px] text-slate-500 mt-1.5 font-medium">Monthly salary savings — Jan to Dec, minimum ₦5,000/month.</p>}
+          {savingsType === 'both' && <p className="text-[11px] text-slate-500 mt-1.5 font-medium">Both plans run simultaneously and independently.</p>}
         </div>
 
         {(savingsType === 'daily' || savingsType === 'both') && (
           <div>
-            <label className="block text-xs font-black uppercase text-emerald-800 mb-1">Daily Contribution Target (₦) *</label>
-            <input type="number" required min={300} placeholder="Minimum ₦300" value={dailyAmount} onChange={(e) => setDailyAmount(e.target.value)} className="w-full px-4 py-2.5 border border-emerald-200 rounded-xl text-sm font-semibold" />
-            <span className="text-[10px] text-slate-400 block mt-1">Minimum ₦300 per day.</span>
+            <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Daily Contribution Target (₦) *</label>
+            <input type="number" required min={300} placeholder="Minimum ₦300" value={dailyAmount} onChange={(e) => setDailyAmount(e.target.value)} className="input-green text-sm font-semibold" />
+            <span className="text-[11px] text-slate-400 block mt-1.5">Minimum ₦300 per day.</span>
           </div>
         )}
 
         <div>
-          <label className="block text-xs font-black uppercase text-emerald-800 mb-1">Assign Home Branch</label>
-          <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className="w-full px-4 py-2.5 border border-emerald-200 rounded-xl bg-white text-sm">
+          <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Assign Home Branch</label>
+          <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className="input-green bg-white text-sm">
             <option value="">-- Choose Branch --</option>
             {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         </div>
 
         {needsTerms && (
-          <div className={`rounded-xl border-2 p-3 flex items-start gap-2 cursor-pointer ${termsAccepted ? 'border-emerald-500 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}
+          <div className={`rounded-xl border-2 p-3.5 flex items-start gap-3 cursor-pointer transition-colors ${termsAccepted ? 'border-emerald-500 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}
             onClick={() => setShowTerms(true)}>
-            <div className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 mt-0.5 ${termsAccepted ? 'bg-emerald-600 text-white' : 'border-2 border-amber-400'}`}>
+            <div className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5 ${termsAccepted ? 'bg-emerald-600 text-white' : 'border-2 border-amber-400'}`}>
               {termsAccepted && <span className="text-[10px] font-black">✓</span>}
             </div>
             <div>
               <p className="text-xs font-bold text-slate-700">{termsAccepted ? 'Terms & Conditions accepted ✓' : 'Read & Accept Terms and Conditions'}</p>
-              <p className="text-[10px] text-slate-500">Monthly Salary Savings Plan terms apply. Tap to read.</p>
+              <p className="text-[11px] text-slate-500 mt-0.5">Monthly Salary Savings Plan terms apply. Tap to read.</p>
             </div>
           </div>
         )}
 
-        <button type="submit" className="w-full bg-amber-500 hover:bg-amber-600 text-emerald-955 font-black py-3 rounded-xl transition duration-150 shadow-md mt-2">
+        <button type="submit" className="w-full bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-emerald-950 font-bold py-3.5 rounded-xl transition-all duration-200 shadow-md mt-2">
           Activate Savings Cycle
         </button>
       </form>
 
       {/* Terms and Conditions Modal */}
       {showTerms && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowTerms(false)}>
-          <div className="bg-white rounded-3xl max-w-lg w-full max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
-            <div className="bg-emerald-800 text-white p-5 rounded-t-3xl">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setShowTerms(false)}>
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full max-h-[88vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="bg-gradient-to-br from-emerald-800 to-emerald-900 text-white p-5 rounded-t-3xl">
               <h3 className="text-base font-black">Monthly Salary Savings Plan</h3>
               <p className="text-emerald-200 text-xs mt-0.5">Terms and Conditions — Please read carefully</p>
             </div>
@@ -1221,9 +1255,9 @@ function RegisterScreen({ onBack, onRegister, branches }: { onBack: () => void, 
                 </div>
               ))}
             </div>
-            <div className="p-4 border-t border-slate-100 flex gap-2">
+            <div className="p-4 border-t border-slate-100 flex gap-2 bg-white rounded-b-3xl">
               <button type="button" onClick={() => setShowTerms(false)}
-                className="flex-1 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50">
+                className="flex-1 py-3 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors">
                 Close
               </button>
               <button type="button" onClick={() => {
@@ -1235,7 +1269,7 @@ function RegisterScreen({ onBack, onRegister, branches }: { onBack: () => void, 
                   onRegister(syntheticData);
                 }
               }}
-                className="flex-1 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black uppercase">
+                className="flex-1 py-3 bg-emerald-700 hover:bg-emerald-800 active:scale-[0.98] text-white rounded-xl text-xs font-bold uppercase tracking-wide transition-all duration-200 shadow-sm">
                 I Accept These Terms
               </button>
             </div>
@@ -1249,9 +1283,11 @@ function RegisterScreen({ onBack, onRegister, branches }: { onBack: () => void, 
 function Grid32({ trackingDays, dailyAmount }: { trackingDays: MarkedDay[], dailyAmount: number }) {
   const daysTotal = 32;
 
+  const completionPct = Math.round((trackingDays.length / daysTotal) * 100);
+
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-4 sm:grid-cols-8 gap-2.5">
+      <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 sm:gap-2.5">
         {Array.from({ length: daysTotal }, (_, i) => {
           const dayNum = i + 1;
           const markedInfo = trackingDays.find(item => item.day_number === dayNum);
@@ -1259,15 +1295,15 @@ function Grid32({ trackingDays, dailyAmount }: { trackingDays: MarkedDay[], dail
           return (
             <div 
               key={dayNum}
-              className={`relative flex flex-col items-center justify-center p-3 rounded-2xl border transition duration-300 ${
+              className={`relative flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-2xl border transition-all duration-200 ${
                 markedInfo 
-                  ? 'bg-amber-50 border-amber-400 text-amber-955 shadow-sm' 
-                  : 'bg-emerald-50/20 border-emerald-100 text-slate-400'
+                  ? 'bg-amber-50 border-amber-400 text-amber-950 shadow-sm' 
+                  : 'bg-emerald-50/40 border-emerald-100 text-slate-400'
               }`}
             >
-              <span className="text-[10px] font-black block mb-1">Day {dayNum}</span>
+              <span className="text-[10px] font-bold block mb-1">Day {dayNum}</span>
               {markedInfo ? (
-                <div className="w-6 h-6 rounded-full bg-amber-400 text-emerald-955 flex items-center justify-center text-[11px] font-black shadow-inner">
+                <div className="w-6 h-6 rounded-full bg-amber-400 text-emerald-950 flex items-center justify-center text-[11px] font-black shadow-inner">
                   ★
                 </div>
               ) : (
@@ -1280,15 +1316,15 @@ function Grid32({ trackingDays, dailyAmount }: { trackingDays: MarkedDay[], dail
         })}
       </div>
 
-      <div className="pt-2 border-t border-emerald-50">
-        <div className="flex justify-between items-center text-xs font-bold text-slate-555 mb-1">
+      <div className="pt-3 border-t border-emerald-50">
+        <div className="flex justify-between items-center text-xs font-bold text-slate-600 mb-1.5">
           <span>Completion Rate</span>
-          <span className="text-emerald-800">{Math.round((trackingDays.length / daysTotal) * 100)}%</span>
+          <span className="text-emerald-800">{trackingDays.length} / {daysTotal} days &middot; {completionPct}%</span>
         </div>
         <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
           <div 
-            className="bg-amber-500 h-full rounded-full transition-all duration-500"
-            style={{ width: `${(trackingDays.length / daysTotal) * 100}%` }}
+            className="bg-gradient-to-r from-amber-400 to-amber-500 h-full rounded-full transition-all duration-500"
+            style={{ width: `${completionPct}%` }}
           />
         </div>
       </div>
@@ -1300,34 +1336,34 @@ function SupportWidget({ details }: { details: SupportSettings }) {
   const whatsappClean = details.support_whatsapp.replace(/[\s\+]/g, '');
 
   return (
-    <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4">
+    <div className="card-green space-y-4">
       <div>
-        <h4 className="text-sm font-black text-emerald-955 uppercase tracking-wider">Need Assistance?</h4>
-        <p className="text-[10px] text-slate-555 mt-0.5">Contact direct support channels managed by HireMercy administration.</p>
+        <h4 className="text-sm font-bold text-emerald-950 uppercase tracking-wide">Need Assistance?</h4>
+        <p className="text-[11px] text-slate-500 mt-1">Contact direct support channels managed by HireMercy administration.</p>
       </div>
 
       <div className="space-y-2">
         <a 
           href={`tel:${details.support_phone}`}
-          className="flex items-center gap-3 p-2.5 bg-emerald-50/40 hover:bg-emerald-50/80 rounded-xl border border-emerald-100/50 text-xs text-emerald-900 transition duration-150 font-bold"
+          className="flex items-center gap-3 p-3 bg-emerald-50/60 hover:bg-emerald-100/70 rounded-xl border border-emerald-100 text-xs text-emerald-900 transition-colors duration-150 font-semibold"
         >
-          <Phone className="w-4 h-4 text-emerald-600" />
+          <span className="icon-circle-light w-8 h-8 sm:w-8 sm:h-8"><Phone className="w-4 h-4" /></span>
           <span>Call: {details.support_phone}</span>
         </a>
         <a 
           href={`https://wa.me/${whatsappClean}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-3 p-2.5 bg-emerald-50/40 hover:bg-emerald-50/80 rounded-xl border border-emerald-100/50 text-xs text-emerald-900 transition duration-150 font-bold"
+          className="flex items-center gap-3 p-3 bg-emerald-50/60 hover:bg-emerald-100/70 rounded-xl border border-emerald-100 text-xs text-emerald-900 transition-colors duration-150 font-semibold"
         >
-          <MessageSquare className="w-4 h-4 text-emerald-600" />
+          <span className="icon-circle-light w-8 h-8 sm:w-8 sm:h-8"><MessageSquare className="w-4 h-4" /></span>
           <span>WhatsApp: Chat Live</span>
         </a>
         <a 
           href={`mailto:${details.support_email}`}
-          className="flex items-center gap-3 p-2.5 bg-emerald-50/40 hover:bg-emerald-50/80 rounded-xl border border-emerald-100/50 text-xs text-emerald-900 transition duration-150 font-bold"
+          className="flex items-center gap-3 p-3 bg-emerald-50/60 hover:bg-emerald-100/70 rounded-xl border border-emerald-100 text-xs text-emerald-900 transition-colors duration-150 font-semibold"
         >
-          <Mail className="w-4 h-4 text-emerald-600" />
+          <span className="icon-circle-light w-8 h-8 sm:w-8 sm:h-8"><Mail className="w-4 h-4" /></span>
           <span>Email: Support Inbox</span>
         </a>
       </div>
@@ -1339,22 +1375,37 @@ function AdvertisementBanner({ details }: { details: SupportSettings }) {
   if (!details.advert_enabled) return null;
 
   return (
-    <div className="overflow-hidden rounded-3xl border border-amber-200 bg-gradient-to-r from-emerald-900 via-emerald-800 to-emerald-950 shadow-lg">
-      <div className="grid gap-4 p-5 md:grid-cols-[1.3fr_0.7fr] md:items-center">
+    <div className="overflow-hidden rounded-3xl border border-amber-200/60 bg-gradient-to-br from-emerald-900 via-emerald-800 to-emerald-950 shadow-lg mb-6 fade-in relative">
+      <div className="grid gap-4 p-5 sm:p-7 md:grid-cols-[1.3fr_0.9fr] md:items-center">
         <div className="space-y-3">
-          <span className="inline-flex rounded-full bg-amber-400 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-950">Featured campaign</span>
-          <h3 className="text-lg font-black text-white">{details.advert_title || 'Cartoon characters safely collecting small daily contributions from customers and returning them back to you in bulk!'}</h3>
-          <p className="text-sm text-emerald-100">{details.advert_description || 'Join the smart daily savings circle with HireMercyAJO.'}</p>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-400 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-950">
+            <Sparkles className="w-3 h-3" /> Featured campaign
+          </span>
+          <h3 className="text-lg sm:text-2xl font-black text-white leading-snug">
+            {details.advert_title ? details.advert_title : (
+              <>Save today and <span className="text-emerald-400">grow together</span>, prosper with confidence</>
+            )}
+          </h3>
+          <p className="text-sm text-emerald-100 max-w-md">{details.advert_description || 'Join the smart daily savings circle with HireMercyAJO.'}</p>
+          <button type="button" className="mt-1 inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all duration-200 shadow-sm">
+            Learn More <ChevronRight className="w-3.5 h-3.5" />
+          </button>
         </div>
         <div className="overflow-hidden rounded-2xl border border-emerald-700/60 bg-white/10 p-2">
           {details.advert_video_url ? (
-            <video src={details.advert_video_url} className="h-40 w-full rounded-xl object-cover" autoPlay loop muted playsInline />
+            <video src={details.advert_video_url} className="h-40 sm:h-48 w-full rounded-xl object-cover" autoPlay loop muted playsInline />
           ) : details.advert_image_url ? (
-            <img src={details.advert_image_url} alt="Advertisement" className="h-40 w-full rounded-xl object-cover" />
+            <img src={details.advert_image_url} alt="Advertisement" className="h-40 sm:h-48 w-full rounded-xl object-cover" />
           ) : (
-            <div className="flex h-40 items-center justify-center rounded-xl bg-emerald-900/70 text-center text-sm font-bold text-emerald-100">Daily contributions made simple.</div>
+            <div className="flex h-40 sm:h-48 items-center justify-center rounded-xl bg-emerald-900/70 text-center text-sm font-bold text-emerald-100 px-4">Daily contributions made simple.</div>
           )}
         </div>
+      </div>
+      <div className="flex justify-center gap-1.5 pb-4">
+        <span className="w-5 h-1.5 rounded-full bg-amber-400" />
+        <span className="w-1.5 h-1.5 rounded-full bg-white/30" />
+        <span className="w-1.5 h-1.5 rounded-full bg-white/30" />
+        <span className="w-1.5 h-1.5 rounded-full bg-white/30" />
       </div>
     </div>
   );
@@ -1399,14 +1450,14 @@ function MonthlySavingsAdminTab({ monthlySavingsPlans, monthlySavingsMonths, pro
         ].map(c => (
           <div key={c.label} className="bg-white border border-emerald-100 rounded-2xl p-4 shadow-sm">
             <p className="text-[10px] font-black uppercase text-emerald-800">{c.label}</p>
-            <p className="text-xl font-black text-emerald-955 mt-1">{c.value}</p>
+            <p className="text-xl font-black text-emerald-950 mt-1">{c.value}</p>
           </div>
         ))}
       </div>
 
-      <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4">
+      <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs space-y-4">
         <div className="flex flex-wrap justify-between items-center gap-3">
-          <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider">Monthly Salary Savings</h3>
+          <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide">Monthly Salary Savings</h3>
           <select value={msSelectedYear} onChange={e => setMsSelectedYear(Number(e.target.value))}
             className="border border-emerald-200 rounded-xl px-2 py-1.5 text-xs font-bold">
             {[currentYear - 1, currentYear, currentYear + 1].map(y => <option key={y} value={y}>{y}</option>)}
@@ -1440,7 +1491,7 @@ function MonthlySavingsAdminTab({ monthlySavingsPlans, monthlySavingsMonths, pro
               </span>
               <button type="button"
                 onClick={() => { setMsDepositMonth(new Date().getMonth() + 1); setMsDepositAmount(''); setMsShowDepositModal(true); }}
-                className="bg-amber-500 hover:bg-amber-600 text-emerald-955 font-black px-3 py-1.5 rounded-xl text-xs uppercase">
+                className="bg-amber-500 hover:bg-amber-600 text-emerald-950 font-black px-3 py-1.5 rounded-xl text-xs uppercase">
                 + Record Deposit
               </button>
             </div>
@@ -1485,7 +1536,7 @@ function MonthlySavingsAdminTab({ monthlySavingsPlans, monthlySavingsMonths, pro
                         <td className="p-2.5 text-right">
                           <button type="button"
                             onClick={() => { setMsDepositMonth(monthNum); setMsDepositAmount(''); setMsShowDepositModal(true); }}
-                            className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-2.5 py-1 rounded-lg text-[10px] uppercase">
+                            className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-2.5 py-1 rounded-xl text-[10px] uppercase">
                             {md?.is_complete ? 'Top Up' : 'Pay'}
                           </button>
                         </td>
@@ -1506,14 +1557,14 @@ function MonthlySavingsAdminTab({ monthlySavingsPlans, monthlySavingsMonths, pro
       </div>
 
       {/* All enrolled this year */}
-      <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
+      <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
         <h4 className="text-xs font-black uppercase text-emerald-800 mb-3">All Enrolled — {msSelectedYear}</h4>
         {enrolled.length === 0 ? (
           <p className="text-xs text-slate-400">No customers enrolled for {msSelectedYear} yet. Register a customer with Monthly or Both plan to get started.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead><tr className="text-slate-500 font-bold border-b">
+              <thead><tr className="text-slate-500 font-bold border-b border-slate-100 text-[10px] uppercase tracking-wide">
                 <th className="p-2">Customer</th><th className="p-2">Total Saved</th>
                 <th className="p-2">Months Complete</th><th className="p-2">Status</th>
               </tr></thead>
@@ -1543,9 +1594,9 @@ function MonthlySavingsAdminTab({ monthlySavingsPlans, monthlySavingsMonths, pro
 
       {/* Deposit modal */}
       {msShowDepositModal && msSelectedCustomer && customerPlan && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setMsShowDepositModal(false)}>
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6" onClick={e => e.stopPropagation()}>
-            <h3 className="text-md font-black text-emerald-955 mb-1">Record Monthly Deposit</h3>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setMsShowDepositModal(false)}>
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-sm w-full p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-bold text-emerald-950 mb-1">Record Monthly Deposit</h3>
             <p className="text-xs text-slate-500 mb-3">{MONTH_NAMES[msDepositMonth - 1]} {msSelectedYear} — {profiles.find(p => p.id === msSelectedCustomer)?.name}</p>
             {(() => {
               const existing = getMonthData(msDepositMonth);
@@ -1612,6 +1663,8 @@ function AdminDashboard({
   monthlySavingsPlans: MonthlySavingsPlan[], monthlySavingsMonths: MonthlySavingsMonth[], onEnrollMonthlySavings: (customerId: string, year: number) => void, onRecordMonthlyDeposit: (customerId: string, year: number, month: number, amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => void
 }) {
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [saverPreviewSearch, setSaverPreviewSearch] = useState('');
   const [loanSubView, setLoanSubView] = useState<'pending' | 'active' | 'completed' | 'history'>('pending');
   const [showAssignLoanModal, setShowAssignLoanModal] = useState(false);
   const [assignLoanCustomerId, setAssignLoanCustomerId] = useState('');
@@ -2174,6 +2227,31 @@ function AdminDashboard({
     });
     const todayCollected = todayTransactions.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
 
+    // --- Display-only comparison figures (read-only aggregation of the same
+    // transactions data above; does not affect any stored value or calculation) ---
+    const prevMonthDate = new Date(curYear, curMonth - 2, 1); // month is 1-based above, JS Date is 0-based
+    const prevYear = prevMonthDate.getFullYear();
+    const prevMonth = prevMonthDate.getMonth() + 1;
+    const prevMonthCollection = transactions
+      .filter(t => {
+        if (!t.date || t.status !== 'Successful') return false;
+        const [tYear, tMonth] = t.date.split('-').map(Number);
+        return tYear === prevYear && tMonth === prevMonth;
+      })
+      .reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+    const monthlyChangePct = prevMonthCollection > 0
+      ? Math.round(((monthlyCollection - prevMonthCollection) / prevMonthCollection) * 100)
+      : (monthlyCollection > 0 ? 100 : 0);
+
+    const yesterdayDate = new Date(new Date(watToday).getTime() - 24 * 60 * 60 * 1000);
+    const yesterdayKey = yesterdayDate.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+    const yesterdayCollected = transactions
+      .filter(t => t.date === yesterdayKey && t.status === 'Successful')
+      .reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+    const todayChangePct = yesterdayCollected > 0
+      ? Math.round(((todayCollected - yesterdayCollected) / yesterdayCollected) * 100)
+      : (todayCollected > 0 ? 100 : 0);
+
     return {
       monthlyCollection,
       monthlyTransactions,
@@ -2181,6 +2259,8 @@ function AdminDashboard({
       todayTransactions,
       totalCustomers: customers.length,
       totalStaff: staff.length,
+      monthlyChangePct,
+      todayChangePct,
     };
   }, [transactions, customers, staff]);
 
@@ -2547,30 +2627,138 @@ function AdminDashboard({
     setExpandedDates(prev => ({ ...prev, [dateKey]: !prev[dateKey] }));
   };
 
+  const ADMIN_NAV: { key: AdminTab; label: string; icon: any }[] = [
+    { key: 'overview', label: 'Dashboard', icon: LayoutDashboard },
+    { key: 'reports', label: 'Analysis', icon: BarChart3 },
+    { key: 'payouts', label: 'Payouts', icon: Landmark },
+    { key: 'records', label: 'Records', icon: FileText },
+    { key: 'transactions', label: 'Transactions', icon: ArrowLeftRight },
+    { key: 'cashsheet', label: 'Cash Sheet', icon: Wallet },
+    { key: 'loans', label: 'Loan Management', icon: HandCoins },
+    { key: 'monthly-savings', label: 'Monthly Savings', icon: CalendarRange },
+    { key: 'customers', label: 'Customers', icon: Users },
+    { key: 'branches', label: 'Branches', icon: Building2 },
+    { key: 'staff', label: 'Staff', icon: UserIcon },
+    { key: 'settings', label: 'Settings', icon: Settings },
+  ];
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
-        <div>
-          <h2 className="text-xl font-black text-emerald-955 flex items-center gap-2">
-            <Shield className="w-6 h-6 text-emerald-700" />
-            Admin Command Centre
-          </h2>
-          <p className="text-xs text-slate-555">Global oversight of savings collections, active balances, and auditing logs</p>
+    <div className="lg:flex lg:items-start lg:gap-6">
+      {/* Mobile top bar: brand + sidebar toggle (sidebar itself is a drawer on mobile) */}
+      <div className="lg:hidden flex items-center justify-between gap-3 mb-4">
+        <div className="flex items-center gap-2">
+          <span className="icon-circle w-9 h-9"><Shield className="w-5 h-5" /></span>
+          <div>
+            <h2 className="text-sm font-black text-emerald-950 leading-tight">Admin Command Centre</h2>
+            <p className="text-[10px] text-slate-500">Global oversight dashboard</p>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2 items-center">
+        <button
+          type="button"
+          onClick={() => setSidebarOpen(true)}
+          className="p-2.5 rounded-xl bg-emerald-800 text-white shadow-sm"
+          aria-label="Open navigation menu"
+        >
+          <LayoutDashboard className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* Sidebar - drawer on mobile, sticky column on desktop */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setSidebarOpen(false)} />
+        </div>
+      )}
+      <aside className={`
+        fixed inset-y-0 left-0 z-50 w-72 shrink-0 transform transition-transform duration-300 ease-out
+        lg:relative lg:z-0 lg:w-64 lg:translate-x-0 lg:sticky lg:top-20
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+      `}>
+        <div className="h-full lg:h-auto lg:max-h-[calc(100vh-6rem)] overflow-y-auto bg-gradient-to-b from-emerald-900 to-emerald-950 rounded-none lg:rounded-3xl p-4 flex flex-col gap-1 shadow-xl">
+          <div className="flex items-center justify-between px-1 pb-3 mb-2 border-b border-white/10">
+            <div className="flex items-center gap-2">
+              <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 flex items-center justify-center shrink-0">
+                <PiggyBank className="w-5 h-5 text-emerald-950" />
+              </span>
+              <div>
+                <p className="text-sm font-black text-white leading-tight">HireMercy<span className="text-amber-400">AJO</span></p>
+                <p className="text-[9px] text-emerald-300">Admin Control Panel</p>
+              </div>
+            </div>
+            <button type="button" onClick={() => setSidebarOpen(false)} className="lg:hidden p-1.5 text-emerald-200 hover:text-white">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {ADMIN_NAV.map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => { setActiveTab(key); setSidebarOpen(false); }}
+              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 text-left ${
+                activeTab === key
+                  ? 'bg-white text-emerald-900 shadow-sm'
+                  : 'text-emerald-100 hover:bg-white/10'
+              }`}
+            >
+              <Icon className="w-4.5 h-4.5 shrink-0" />
+              <span className="truncate">{label}</span>
+            </button>
+          ))}
+
+          <div className="mt-4 rounded-2xl bg-gradient-to-br from-emerald-800 to-emerald-950 border border-emerald-700/60 p-4 text-center">
+            <div className="w-12 h-12 mx-auto mb-2 rounded-2xl bg-amber-400/90 flex items-center justify-center shadow-md">
+              <ShieldCheck className="w-6 h-6 text-emerald-950" />
+            </div>
+            <p className="text-xs font-black text-white">Grow Together,<br/>Prosper Forever</p>
+            <p className="text-[10px] text-emerald-300 mt-1.5 leading-relaxed">Empowering communities through consistent savings and trust.</p>
+            <button
+              type="button"
+              onClick={() => { setActiveTab('reports'); setSidebarOpen(false); }}
+              className="mt-3 w-full bg-amber-500 hover:bg-amber-400 text-emerald-950 text-[11px] font-bold py-2 rounded-xl transition-colors flex items-center justify-center gap-1"
+            >
+              View Reports <ArrowUpRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main content column */}
+      <div className="flex-1 min-w-0 space-y-5 sm:space-y-6">
+      <div className="flex flex-col gap-4 card-green">
+        <div className="hidden lg:flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div>
+            <h2 className="text-lg sm:text-xl font-black text-emerald-950 flex items-center gap-2">
+              <span className="icon-circle w-9 h-9 sm:w-10 sm:h-10"><Shield className="w-5 h-5" /></span>
+              Admin Command Centre
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">Global oversight of savings collections, active balances, and auditing logs</p>
+          </div>
+          <div className="flex flex-wrap gap-2 items-center">
+            <button
+              type="button"
+              onClick={() => setShowAnalysisModal(true)}
+              className="rounded-xl bg-amber-500 px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-emerald-950 shadow-sm transition-all duration-200 hover:bg-amber-400 active:scale-[0.98]"
+            >
+              Analysis
+            </button>
+            <LiveTransactionCounter count={successfulTransactions.filter(tx => tx.date === new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' }) && tx.status === 'Successful').length} label="Today's work" />
+          </div>
+        </div>
+        <div className="flex sm:hidden justify-end">
           <button
             type="button"
             onClick={() => setShowAnalysisModal(true)}
-            className="rounded-xl bg-amber-500 px-4 py-2 text-xs font-black uppercase tracking-wide text-emerald-950 shadow-sm transition hover:bg-amber-400"
+            className="rounded-xl bg-amber-500 px-4 py-2 text-xs font-bold uppercase tracking-wide text-emerald-950 shadow-sm"
           >
             Analysis
           </button>
-          <LiveTransactionCounter count={successfulTransactions.filter(tx => tx.date === new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' }) && tx.status === 'Successful').length} label="Today's work" />
+        </div>
+        <div className="lg:hidden flex gap-2 overflow-x-auto -mx-1 px-1 pb-1">
           {(['overview', 'customers', 'branches', 'staff', 'payouts', 'records', 'transactions', 'cashsheet', 'loans', 'monthly-savings', 'settings', 'reports'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 rounded-xl text-xs font-black tracking-wide uppercase transition ${
+              className={`shrink-0 px-4 py-2.5 rounded-xl text-xs font-bold tracking-wide uppercase transition-all duration-200 ${
                 activeTab === tab 
                   ? 'bg-emerald-700 text-white shadow-md' 
                   : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
@@ -2582,71 +2770,96 @@ function AdminDashboard({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         {/* Clickable Total Cycle Collection (Monthly Resetting Card) */}
         <button 
           onClick={() => setShowCollectionDrilldown(true)}
-          className="bg-white p-6 rounded-3xl border-2 border-emerald-200 hover:border-emerald-300 text-left transition duration-150 flex items-center gap-4 focus:outline-none w-full animate-fade-in text-slate-855"
+          className="stat-card text-left flex flex-col gap-3 focus:outline-none w-full text-slate-800"
         >
-          <div className="p-3 bg-emerald-100 text-emerald-700 rounded-2xl">
-            <Landmark className="w-8 h-8" />
+          <div className="flex items-center gap-3">
+            <span className="icon-circle shrink-0 w-11 h-11"><Landmark className="w-5 h-5" /></span>
+            <div className="min-w-0">
+              <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wide leading-tight">Monthly Cycle<br/>Collection</p>
+            </div>
           </div>
           <div>
-            <p className="text-[10px] text-slate-555 uppercase font-black">Monthly Cycle Collection</p>
-            <p className="text-xl font-black text-slate-900">₦{stats.monthlyCollection.toLocaleString()}</p>
-            <p className="text-[9px] text-emerald-800 font-bold underline mt-0.5">Click for details & reset history</p>
+            <p className="text-xl sm:text-2xl font-black text-slate-900">₦{stats.monthlyCollection.toLocaleString()}</p>
+            <p className={`text-[11px] font-bold mt-0.5 flex items-center gap-1 ${stats.monthlyChangePct >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+              {stats.monthlyChangePct >= 0 ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowLeftRight className="w-3.5 h-3.5 rotate-90" />}
+              {Math.abs(stats.monthlyChangePct)}% vs last month
+            </p>
           </div>
+          <MiniSparkline color="#059669" positive={stats.monthlyChangePct >= 0} />
         </button>
 
         {/* Today's Contribution Card (Clickable) */}
         <button 
           onClick={() => setShowTodayDrilldown(true)}
-          className="bg-white p-6 rounded-3xl border-2 border-dashed border-amber-300 hover:border-amber-400 bg-amber-50/20 text-left transition duration-150 flex items-center gap-4 focus:outline-none w-full text-slate-855"
+          className="stat-card text-left flex flex-col gap-3 focus:outline-none w-full text-slate-800"
+          style={{ background: 'linear-gradient(145deg, #ffffff 0%, var(--emerald-50) 60%, #fffbeb 100%)', borderColor: 'rgba(217, 119, 6, 0.2)' }}
         >
-          <div className="p-3 bg-amber-100 text-amber-700 rounded-2xl animate-pulse">
-            <Coins className="w-8 h-8" />
+          <div className="flex items-center gap-3">
+            <span className="icon-circle-light shrink-0 w-11 h-11" style={{ background: 'var(--emerald-100)' }}><Coins className="w-5 h-5 text-amber-600" /></span>
+            <div className="min-w-0">
+              <p className="text-[10px] text-amber-700 uppercase font-bold tracking-wide flex items-center gap-1.5 leading-tight">
+                Today's<br/>Contribution
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              </p>
+            </div>
           </div>
           <div>
-            <p className="text-[10px] text-amber-800 uppercase font-black flex items-center gap-1">
-              Today's Contribution
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+            <p className="text-xl sm:text-2xl font-black text-slate-900">₦{stats.todayCollected.toLocaleString()}</p>
+            <p className={`text-[11px] font-bold mt-0.5 ${stats.todayChangePct >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+              {stats.todayChangePct === 0 ? '— 0% vs yesterday' : `${stats.todayChangePct > 0 ? '↗' : '↘'} ${Math.abs(stats.todayChangePct)}% vs yesterday`}
             </p>
-            <p className="text-xl font-black text-slate-900">₦{stats.todayCollected.toLocaleString()}</p>
-            <p className="text-[9px] text-emerald-800 font-bold underline mt-0.5">Click to view breakdown</p>
           </div>
+          <MiniSparkline color="#d97706" positive={stats.todayChangePct >= 0} />
         </button>
 
         <button
           onClick={() => { setShowCustomersDrilldown(true); setCustomersDrilldownView(null); }}
-          className="relative bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm hover:border-emerald-300 text-left transition duration-150 flex items-center gap-4 focus:outline-none w-full text-slate-855"
+          className="relative stat-card text-left flex flex-col gap-3 focus:outline-none w-full text-slate-800"
         >
           {newCustomersList.length > 0 && (
-            <span className="absolute -top-2 -right-2 bg-amber-505 text-white text-[10px] font-black px-2 py-1 rounded-full shadow">
+            <span className="absolute -top-2 -right-2 bg-amber-500 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-sm">
               +{newCustomersList.length} new
             </span>
           )}
-          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl">
-            <Users className="w-8 h-8" />
+          <div className="flex items-center gap-3">
+            <span className="icon-circle shrink-0 w-11 h-11"><Users className="w-5 h-5" /></span>
+            <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wide leading-tight">Registered<br/>Customers</p>
           </div>
           <div>
-            <p className="text-[10px] text-slate-505 uppercase font-black">Registered Customers</p>
-            <p className="text-xl font-black text-slate-900">{stats.totalCustomers}</p>
-            <p className="text-[9px] text-emerald-800 font-bold underline mt-0.5">Click to view breakdown</p>
+            <p className="text-xl sm:text-2xl font-black text-slate-900">{stats.totalCustomers}</p>
+            <p className="text-[11px] font-bold text-emerald-600 mt-0.5">{newCustomersList.length} new recently</p>
           </div>
+          <MiniSparkline color="#059669" positive />
         </button>
 
+        <div className="stat-card flex flex-col gap-3 w-full text-slate-800">
+          <div className="flex items-center gap-3">
+            <span className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 bg-violet-100 text-violet-700"><ShieldCheck className="w-5 h-5" /></span>
+            <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wide leading-tight">Authorized<br/>Field Agents</p>
+          </div>
+          <div>
+            <p className="text-xl sm:text-2xl font-black text-slate-900">{stats.totalStaff}</p>
+            <p className="text-[11px] font-bold text-violet-600 mt-0.5">Active & verified</p>
+          </div>
+          <MiniSparkline color="#7c3aed" positive />
+        </div>
+
         {showCustomersDrilldown && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl max-w-lg w-full p-6 border border-emerald-100 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto">
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4">
+            <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-5 sm:p-6 border border-emerald-100 shadow-2xl space-y-4 max-h-[88vh] overflow-y-auto">
               <div className="flex justify-between items-center border-b border-emerald-50 pb-3">
-                <h3 className="text-lg font-black text-emerald-955 uppercase tracking-wider flex items-center gap-2">
-                  <Users className="w-6 h-6 text-emerald-700" />
+                <h3 className="text-base sm:text-lg font-black text-emerald-950 uppercase tracking-wide flex items-center gap-2">
+                  <Users className="w-5 h-5 text-emerald-700" />
                   Customers Breakdown
                 </h3>
                 <button
                   type="button"
                   onClick={() => { setShowCustomersDrilldown(false); setCustomersDrilldownView(null); }}
-                  className="p-1 text-slate-400 hover:text-slate-600 font-bold"
+                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
                 >
                   ✕
                 </button>
@@ -2726,12 +2939,12 @@ function AdminDashboard({
           </div>
         )}
 
-        <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-emerald-50 text-emerald-605 rounded-2xl">
+        <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs flex items-center gap-4">
+          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl">
             <Briefcase className="w-8 h-8" />
           </div>
           <div>
-            <p className="text-[10px] text-slate-505 uppercase font-black">Authorized Field Agents</p>
+            <p className="text-[10px] text-slate-500 uppercase font-black">Authorized Field Agents</p>
             <p className="text-xl font-black text-slate-900">{stats.totalStaff}</p>
           </div>
         </div>
@@ -2742,7 +2955,7 @@ function AdminDashboard({
           <div className="w-full max-w-2xl rounded-3xl border border-emerald-100 bg-white p-6 shadow-2xl">
             <div className="mb-4 flex items-center justify-between border-b border-emerald-50 pb-3">
               <div>
-                <h3 className="text-lg font-black uppercase tracking-wider text-emerald-955">Transaction analytics</h3>
+                <h3 className="text-lg font-black uppercase tracking-wide text-emerald-950">Transaction analytics</h3>
                 <p className="text-xs text-slate-500">Snapshot of customer reach and cash flow for the current successful set.</p>
               </div>
               <button type="button" onClick={() => setShowAnalysisModal(false)} className="text-slate-400 hover:text-slate-600">✕</button>
@@ -2772,7 +2985,7 @@ function AdminDashboard({
       {deleteTarget && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-3xl border border-emerald-100 bg-white p-6 shadow-2xl">
-            <h3 className="text-lg font-black uppercase tracking-wider text-emerald-955">Delete transaction?</h3>
+            <h3 className="text-lg font-black uppercase tracking-wide text-emerald-950">Delete transaction?</h3>
             <p className="mt-2 text-sm text-slate-600">Are you sure you want to delete this transaction? This action cannot be undone.</p>
             <div className="mt-4 rounded-2xl bg-amber-50/60 p-3 text-sm text-slate-700">
               <p className="font-black text-emerald-900">{deleteTarget.customer_name || 'Customer'}</p>
@@ -2789,9 +3002,9 @@ function AdminDashboard({
       {/* Monthly Cycle Collection Drilldown Modal */}
       {showCollectionDrilldown && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 border border-emerald-100 shadow-2xl space-y-6">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-6 border border-emerald-100 shadow-2xl space-y-6">
             <div className="flex justify-between items-center border-b border-emerald-50 pb-3">
-              <h3 className="text-lg font-black text-emerald-955 uppercase tracking-wider flex items-center gap-2">
+              <h3 className="text-lg font-black text-emerald-950 uppercase tracking-wide flex items-center gap-2">
                 <Landmark className="w-6 h-6 text-emerald-700" />
                 Monthly Cycle breakdown
               </h3>
@@ -2815,7 +3028,7 @@ function AdminDashboard({
                     </div>
                   ))}
                   <div className="flex justify-between p-2.5 bg-slate-50 rounded-xl">
-                    <span className="font-semibold text-slate-555">Unassigned Branch</span>
+                    <span className="font-semibold text-slate-500">Unassigned Branch</span>
                     <span className="font-bold text-slate-900">₦{(monthlyDrilldownData.branchTotals['unknown'] || 0).toLocaleString()}</span>
                   </div>
                 </div>
@@ -2826,7 +3039,7 @@ function AdminDashboard({
                 <div className="grid grid-cols-3 gap-2">
                   {Object.keys(monthlyDrilldownData.methodTotals).map(method => (
                     <div key={method} className="p-3 bg-amber-50/50 border border-amber-100 rounded-xl text-center">
-                      <p className="text-[10px] text-slate-555 font-bold">{method}</p>
+                      <p className="text-[10px] text-slate-500 font-bold">{method}</p>
                       <p className="font-black text-slate-900 mt-1">₦{monthlyDrilldownData.methodTotals[method].toLocaleString()}</p>
                     </div>
                   ))}
@@ -2835,7 +3048,7 @@ function AdminDashboard({
             </div>
 
             <div className="border-t border-emerald-50 pt-4 flex justify-between items-center">
-              <span className="text-xs text-slate-555 font-bold">Total Collection Current Month:</span>
+              <span className="text-xs text-slate-500 font-bold">Total Collection Current Month:</span>
               <span className="text-lg font-black text-emerald-800">₦{stats.monthlyCollection.toLocaleString()}</span>
             </div>
           </div>
@@ -2845,10 +3058,10 @@ function AdminDashboard({
       {/* Today's Contribution Drilldown Modal */}
       {showTodayDrilldown && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 border border-emerald-100 shadow-2xl space-y-6">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-6 border border-emerald-100 shadow-2xl space-y-6">
             <div className="flex justify-between items-center border-b border-emerald-50 pb-3">
-              <h3 className="text-lg font-black text-emerald-955 uppercase tracking-wider flex items-center gap-2">
-                <Coins className="w-6 h-6 text-amber-505" />
+              <h3 className="text-lg font-black text-emerald-950 uppercase tracking-wide flex items-center gap-2">
+                <Coins className="w-6 h-6 text-amber-500" />
                 Today's Breakdown ({new Date().toLocaleDateString()})
               </h3>
               <button 
@@ -2887,7 +3100,7 @@ function AdminDashboard({
                 <div className="grid grid-cols-3 gap-2">
                   {Object.keys(todayDrilldownData.methodTotals).map(method => (
                     <div key={method} className="p-3 bg-amber-50/50 border border-amber-100 rounded-xl text-center">
-                      <p className="text-[10px] text-slate-505 font-bold">{method}</p>
+                      <p className="text-[10px] text-slate-500 font-bold">{method}</p>
                       <p className="font-black text-slate-900 mt-1">₦{todayDrilldownData.methodTotals[method].toLocaleString()}</p>
                     </div>
                   ))}
@@ -2896,7 +3109,7 @@ function AdminDashboard({
             </div>
 
             <div className="border-t border-emerald-50 pt-4 flex justify-between items-center">
-              <span className="text-xs text-slate-505 font-bold">Total Collection Today:</span>
+              <span className="text-xs text-slate-500 font-bold">Total Collection Today:</span>
               <span className="text-lg font-black text-emerald-800">₦{stats.todayCollected.toLocaleString()}</span>
             </div>
           </div>
@@ -2905,37 +3118,38 @@ function AdminDashboard({
 
       {activeTab === 'overview' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm lg:col-span-1 h-fit text-slate-800">
-            <h3 className="text-md font-black text-emerald-955 mb-4 uppercase tracking-wider font-bold">Post Contribution</h3>
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs lg:col-span-1 h-fit text-slate-800">
+            <h3 className="text-sm font-bold text-emerald-950 mb-1 uppercase tracking-wide">Post Contribution</h3>
+            <p className="text-[11px] text-slate-500 mb-4">Record a customer's daily savings contribution</p>
             <form onSubmit={handlePost} className="space-y-4">
               <div>
-                <label className="block text-xs font-black text-emerald-800 mb-1 font-bold">Select Customer *</label>
+                <label className="block text-xs font-bold text-emerald-800 mb-1.5">Select Customer *</label>
                 <SearchableCustomerSelect 
                   customers={customers} 
                   selectedId={selectedCustomerId} 
                   onSelect={setSelectedCustomerId} 
-                  placeholder="Type name or phone to choose account..."
+                  placeholder="Search by name or phone number..."
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-black text-emerald-800 mb-1 font-bold">Deposit Amount (₦)</label>
+                <label className="block text-xs font-bold text-emerald-800 mb-1.5">Deposit Amount (₦) *</label>
                 <input 
                   type="number" 
                   required
-                  placeholder="e.g. 5000"
+                  placeholder="e.g. 5,000"
                   value={depositAmount}
                   onChange={(e) => setDepositAmount(e.target.value)}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-sm"
+                  className="input-green text-sm"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-black text-emerald-800 mb-1 font-bold">Payment Channel</label>
+                <label className="block text-xs font-bold text-emerald-800 mb-1.5">Payment Channel *</label>
                 <select 
                   value={paymentMethod} 
                   onChange={(e) => setPaymentMethod(e.target.value as any)}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl bg-white text-sm"
+                  className="input-green bg-white text-sm"
                 >
                   <option value="Cash">Cash</option>
                   <option value="Bank Transfer">Bank Transfer</option>
@@ -2945,15 +3159,33 @@ function AdminDashboard({
 
               <button 
                 type="submit" 
-                className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl transition duration-150 text-sm shadow-md"
+                className="w-full bg-emerald-700 hover:bg-emerald-800 active:scale-[0.98] text-white font-bold py-3.5 rounded-xl transition-all duration-200 text-sm shadow-md flex flex-col items-center gap-0.5"
               >
-                Post & Auto-Split
+                <span className="flex items-center gap-2"><ArrowUpRight className="w-4 h-4" /> Post Contribution &amp; Auto-Split</span>
+                <span className="text-[10px] font-medium text-emerald-100 normal-case">Post contribution and automatically split to savings, bonus and admin share</span>
               </button>
             </form>
           </div>
 
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm lg:col-span-2 space-y-4">
-            <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider font-bold">Saver Preview</h3>
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs lg:col-span-2 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide">Saver Preview</h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">Select a customer above or click on a name below to preview their 32-day tracking grid</p>
+              </div>
+              {!selectedCustomerId && (
+                <div className="relative shrink-0 w-full sm:w-56">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={saverPreviewSearch}
+                    onChange={(e) => setSaverPreviewSearch(e.target.value)}
+                    placeholder="Search customers..."
+                    className="input-green text-xs pl-8 py-2"
+                  />
+                </div>
+              )}
+            </div>
             
             {selectedCustomerId ? (
               (() => {
@@ -2963,13 +3195,13 @@ function AdminDashboard({
                   <div className="p-6 bg-emerald-50/20 border-2 border-emerald-200 rounded-2xl space-y-4 animate-fade-in text-slate-800 font-bold">
                     <div className="flex justify-between items-start flex-wrap gap-3">
                       <div className="space-y-1">
-                        <h4 className="font-bold text-emerald-955 text-base">{cust.name}</h4>
-                        <p className="text-[11px] text-slate-550 font-bold">Contact: {cust.phone}</p>
-                        <p className="text-[11px] text-slate-550 font-bold">Target Plan: ₦{cust.daily_amount.toLocaleString()}/day</p>
-                        <p className="text-[11px] text-slate-550 font-bold">
+                        <h4 className="font-bold text-emerald-950 text-base">{cust.name}</h4>
+                        <p className="text-[11px] text-slate-500 font-bold">Contact: {cust.phone}</p>
+                        <p className="text-[11px] text-slate-500 font-bold">Target Plan: ₦{cust.daily_amount.toLocaleString()}/day</p>
+                        <p className="text-[11px] text-slate-500 font-bold">
                           Balance/Amount: ₦{((markedDays[cust.id] || []).reduce((s, d) => s + d.amount, 0)).toLocaleString()}
                         </p>
-                        <p className="text-[11px] text-slate-550 font-bold">
+                        <p className="text-[11px] text-slate-500 font-bold">
                           Month: {(() => {
                             const days = markedDays[cust.id] || [];
                             if (days.length > 0) return periodLabelFromKey((days[0] as any)?.period_key);
@@ -2979,11 +3211,17 @@ function AdminDashboard({
                           })()}
                         </p>
                       </div>
-                      <div className="text-right">
-                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Progress</span>
-                        <span className="text-[10px] bg-amber-500 text-emerald-955 font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider font-bold">
+                      <div className="text-right flex flex-col items-end gap-2">
+                        <span className="text-[10px] bg-amber-500 text-emerald-950 font-black px-2.5 py-0.5 rounded-full uppercase tracking-wide">
                           {(markedDays[cust.id] || []).length} / 32 Days Marked
                         </span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCustomerId('')}
+                          className="text-[10px] text-emerald-700 font-bold hover:underline"
+                        >
+                          ← Back to list
+                        </button>
                       </div>
                     </div>
                     {previewCreditBalance > 0 && (
@@ -2997,19 +3235,34 @@ function AdminDashboard({
                 );
               })()
             ) : (
-              <div className="text-center py-12 bg-emerald-50/10 border border-dashed border-emerald-200 rounded-2xl">
-                <p className="text-xs text-slate-400 px-4">Please select a customer in the search bar above or click one below to preview their 32-day tracking grid:</p>
-                <div className="mt-4 flex flex-wrap gap-2 justify-center max-h-40 overflow-y-auto p-2">
-                  {customers.slice().map(c => (
+              <div>
+                <div className="flex flex-wrap gap-2 max-h-64 overflow-y-auto p-1">
+                  {customers
+                    .filter(c => !saverPreviewSearch.trim() || c.name.toLowerCase().includes(saverPreviewSearch.trim().toLowerCase()) || c.phone.includes(saverPreviewSearch.trim()))
+                    .slice(0, 30)
+                    .map(c => (
                     <button
                       key={c.id}
                       type="button"
                       onClick={() => setSelectedCustomerId(c.id)}
-                      className="px-3 py-1.5 bg-white hover:bg-emerald-50 text-emerald-900 border border-emerald-100 rounded-xl text-xs font-bold transition shadow-sm"
+                      className="px-3.5 py-2 bg-white hover:bg-emerald-50 text-emerald-900 border border-emerald-100 rounded-xl text-xs font-semibold transition-all duration-200 shadow-sm flex items-center gap-1.5"
                     >
+                      <UserIcon className="w-3 h-3 text-emerald-500" />
                       {c.name}
                     </button>
                   ))}
+                  {customers.length === 0 && (
+                    <p className="text-xs text-slate-400 px-2 py-6">No customers registered yet.</p>
+                  )}
+                </div>
+                <div className="text-center pt-3 mt-2 border-t border-emerald-50">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('customers')}
+                    className="text-xs font-bold text-emerald-700 hover:text-emerald-900 inline-flex items-center gap-1"
+                  >
+                    View All Customers <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
             )}
@@ -3017,10 +3270,29 @@ function AdminDashboard({
         </div>
       )}
 
+      {activeTab === 'overview' && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+          {[
+            { icon: ShieldCheck, title: 'Secure & Trusted', desc: 'Your data and transactions are 100% secure.' },
+            { icon: Target, title: 'Simple & Smart', desc: 'Easy to use, built for market people.' },
+            { icon: TrendingUp, title: 'Track & Grow', desc: 'Monitor savings, loans, and payouts in real-time.' },
+            { icon: Users, title: 'Community Driven', desc: 'Together we save, together we prosper.' },
+          ].map(({ icon: Icon, title, desc }) => (
+            <div key={title} className="card-green flex items-start gap-3">
+              <span className="icon-circle-light w-9 h-9 shrink-0"><Icon className="w-4 h-4" /></span>
+              <div>
+                <p className="text-xs font-bold text-emerald-950">{title}</p>
+                <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed">{desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {activeTab === 'customers' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm lg:col-span-1 h-fit text-slate-800">
-            <h3 className="text-md font-black text-emerald-955 mb-4 uppercase tracking-wider flex items-center gap-1.5">
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs lg:col-span-1 h-fit text-slate-800">
+            <h3 className="text-sm font-bold text-emerald-950 mb-4 uppercase tracking-wide flex items-center gap-1.5">
               <UserPlus className="w-5 h-5 text-emerald-700" />
               Register Customer Profile
             </h3>
@@ -3034,7 +3306,7 @@ function AdminDashboard({
                   placeholder="e.g. John Doe"
                   value={custName}
                   onChange={(e) => setCustName(e.target.value)}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-xs"
+                  className="input-green text-xs"
                 />
               </div>
               <div>
@@ -3045,7 +3317,7 @@ function AdminDashboard({
                   placeholder="080XXXXXXXX"
                   value={custPhone}
                   onChange={(e) => setCustPhone(e.target.value)}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-xs"
+                  className="input-green text-xs"
                 />
               </div>
               <div>
@@ -3055,7 +3327,7 @@ function AdminDashboard({
                   placeholder="chinedu@domain.com"
                   value={custEmail}
                   onChange={(e) => setCustEmail(e.target.value)}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-xs"
+                  className="input-green text-xs"
                 />
               </div>
               <div>
@@ -3067,7 +3339,7 @@ function AdminDashboard({
                     placeholder="••••••••"
                     value={custPassword}
                     onChange={(e) => setCustPassword(e.target.value)}
-                    className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-xs pr-8"
+                    className="input-green text-xs pr-8"
                   />
                   <button 
                     type="button" 
@@ -3092,7 +3364,7 @@ function AdminDashboard({
               {(custSavingsType === 'daily' || custSavingsType === 'both') && (
               <div>
                 <label className="block text-xs font-black text-emerald-800 mb-1">Daily Contribution (₦) *</label>
-                <input type="number" required={(custSavingsType as string) !== 'monthly'} min={300} placeholder="Minimum ₦300" value={custDailyAmount} onChange={(e) => setCustDailyAmount(e.target.value)} className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-xs font-semibold" />
+                <input type="number" required={(custSavingsType as string) !== 'monthly'} min={300} placeholder="Minimum ₦300" value={custDailyAmount} onChange={(e) => setCustDailyAmount(e.target.value)} className="input-green text-xs font-semibold" />
                 <span className="text-[9px] text-slate-400 block mt-1">Minimum ₦300/day</span>
               </div>
               )}
@@ -3107,7 +3379,7 @@ function AdminDashboard({
               )}
               <div>
                 <label className="block text-xs font-black text-emerald-800 mb-1">Assign Home Branch *</label>
-                <select required value={custBranch} onChange={(e) => setCustBranch(e.target.value)} className="w-full px-3 py-2 border border-emerald-200 rounded-xl bg-white text-xs">
+                <select required value={custBranch} onChange={(e) => setCustBranch(e.target.value)} className="input-green bg-white text-xs">
                   <option value="">-- Choose Branch --</option>
                   {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
@@ -3119,8 +3391,8 @@ function AdminDashboard({
 
             {/* Shared Terms Modal for Admin registration */}
             {showCustTerms && (
-              <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowCustTerms(false)}>
-                <div className="bg-white rounded-3xl max-w-lg w-full max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+              <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setShowCustTerms(false)}>
+                <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
                   <div className="bg-emerald-800 text-white p-5 rounded-t-3xl">
                     <h3 className="text-base font-black">Monthly Salary Savings Plan</h3>
                     <p className="text-emerald-200 text-xs mt-0.5">Terms and Conditions</p>
@@ -3151,15 +3423,15 @@ function AdminDashboard({
             )}
           </div>
 
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm lg:col-span-2 h-fit">
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs lg:col-span-2 h-fit">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 text-slate-800">
-              <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider">Customer Directory</h3>
+              <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide">Customer Directory</h3>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[10px] font-black uppercase text-emerald-800">Filter Branch:</span>
                 <select
                   value={selectedBranchFilter}
                   onChange={(e) => setSelectedBranchFilter(e.target.value)}
-                  className="px-2 py-1 text-xs border border-emerald-200 rounded-lg bg-white font-bold"
+                  className="px-2 py-1 text-xs border border-emerald-200 rounded-xl bg-white font-bold"
                 >
                   <option value="">All Branches</option>
                   {branches.map(b => (
@@ -3170,7 +3442,7 @@ function AdminDashboard({
                 <select
                   value={selectedLoanStatusFilter}
                   onChange={(e) => setSelectedLoanStatusFilter(e.target.value)}
-                  className="px-2 py-1 text-xs border border-emerald-200 rounded-lg bg-white font-bold"
+                  className="px-2 py-1 text-xs border border-emerald-200 rounded-xl bg-white font-bold"
                 >
                   <option value="">All</option>
                   <option value="No Loan">No Loan</option>
@@ -3222,7 +3494,7 @@ function AdminDashboard({
                             {c.name}
                           </button>
                         </td>
-                        <td className="p-3 font-semibold text-slate-655">{c.phone}</td>
+                        <td className="p-3 font-semibold text-slate-600">{c.phone}</td>
                         <td className="p-3 font-bold">₦{c.daily_amount.toLocaleString()}</td>
                         <td className="p-3">
                           <button 
@@ -3249,7 +3521,7 @@ function AdminDashboard({
                           <button 
                             type="button"
                             onClick={() => handleSendResetLink(c.email)}
-                            className="p-1.5 text-slate-655 hover:bg-slate-50 rounded-lg transition"
+                            className="p-1.5 text-slate-600 hover:bg-slate-50 rounded-xl transition"
                             title="Send Password Reset Email Link"
                           >
                             <Key className="w-4 h-4 text-emerald-700" />
@@ -3257,7 +3529,7 @@ function AdminDashboard({
                           <button 
                             type="button"
                             onClick={() => onResetPasswordToDefault?.(c.id)}
-                            className="p-1.5 text-amber-700 hover:bg-amber-50 rounded-lg transition"
+                            className="p-1.5 text-amber-700 hover:bg-amber-50 rounded-xl transition"
                             title="Reset password directly to 123456 (no email needed)"
                           >
                             <Lock className="w-4 h-4" />
@@ -3265,7 +3537,7 @@ function AdminDashboard({
                           <button 
                             type="button"
                             onClick={() => setEditingCustomer(c)}
-                            className="p-1.5 text-emerald-700 hover:bg-emerald-50 rounded-lg transition"
+                            className="p-1.5 text-emerald-700 hover:bg-emerald-50 rounded-xl transition"
                             title="Edit Customer Details"
                           >
                             <Edit2 className="w-4 h-4" />
@@ -3273,7 +3545,7 @@ function AdminDashboard({
                           <button 
                             type="button"
                             onClick={() => onDeleteCustomer(c.id)}
-                            className="p-1.5 text-red-650 hover:bg-red-50 rounded-lg transition"
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-xl transition"
                             title="Delete Customer Profile"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -3313,9 +3585,9 @@ function AdminDashboard({
 
       {editingCustomer && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <form onSubmit={handleSaveEditCustomer} className="bg-white rounded-3xl max-w-md w-full p-6 border border-emerald-100 shadow-2xl space-y-4">
+          <form onSubmit={handleSaveEditCustomer} className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full p-6 border border-emerald-100 shadow-2xl space-y-4">
             <div className="flex justify-between items-center border-b border-emerald-50 pb-3">
-              <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider">Edit Customer Profile</h3>
+              <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide">Edit Customer Profile</h3>
               <button 
                 type="button"
                 onClick={() => setEditingCustomer(null)}
@@ -3333,7 +3605,7 @@ function AdminDashboard({
                   required
                   value={editingCustomer.name}
                   onChange={(e) => setEditingCustomer({ ...editingCustomer, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl"
+                  className="input-green"
                 />
               </div>
               <div>
@@ -3343,7 +3615,7 @@ function AdminDashboard({
                   required
                   value={editingCustomer.phone}
                   onChange={(e) => setEditingCustomer({ ...editingCustomer, phone: e.target.value })}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl"
+                  className="input-green"
                 />
               </div>
               <div>
@@ -3352,7 +3624,7 @@ function AdminDashboard({
                   type="email" 
                   value={editingCustomer.email || ''}
                   onChange={(e) => setEditingCustomer({ ...editingCustomer, email: e.target.value })}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl"
+                  className="input-green"
                 />
               </div>
               <div>
@@ -3364,7 +3636,7 @@ function AdminDashboard({
                   placeholder="Minimum ₦300"
                   value={editingCustomer.daily_amount.toString()}
                   onChange={(e) => setEditingCustomer({ ...editingCustomer, daily_amount: Number(e.target.value) })}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl font-bold"
+                  className="input-green font-bold"
                 />
               </div>
               <div>
@@ -3373,7 +3645,7 @@ function AdminDashboard({
                   required
                   value={editingCustomer.branch_id || ''}
                   onChange={(e) => setEditingCustomer({ ...editingCustomer, branch_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl bg-white"
+                  className="input-green bg-white"
                 >
                   <option value="">-- Choose Branch --</option>
                   {branches.map(b => (
@@ -3387,7 +3659,7 @@ function AdminDashboard({
                   id="allowAnytime"
                   checked={editingCustomer.allow_anytime_change || false}
                   onChange={(e) => setEditingCustomer({ ...editingCustomer, allow_anytime_change: e.target.checked })}
-                  className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-555 border-emerald-300"
+                  className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-emerald-300"
                 />
                 <label htmlFor="allowAnytime" className="text-xs font-bold text-emerald-900 select-none">
                   Grant Client Permission to Change Amount Anytime
@@ -3410,8 +3682,8 @@ function AdminDashboard({
       {/* Branch Management (With Editing & Deletion) */}
       {activeTab === 'branches' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm lg:col-span-1 h-fit text-slate-800">
-            <h3 className="text-md font-black text-emerald-955 mb-4 uppercase tracking-wider flex items-center gap-1.5 font-bold">
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs lg:col-span-1 h-fit text-slate-800">
+            <h3 className="text-sm font-bold text-emerald-950 mb-4 uppercase tracking-wide flex items-center gap-1.5 font-bold">
               <Building2 className="w-5 h-5 text-emerald-700" />
               {editingBranch ? 'Edit Branch' : 'Register Branch'}
             </h3>
@@ -3424,7 +3696,7 @@ function AdminDashboard({
                   placeholder="e.g. Ikeja Mainland Centre"
                   value={editingBranch ? editingBranch.name : branchName}
                   onChange={(e) => editingBranch ? setEditingBranch({ ...editingBranch, name: e.target.value }) : setBranchName(e.target.value)}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-sm"
+                  className="input-green text-sm"
                 />
               </div>
               <div>
@@ -3434,7 +3706,7 @@ function AdminDashboard({
                   placeholder="e.g. 42 Allen Avenue, Lagos"
                   value={editingBranch ? (editingBranch.address || '') : branchAddress}
                   onChange={(e) => editingBranch ? setEditingBranch({ ...editingBranch, address: e.target.value }) : setBranchAddress(e.target.value)}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-sm"
+                  className="input-green text-sm"
                 />
               </div>
               <div className="flex gap-2">
@@ -3450,8 +3722,8 @@ function AdminDashboard({
             </form>
           </div>
 
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm lg:col-span-2">
-            <h3 className="text-md font-black text-emerald-955 mb-4 uppercase tracking-wider">Active Branches</h3>
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs lg:col-span-2">
+            <h3 className="text-sm font-bold text-emerald-950 mb-4 uppercase tracking-wide">Active Branches</h3>
             <div className="overflow-x-auto text-slate-800 font-medium">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
@@ -3475,7 +3747,7 @@ function AdminDashboard({
                           <button 
                             type="button"
                             onClick={() => setEditingBranch(b)}
-                            className="p-1.5 text-emerald-700 hover:bg-emerald-50 rounded-lg transition"
+                            className="p-1.5 text-emerald-700 hover:bg-emerald-50 rounded-xl transition"
                             title="Edit Branch"
                           >
                             <Edit2 className="w-4 h-4" />
@@ -3483,7 +3755,7 @@ function AdminDashboard({
                           <button 
                             type="button"
                             onClick={() => onDeleteBranch(b.id)}
-                            className="p-1.5 text-red-650 hover:bg-red-50 rounded-lg transition"
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-xl transition"
                             title="Delete Branch"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -3502,8 +3774,8 @@ function AdminDashboard({
       {/* Staff Management */}
       {activeTab === 'staff' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm lg:col-span-1 h-fit text-slate-800">
-            <h3 className="text-md font-black text-emerald-955 mb-4 uppercase tracking-wider flex items-center gap-1.5 font-bold">
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs lg:col-span-1 h-fit text-slate-800">
+            <h3 className="text-sm font-bold text-emerald-950 mb-4 uppercase tracking-wide flex items-center gap-1.5 font-bold">
               <UserPlus className="w-5 h-5 text-emerald-700" />
               {editingStaff ? 'Edit Staff Member' : 'Onboard Staff'}
             </h3>
@@ -3516,7 +3788,7 @@ function AdminDashboard({
                   placeholder="e.g. John Bello"
                   value={editingStaff ? editingStaff.name : staffName}
                   onChange={(e) => editingStaff ? setEditingStaff({ ...editingStaff, name: e.target.value }) : setStaffName(e.target.value)}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-sm"
+                  className="input-green text-sm"
                 />
               </div>
               <div>
@@ -3527,7 +3799,7 @@ function AdminDashboard({
                   placeholder="080XXXXXXXX"
                   value={editingStaff ? editingStaff.phone : staffPhone}
                   onChange={(e) => editingStaff ? setEditingStaff({ ...editingStaff, phone: e.target.value }) : setStaffPhone(e.target.value)}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-sm"
+                  className="input-green text-sm"
                 />
               </div>
               <div>
@@ -3538,7 +3810,7 @@ function AdminDashboard({
                   placeholder="john@hiremercy.com"
                   value={editingStaff ? (editingStaff.email || '') : staffEmail}
                   onChange={(e) => editingStaff ? setEditingStaff({ ...editingStaff, email: e.target.value }) : setStaffEmail(e.target.value)}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-sm"
+                  className="input-green text-sm"
                 />
               </div>
               
@@ -3571,7 +3843,7 @@ function AdminDashboard({
                   required
                   value={editingStaff ? (editingStaff.branch_id || '') : staffBranch}
                   onChange={(e) => editingStaff ? setEditingStaff({ ...editingStaff, branch_id: e.target.value }) : setStaffBranch(e.target.value)}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl bg-white text-sm"
+                  className="input-green bg-white text-sm"
                 >
                   <option value="">-- Choose Branch --</option>
                   {branches.map(b => (
@@ -3592,8 +3864,8 @@ function AdminDashboard({
             </form>
           </div>
 
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm lg:col-span-2">
-            <h3 className="text-md font-black text-emerald-955 mb-4 uppercase tracking-wider">Field Staff Directory</h3>
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs lg:col-span-2">
+            <h3 className="text-sm font-bold text-emerald-950 mb-4 uppercase tracking-wide">Field Staff Directory</h3>
             <div className="overflow-x-auto text-slate-800 font-medium">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
@@ -3615,7 +3887,7 @@ function AdminDashboard({
                       <tr key={s.id} className="hover:bg-emerald-50/20 transition">
                         <td className="p-3 font-bold">{s.name}</td>
                         <td className="p-3 font-semibold">{s.phone}</td>
-                        <td className="p-3 text-slate-555">{s.email || 'N/A'}</td>
+                        <td className="p-3 text-slate-500">{s.email || 'N/A'}</td>
                         <td className="p-3 text-emerald-800 font-bold">
                           {branches.find(b => b.id === s.branch_id)?.name || 'N/A'}
                         </td>
@@ -3623,7 +3895,7 @@ function AdminDashboard({
                           <button 
                             type="button"
                             onClick={() => handleSendResetLink(s.email)}
-                            className="p-1.5 text-emerald-700 hover:bg-emerald-50 rounded-lg transition"
+                            className="p-1.5 text-emerald-700 hover:bg-emerald-50 rounded-xl transition"
                             title="Send Password Reset Email Link"
                           >
                             <Key className="w-4 h-4 text-emerald-700" />
@@ -3631,7 +3903,7 @@ function AdminDashboard({
                           <button 
                             type="button"
                             onClick={() => setEditingStaff(s)}
-                            className="p-1.5 text-emerald-700 hover:bg-emerald-50 rounded-lg transition"
+                            className="p-1.5 text-emerald-700 hover:bg-emerald-50 rounded-xl transition"
                             title="Edit Staff Details"
                           >
                             <Edit2 className="w-4 h-4" />
@@ -3639,7 +3911,7 @@ function AdminDashboard({
                           <button 
                             type="button"
                             onClick={() => onDeleteStaff(s.id)}
-                            className="p-1.5 text-red-650 hover:bg-red-50 rounded-lg transition"
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-xl transition"
                             title="Delete Staff"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -3659,9 +3931,9 @@ function AdminDashboard({
       {activeTab === 'payouts' && (
         <div className="space-y-6 animate-fade-in text-slate-800 font-bold">
           {/* FEATURE 1 (Admin): Outstanding Payout Ledger */}
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
-            <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider mb-1 font-bold">Outstanding Payout Ledger</h3>
-            <p className="text-xs text-slate-505 mb-4 font-medium">Customers with at least one fully-frozen, uncollected 32-day cycle. Click a name to see exactly which months.</p>
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
+            <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide mb-1 font-bold">Outstanding Payout Ledger</h3>
+            <p className="text-xs text-slate-500 mb-4 font-medium">Customers with at least one fully-frozen, uncollected 32-day cycle. Click a name to see exactly which months.</p>
             <div className="relative mb-4">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <input
@@ -3715,8 +3987,8 @@ function AdminDashboard({
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Trigger manual payout form */}
-            <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm lg:col-span-1 h-fit">
-              <h3 className="text-md font-black text-emerald-955 mb-2 uppercase tracking-wider flex items-center gap-1.5 font-bold">
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs lg:col-span-1 h-fit">
+              <h3 className="text-sm font-bold text-emerald-950 mb-2 uppercase tracking-wide flex items-center gap-1.5 font-bold">
                 <Coins className="w-5 h-5 text-emerald-700" />
                 Trigger Manual Payout
               </h3>
@@ -3780,7 +4052,7 @@ function AdminDashboard({
                         required
                         value={manualBankName}
                         onChange={(e) => setManualBankName(e.target.value)}
-                        className="w-full px-3 py-2 border border-emerald-200 rounded-xl bg-white"
+                        className="input-green bg-white"
                       >
                         <option value="">-- Choose Recipient Bank --</option>
                         {nigerianBanks.map(b => (
@@ -3798,7 +4070,7 @@ function AdminDashboard({
                         maxLength={10}
                         value={manualAccountNumber}
                         onChange={(e) => setManualAccountNumber(e.target.value.replace(/\D/g, ''))}
-                        className="w-full px-3 py-2 border border-emerald-200 rounded-xl"
+                        className="input-green"
                       />
                     </div>
 
@@ -3810,7 +4082,7 @@ function AdminDashboard({
                         placeholder="e.g. John Doe"
                         value={manualAccountName}
                         onChange={(e) => setManualAccountName(e.target.value)}
-                        className="w-full px-3 py-2 border border-emerald-200 rounded-xl"
+                        className="input-green"
                       />
                     </div>
                   </>
@@ -3829,7 +4101,7 @@ function AdminDashboard({
             {/* Pending payout requests - awaiting admin approval */}
             <div className="bg-white p-6 rounded-3xl border border-amber-200 shadow-sm lg:col-span-2">
               <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider font-bold">Pending Payout Requests</h3>
+                <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide font-bold">Pending Payout Requests</h3>
                 <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">
                   {payoutRequests.filter(p => p.status === 'Pending').length} awaiting approval
                 </span>
@@ -3849,14 +4121,14 @@ function AdminDashboard({
                         <button 
                           type="button"
                           onClick={() => onRejectPayout?.(h.id)}
-                          className="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded-lg transition text-[10px] whitespace-nowrap"
+                          className="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded-xl transition text-[10px] whitespace-nowrap"
                         >
                           Reject
                         </button>
                         <button 
                           type="button"
                           onClick={() => onApprovePayout(h.id)}
-                          className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-1 px-3 rounded-lg transition text-[10px] whitespace-nowrap"
+                          className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-1 px-3 rounded-xl transition text-[10px] whitespace-nowrap"
                         >
                           Approve & Payout
                         </button>
@@ -3868,10 +4140,10 @@ function AdminDashboard({
             </div>
 
             {/* Customer Payout logs table */}
-            <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm lg:col-span-2">
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs lg:col-span-2">
               <div className="mb-4">
-                <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider font-bold">Customer Withdrawal Logs</h3>
-                <p className="text-xs text-slate-505 font-medium">1-day company fee is deducted automatically when calculating the payout amount.</p>
+                <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide font-bold">Customer Withdrawal Logs</h3>
+                <p className="text-xs text-slate-500 font-medium">1-day company fee is deducted automatically when calculating the payout amount.</p>
               </div>
               <div className="overflow-x-auto text-slate-800 font-semibold">
                 <table className="w-full text-left text-xs border-collapse">
@@ -3899,7 +4171,7 @@ function AdminDashboard({
                         return nameA.localeCompare(nameB);
                       }).map(h => (
                         <tr key={h.id}>
-                          <td className="p-3 text-slate-505">
+                          <td className="p-3 text-slate-500">
                             {new Date(h.created_at).toLocaleDateString()}
                             <span className="block text-[9px] text-slate-400">{new Date(h.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                           </td>
@@ -3932,14 +4204,14 @@ function AdminDashboard({
                                 <button 
                                   type="button"
                                   onClick={() => onRejectPayout?.(h.id)}
-                                  className="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded-lg transition text-[10px] whitespace-nowrap"
+                                  className="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded-xl transition text-[10px] whitespace-nowrap"
                                 >
                                   Reject
                                 </button>
                                 <button 
                                   type="button"
                                   onClick={() => onApprovePayout(h.id)}
-                                  className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-1 px-3 rounded-lg transition text-[10px] whitespace-nowrap"
+                                  className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-1 px-3 rounded-xl transition text-[10px] whitespace-nowrap"
                                 >
                                   Approve & Payout
                                 </button>
@@ -3955,13 +4227,13 @@ function AdminDashboard({
             </div>
 
             {/* Payout History Archive - records moved off the active ledger on approval */}
-            <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm lg:col-span-2">
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs lg:col-span-2">
               <div className="mb-4">
-                <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider flex items-center gap-1.5 font-bold">
+                <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5 font-bold">
                   <Landmark className="w-4 h-4 text-emerald-700" />
                   Payout History Archive
                 </h3>
-                <p className="text-xs text-slate-505 font-medium">Settled saved-month records that have been removed from the active contributions ledger.</p>
+                <p className="text-xs text-slate-500 font-medium">Settled saved-month records that have been removed from the active contributions ledger.</p>
               </div>
               <div className="overflow-x-auto text-slate-800 font-semibold">
                 <table className="w-full text-left text-xs border-collapse">
@@ -3983,7 +4255,7 @@ function AdminDashboard({
                     ) : (
                       payoutHistory.slice(0, 25).map(h => (
                         <tr key={h.id}>
-                          <td className="p-3 text-slate-505">{new Date(h.approved_at).toLocaleDateString()}</td>
+                          <td className="p-3 text-slate-500">{new Date(h.approved_at).toLocaleDateString()}</td>
                           <td className="p-3 font-bold text-slate-700">{profiles.find(p => p.id === h.customer_id)?.name || h.customer_name || h.customer_id}</td>
                           <td className="p-3 font-semibold text-emerald-800">{h.month_label}</td>
                           <td className="p-3">₦{h.total_amount.toLocaleString()}</td>
@@ -4023,9 +4295,9 @@ function AdminDashboard({
           {cashSheetView === 'entry' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Denomination Calculator */}
-              <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4">
+              <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs space-y-4">
                 <div className="flex items-center justify-between flex-wrap gap-2">
-                  <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider font-bold">Denomination Calculator</h3>
+                  <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide font-bold">Denomination Calculator</h3>
                   <input
                     type="date"
                     value={cashSheetDate}
@@ -4051,15 +4323,15 @@ function AdminDashboard({
                             min="0"
                             value={row.pieces || ''}
                             onChange={e => updateDenomPieces(row.denom, e.target.value)}
-                            className="w-20 border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold"
+                            className="w-20 border border-slate-200 rounded-xl px-2 py-1 text-xs font-bold"
                             placeholder="0"
                           />
                         </td>
                         <td className="p-2 text-right font-bold text-emerald-800">₦{row.total.toLocaleString()}</td>
                       </tr>
                     ))}
-                    <tr className="bg-emerald-955">
-                      <td className="p-2.5 font-black text-white uppercase tracking-wider text-xs rounded-l-xl" colSpan={2}>Grand Total</td>
+                    <tr className="bg-emerald-950">
+                      <td className="p-2.5 font-black text-white uppercase tracking-wide text-xs rounded-l-xl" colSpan={2}>Grand Total</td>
                       <td className="p-2.5 text-right font-black text-white text-sm rounded-r-xl">₦{grandCashTotal.toLocaleString()}</td>
                     </tr>
                   </tbody>
@@ -4069,7 +4341,7 @@ function AdminDashboard({
                     grandCashTotal, which already recompute on every keystroke
                     via updateDenomPieces, so this stays in sync automatically
                     with no additional wiring. Uses bg-emerald-900 (a real
-                    Tailwind shade) rather than bg-emerald-955 used in the
+                    Tailwind shade) rather than bg-emerald-950 used in the
                     table row above, since that class isn't a standard shade
                     and may not render depending on the Tailwind config. */}
                 <div className="bg-emerald-900 text-white rounded-2xl p-4">
@@ -4091,15 +4363,15 @@ function AdminDashboard({
                 <button
                   type="button"
                   onClick={handleSaveDenominationRecord}
-                  className="w-full bg-amber-500 hover:bg-amber-600 text-emerald-955 font-black py-2.5 rounded-xl text-xs transition shadow-md"
+                  className="w-full bg-amber-500 hover:bg-amber-600 text-emerald-950 font-black py-2.5 rounded-xl text-xs transition shadow-md"
                 >
                   Save Denomination Record
                 </button>
               </div>
 
               {/* Reconciliation Summary */}
-              <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4">
-                <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider font-bold">Reconciliation Summary</h3>
+              <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs space-y-4">
+                <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide font-bold">Reconciliation Summary</h3>
 
                 <div className="space-y-3 text-xs">
                   <div className="flex items-center justify-between bg-slate-50 rounded-xl p-3">
@@ -4170,8 +4442,8 @@ function AdminDashboard({
           )}
 
           {cashSheetView === 'archive' && (
-            <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
-              <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider mb-4 font-bold">Records Dashboard</h3>
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
+              <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide mb-4 font-bold">Records Dashboard</h3>
               {cashFolders.length === 0 ? (
                 <div className="text-center py-12 border border-dashed border-emerald-200 rounded-2xl text-slate-400 text-xs">No cash records archived yet.</div>
               ) : (
@@ -4185,7 +4457,7 @@ function AdminDashboard({
                               type="text"
                               value={editingFolderName}
                               onChange={e => setEditingFolderName(e.target.value)}
-                              className="flex-1 border border-emerald-200 rounded-lg px-2 py-1 text-xs font-bold"
+                              className="flex-1 border border-emerald-200 rounded-xl px-2 py-1 text-xs font-bold"
                               autoFocus
                             />
                             <button type="button" onClick={() => handleRenameFolder(records[0].id, editingFolderName)} className="text-emerald-700"><CheckCircle2 className="w-4 h-4" /></button>
@@ -4206,7 +4478,7 @@ function AdminDashboard({
                       <p className="text-[11px] text-slate-500 font-semibold">{records.length} entr{records.length === 1 ? 'y' : 'ies'}</p>
                       <div className="space-y-1.5 max-h-40 overflow-y-auto">
                         {records.map(r => (
-                          <div key={r.id} className="flex items-center justify-between text-[11px] bg-slate-50 rounded-lg p-2">
+                          <div key={r.id} className="flex items-center justify-between text-[11px] bg-slate-50 rounded-xl p-2">
                             <span className="font-semibold text-slate-600 flex items-center gap-1.5">
                               {r.record_date}
                               {r.record_type === 'denomination' && (
@@ -4228,13 +4500,13 @@ function AdminDashboard({
 
       {/* Record Sheet */}
       {activeTab === 'records' && (
-        <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm animate-fade-in space-y-6">
+        <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs animate-fade-in space-y-6">
           <div>
-            <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider flex items-center gap-1.5 font-bold">
+            <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5 font-bold">
               <FileText className="w-5 h-5 text-emerald-700" />
               Settlement Records Sheet
             </h3>
-            <p className="text-xs text-slate-505 font-medium">View active contributors who are yet to withdraw and completed cycles.</p>
+            <p className="text-xs text-slate-500 font-medium">View active contributors who are yet to withdraw and completed cycles.</p>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -4350,12 +4622,12 @@ function AdminDashboard({
       {activeTab === 'transactions' && (
         <div className="space-y-6">
           {/* Pending Deposits Queue */}
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm animate-fade-in text-slate-800">
-            <h3 className="text-md font-black text-amber-805 mb-2 uppercase tracking-wider flex items-center gap-1.5 font-bold font-bold">
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs animate-fade-in text-slate-800">
+            <h3 className="text-md font-black text-amber-800 mb-2 uppercase tracking-wide flex items-center gap-1.5 font-bold font-bold">
               <Clock className="w-5 h-5 text-amber-800" />
               Pending Contributions Approval Queue ({pendingTransactions.length})
             </h3>
-            <p className="text-xs text-slate-505 mb-4 font-medium">Customers submitted these manual deposits. Click Approve to split metrics and mark their tracking cards.</p>
+            <p className="text-xs text-slate-500 mb-4 font-medium">Customers submitted these manual deposits. Click Approve to split metrics and mark their tracking cards.</p>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
@@ -4375,24 +4647,24 @@ function AdminDashboard({
                   ) : (
                     pendingTransactions.map(tx => (
                       <tr key={tx.id} className="hover:bg-amber-50/30 transition text-slate-800">
-                        <td className="p-3 text-slate-505">{tx.date}</td>
+                        <td className="p-3 text-slate-500">{tx.date}</td>
                         <td className="p-3 font-bold">
                           {profiles.find(p => p.id === tx.customer_id)?.name || tx.customer_name || 'System User'}
                         </td>
                         <td className="p-3 font-medium text-slate-600">{tx.payment_method}</td>
-                        <td className="p-3 font-black text-emerald-805">₦{tx.amount.toLocaleString()}</td>
+                        <td className="p-3 font-black text-emerald-800">₦{tx.amount.toLocaleString()}</td>
                         <td className="p-3 text-right flex justify-end gap-1.5">
                           <button 
                             type="button"
                             onClick={() => onApproveTransaction(tx.id)}
-                            className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-1 px-3 rounded-lg transition text-[10px] uppercase font-bold"
+                            className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-1 px-3 rounded-xl transition text-[10px] uppercase font-bold"
                           >
                             Approve & Confirm
                           </button>
                           <button 
                             type="button"
                             onClick={() => onDeleteTransaction(tx.id)}
-                            className="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded-lg transition text-[10px] uppercase font-bold"
+                            className="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded-xl transition text-[10px] uppercase font-bold"
                           >
                             Decline
                           </button>
@@ -4406,9 +4678,9 @@ function AdminDashboard({
           </div>
 
           {/* Ledger of completed transactions */}
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm animate-fade-in text-slate-800">
-            <h3 className="text-md font-black text-emerald-955 mb-2 uppercase tracking-wider font-bold">Completed Transaction Ledger</h3>
-            <p className="text-xs text-slate-505 mb-4 font-medium">Deleting a confirmed log reverses split allocations, unmarking days directly on tracking grids.</p>
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs animate-fade-in text-slate-800">
+            <h3 className="text-sm font-bold text-emerald-950 mb-2 uppercase tracking-wide font-bold">Completed Transaction Ledger</h3>
+            <p className="text-xs text-slate-500 mb-4 font-medium">Deleting a confirmed log reverses split allocations, unmarking days directly on tracking grids.</p>
             <div className="space-y-3">
               {successfulTransactions.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-emerald-200 p-4 text-center text-slate-400">No completed contributions posted yet.</div>
@@ -4455,10 +4727,10 @@ function AdminDashboard({
                                   <td className="p-3 font-bold text-slate-800">
                                     {profiles.find(p => p.id === tx.customer_id)?.name || tx.customer_name || 'System User'}
                                   </td>
-                                  <td className="p-3 font-medium text-slate-605">{tx.payment_method}</td>
+                                  <td className="p-3 font-medium text-slate-600">{tx.payment_method}</td>
                                   <td className="p-3 font-bold text-emerald-800">₦{Number(tx.amount || 0).toLocaleString()}</td>
                                   <td className="p-3">
-                                    <span className="bg-amber-100 text-amber-955 font-black px-2.5 py-0.5 rounded">
+                                    <span className="bg-amber-100 text-amber-950 font-black px-2.5 py-0.5 rounded">
                                       Days {tx.start_day} - {tx.end_day} ({tx.days_covered} days marked)
                                     </span>
                                   </td>
@@ -4466,7 +4738,7 @@ function AdminDashboard({
                                     <button 
                                       type="button"
                                       onClick={() => openDeleteConfirmation(tx)}
-                                      className="p-1.5 text-red-650 hover:bg-red-50 rounded-lg transition duration-150"
+                                      className="p-1.5 text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200"
                                       title="Delete and reverse auto-split"
                                     >
                                       <Trash2 className="w-4 h-4" />
@@ -4532,19 +4804,19 @@ function AdminDashboard({
               <button
                 type="button"
                 onClick={() => { setShowAssignLoanModal(true); setAssignLoanCustomerId(''); setAssignLoanAmount(''); setAssignLoanRemarks(''); setAssignLoanDate(new Date().toISOString().slice(0, 10)); }}
-                className="bg-amber-500 hover:bg-amber-600 text-emerald-955 font-black px-4 py-2 rounded-xl text-xs uppercase"
+                className="bg-amber-500 hover:bg-amber-600 text-emerald-950 font-black px-4 py-2 rounded-xl text-xs uppercase"
               >
                 Assign Loan
               </button>
             </div>
 
             {loanSubView === 'pending' && (
-              <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm overflow-x-auto">
+              <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs overflow-x-auto">
                 {pendingRequests.length === 0 ? (
                   <p className="text-xs text-slate-400 py-6 text-center">No pending loan requests.</p>
                 ) : (
                   <table className="w-full text-left text-xs">
-                    <thead><tr className="text-slate-500 font-bold border-b"><th className="p-2">Customer</th><th className="p-2">Phone</th><th className="p-2">Branch</th><th className="p-2">Daily</th><th className="p-2">Loan Amount</th><th className="p-2">Repayment</th><th className="p-2">Requested</th><th className="p-2 text-right">Actions</th></tr></thead>
+                    <thead><tr className="text-slate-500 font-bold border-b border-slate-100 text-[10px] uppercase tracking-wide"><th className="p-2">Customer</th><th className="p-2">Phone</th><th className="p-2">Branch</th><th className="p-2">Daily</th><th className="p-2">Loan Amount</th><th className="p-2">Repayment</th><th className="p-2">Requested</th><th className="p-2 text-right">Actions</th></tr></thead>
                     <tbody className="divide-y">
                       {pendingRequests.map(r => {
                         const c = lookupCustomer(r.customer_id);
@@ -4558,8 +4830,8 @@ function AdminDashboard({
                             <td className="p-2">₦{r.repayment_amount.toLocaleString()}</td>
                             <td className="p-2">{new Date(r.requested_at).toLocaleDateString()}</td>
                             <td className="p-2 text-right space-x-1.5 whitespace-nowrap">
-                              <button type="button" onClick={() => onApproveLoanRequest(r.id)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1 rounded-lg text-[10px] uppercase">Approve</button>
-                              <button type="button" onClick={() => { setRejectingRequestId(r.id); setRejectionReason(''); }} className="bg-red-100 hover:bg-red-200 text-red-800 font-bold px-2.5 py-1 rounded-lg text-[10px] uppercase">Reject</button>
+                              <button type="button" onClick={() => onApproveLoanRequest(r.id)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1 rounded-xl text-[10px] uppercase">Approve</button>
+                              <button type="button" onClick={() => { setRejectingRequestId(r.id); setRejectionReason(''); }} className="bg-red-100 hover:bg-red-200 text-red-800 font-bold px-2.5 py-1 rounded-xl text-[10px] uppercase">Reject</button>
                             </td>
                           </tr>
                         );
@@ -4571,12 +4843,12 @@ function AdminDashboard({
             )}
 
             {loanSubView === 'active' && (
-              <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm overflow-x-auto">
+              <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs overflow-x-auto">
                 {activeLoans.length === 0 ? (
                   <p className="text-xs text-slate-400 py-6 text-center">No active loans.</p>
                 ) : (
                   <table className="w-full text-left text-xs">
-                    <thead><tr className="text-slate-500 font-bold border-b"><th className="p-2">Customer</th><th className="p-2">Loan</th><th className="p-2">Repayment</th><th className="p-2">Paid</th><th className="p-2">Remaining</th><th className="p-2">Days</th><th className="p-2">Start</th><th className="p-2">Remaining Days</th></tr></thead>
+                    <thead><tr className="text-slate-500 font-bold border-b border-slate-100 text-[10px] uppercase tracking-wide"><th className="p-2">Customer</th><th className="p-2">Loan</th><th className="p-2">Repayment</th><th className="p-2">Paid</th><th className="p-2">Remaining</th><th className="p-2">Days</th><th className="p-2">Start</th><th className="p-2">Remaining Days</th></tr></thead>
                     <tbody className="divide-y">
                       {activeLoans.map(l => (
                         <tr key={l.id}>
@@ -4597,12 +4869,12 @@ function AdminDashboard({
             )}
 
             {loanSubView === 'completed' && (
-              <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm overflow-x-auto">
+              <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs overflow-x-auto">
                 {completedLoans.length === 0 ? (
                   <p className="text-xs text-slate-400 py-6 text-center">No completed loans yet.</p>
                 ) : (
                   <table className="w-full text-left text-xs">
-                    <thead><tr className="text-slate-500 font-bold border-b"><th className="p-2">Customer</th><th className="p-2">Loan Amount</th><th className="p-2">Approved</th><th className="p-2">Completed</th><th className="p-2">Service Charge</th><th className="p-2">Total Repaid</th></tr></thead>
+                    <thead><tr className="text-slate-500 font-bold border-b border-slate-100 text-[10px] uppercase tracking-wide"><th className="p-2">Customer</th><th className="p-2">Loan Amount</th><th className="p-2">Approved</th><th className="p-2">Completed</th><th className="p-2">Service Charge</th><th className="p-2">Total Repaid</th></tr></thead>
                     <tbody className="divide-y">
                       {completedLoans.map(l => (
                         <tr key={l.id}>
@@ -4621,14 +4893,14 @@ function AdminDashboard({
             )}
 
             {loanSubView === 'history' && (
-              <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
+              <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
                 <div className="flex flex-wrap gap-2 mb-4">
-                  <input type="month" value={loanHistoryMonthFilter} onChange={e => setLoanHistoryMonthFilter(e.target.value)} className="border rounded-lg px-2 py-1 text-xs" />
-                  <select value={loanHistoryBranchFilter} onChange={e => setLoanHistoryBranchFilter(e.target.value)} className="border rounded-lg px-2 py-1 text-xs font-bold">
+                  <input type="month" value={loanHistoryMonthFilter} onChange={e => setLoanHistoryMonthFilter(e.target.value)} className="border rounded-xl px-2 py-1 text-xs" />
+                  <select value={loanHistoryBranchFilter} onChange={e => setLoanHistoryBranchFilter(e.target.value)} className="border rounded-xl px-2 py-1 text-xs font-bold">
                     <option value="">All Branches</option>
                     {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
-                  <select value={loanHistoryStatusFilter} onChange={e => setLoanHistoryStatusFilter(e.target.value)} className="border rounded-lg px-2 py-1 text-xs font-bold">
+                  <select value={loanHistoryStatusFilter} onChange={e => setLoanHistoryStatusFilter(e.target.value)} className="border rounded-xl px-2 py-1 text-xs font-bold">
                     <option value="">All Events</option>
                     <option value="Requested">Requested</option>
                     <option value="Approved">Approved</option>
@@ -4642,7 +4914,7 @@ function AdminDashboard({
                     <p className="text-xs text-slate-400 py-6 text-center">No loan history matches these filters.</p>
                   ) : (
                     <table className="w-full text-left text-xs">
-                      <thead><tr className="text-slate-500 font-bold border-b"><th className="p-2">Date</th><th className="p-2">Customer</th><th className="p-2">Event</th><th className="p-2">Loan Amount</th><th className="p-2">Repayment</th></tr></thead>
+                      <thead><tr className="text-slate-500 font-bold border-b border-slate-100 text-[10px] uppercase tracking-wide"><th className="p-2">Date</th><th className="p-2">Customer</th><th className="p-2">Event</th><th className="p-2">Loan Amount</th><th className="p-2">Repayment</th></tr></thead>
                       <tbody className="divide-y">
                         {filteredHistory.map((h: any) => (
                           <tr key={h.id}>
@@ -4661,9 +4933,9 @@ function AdminDashboard({
             )}
 
             {rejectingRequestId && (
-              <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setRejectingRequestId(null)}>
+              <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setRejectingRequestId(null)}>
                 <div className="bg-white rounded-2xl p-5 max-w-sm w-full" onClick={e => e.stopPropagation()}>
-                  <h4 className="text-sm font-black text-emerald-955 mb-3">Reject Loan Request</h4>
+                  <h4 className="text-sm font-black text-emerald-950 mb-3">Reject Loan Request</h4>
                   <textarea value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} placeholder="Reason (optional)" className="w-full border rounded-xl px-3 py-2 text-xs mb-3" rows={3} />
                   <div className="flex gap-2">
                     <button type="button" onClick={() => setRejectingRequestId(null)} className="flex-1 bg-slate-100 text-slate-700 font-bold py-2 rounded-xl text-xs">Cancel</button>
@@ -4674,9 +4946,9 @@ function AdminDashboard({
             )}
 
             {showAssignLoanModal && (
-              <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowAssignLoanModal(false)}>
-                <div className="bg-white rounded-3xl max-w-md w-full max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
-                  <h3 className="text-md font-black text-emerald-955 mb-3">Assign Loan</h3>
+              <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setShowAssignLoanModal(false)}>
+                <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+                  <h3 className="text-sm font-bold text-emerald-950 mb-3">Assign Loan</h3>
                   <SearchableCustomerSelect
                     customers={profiles.filter(p => p.role === 'Customer')}
                     selectedId={assignLoanCustomerId}
@@ -4753,8 +5025,8 @@ function AdminDashboard({
       {activeTab === 'reports' && (
         <div className="space-y-6 animate-fade-in">
           {/* Monthly Financial Summary Dashboard */}
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4">
-            <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider flex items-center gap-1.5 font-bold">
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs space-y-4">
+            <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5 font-bold">
               <LayoutDashboard className="w-5 h-5 text-emerald-700" />
               Monthly Financial Summary — {periodLabelFromKey(currentPeriodKey)}
             </h3>
@@ -4780,10 +5052,10 @@ function AdminDashboard({
                         if (isExpenses) { setShowExpensesDrilldown(true); }
                       },
                     } : {})}
-                    className={`bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-4 text-left w-full ${clickable ? 'hover:border-emerald-400 transition duration-150 focus:outline-none' : ''}`}
+                    className={`bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-4 text-left w-full ${clickable ? 'hover:border-emerald-400 transition-all duration-200 focus:outline-none' : ''}`}
                   >
-                    <p className="text-[11px] font-black uppercase tracking-wider text-emerald-800">{card.label}</p>
-                    <p className="text-xl sm:text-2xl font-black text-emerald-955 mt-1">₦{card.value.toLocaleString()}</p>
+                    <p className="text-[11px] font-black uppercase tracking-wide text-emerald-800">{card.label}</p>
+                    <p className="text-xl sm:text-2xl font-black text-emerald-950 mt-1">₦{card.value.toLocaleString()}</p>
                     {clickable && <p className="text-[9px] text-emerald-700 font-bold underline mt-0.5">Click for details</p>}
                   </Tag>
                 );
@@ -4793,9 +5065,9 @@ function AdminDashboard({
 
           {showPayoutDrilldown && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-white rounded-3xl max-w-lg w-full p-6 border border-emerald-100 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto">
+              <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-6 border border-emerald-100 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto">
                 <div className="flex justify-between items-center border-b border-emerald-50 pb-3">
-                  <h3 className="text-lg font-black text-emerald-955 uppercase tracking-wider">
+                  <h3 className="text-lg font-black text-emerald-950 uppercase tracking-wide">
                     Total Payout Breakdown — {periodLabelFromKey(currentPeriodKey)}
                   </h3>
                   <button type="button" onClick={() => { setShowPayoutDrilldown(false); setPayoutDrilldownView(null); }} className="p-1 text-slate-400 hover:text-slate-600 font-bold">✕</button>
@@ -4854,9 +5126,9 @@ function AdminDashboard({
 
           {showExpensesDrilldown && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-white rounded-3xl max-w-lg w-full p-6 border border-emerald-100 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto">
+              <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-6 border border-emerald-100 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto">
                 <div className="flex justify-between items-center border-b border-emerald-50 pb-3">
-                  <h3 className="text-lg font-black text-emerald-955 uppercase tracking-wider">
+                  <h3 className="text-lg font-black text-emerald-950 uppercase tracking-wide">
                     Total Expenses — {periodLabelFromKey(currentPeriodKey)}
                   </h3>
                   <button type="button" onClick={() => setShowExpensesDrilldown(false)} className="p-1 text-slate-400 hover:text-slate-600 font-bold">✕</button>
@@ -4879,7 +5151,7 @@ function AdminDashboard({
                 </div>
 
                 <div className="border-t border-emerald-50 pt-3 flex justify-between items-center">
-                  <span className="text-xs text-slate-505 font-bold">Total:</span>
+                  <span className="text-xs text-slate-500 font-bold">Total:</span>
                   <span className="text-lg font-black text-slate-900">₦{liveMonth.expenses.toLocaleString()}</span>
                 </div>
               </div>
@@ -4910,8 +5182,8 @@ function AdminDashboard({
             }).filter(b => b.count > 0);
 
             return (
-              <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4">
-                <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider flex items-center gap-1.5 font-bold">
+              <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs space-y-4">
+                <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5 font-bold">
                   <LayoutDashboard className="w-5 h-5 text-emerald-700" />
                   Loan Reports
                 </h3>
@@ -4925,8 +5197,8 @@ function AdminDashboard({
                     { label: 'Total Loan Repayments', value: totalLoanRepayments, isCurrency: true },
                   ].map(card => (
                     <div key={card.label} className="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-4">
-                      <p className="text-[11px] font-black uppercase tracking-wider text-emerald-800">{card.label}</p>
-                      <p className="text-xl sm:text-2xl font-black text-emerald-955 mt-1">{card.isCurrency ? `₦${card.value.toLocaleString()}` : card.value}</p>
+                      <p className="text-[11px] font-black uppercase tracking-wide text-emerald-800">{card.label}</p>
+                      <p className="text-xl sm:text-2xl font-black text-emerald-950 mt-1">{card.isCurrency ? `₦${card.value.toLocaleString()}` : card.value}</p>
                     </div>
                   ))}
                 </div>
@@ -4953,16 +5225,16 @@ function AdminDashboard({
           })()}
 
           {/* Part 5: Monthly Payout Card */}
-          <div className="bg-emerald-955 text-white p-6 rounded-3xl shadow-sm">
+          <div className="bg-emerald-950 text-white p-6 rounded-3xl shadow-sm">
             <p className="text-[10px] uppercase font-black tracking-wider text-emerald-200">Monthly Payout (Contributions − Profit)</p>
             <p className="text-3xl font-black mt-1 text-[#166534]">₦{monthlyPayoutCard.toLocaleString()}</p>
             <p className="text-[11px] text-emerald-300 mt-1.5">Resets automatically at the start of each new month.</p>
           </div>
 
           {/* Monthly Archive */}
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
-            <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider mb-1 font-bold">Monthly Archive</h3>
-            <p className="text-xs text-slate-505 mb-4 font-medium">Previous months archive automatically once they end. The current month always stays live above.</p>
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
+            <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide mb-1 font-bold">Monthly Archive</h3>
+            <p className="text-xs text-slate-500 mb-4 font-medium">Previous months archive automatically once they end. The current month always stays live above.</p>
             {monthlySummaries.length === 0 ? (
               <div className="text-center py-8 border border-dashed border-emerald-200 rounded-2xl text-slate-400 text-xs">No archived months yet.</div>
             ) : (
@@ -4996,19 +5268,19 @@ function AdminDashboard({
             )}
           </div>
 
-        <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm animate-fade-in space-y-6">
+        <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs animate-fade-in space-y-6">
           <div>
-            <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider flex items-center gap-1.5 font-bold">
+            <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5 font-bold">
               <FileText className="w-5 h-5 text-emerald-700" />
               Monthly Revenue & Profit Report
             </h3>
-            <p className="text-xs text-slate-505 font-medium">This calculates company profit generated monthly based on active customers (where 1 day's contribution is removed as company profit per active customer).</p>
+            <p className="text-xs text-slate-500 font-medium">This calculates company profit generated monthly based on active customers (where 1 day's contribution is removed as company profit per active customer).</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-emerald-50/40 p-6 rounded-2xl border border-emerald-100 text-center flex flex-col justify-center space-y-2">
-              <p className="text-[11px] text-slate-555 font-bold uppercase tracking-wider font-bold">Monthly Profit (1-Day Fee Per Paid Customer)</p>
-              <p className="text-4xl font-black text-emerald-850 font-bold">
+              <p className="text-[11px] text-slate-500 font-bold uppercase tracking-wide font-bold">Monthly Profit (1-Day Fee Per Paid Customer)</p>
+              <p className="text-4xl font-black text-emerald-800 font-bold">
                 ₦{customers.filter(c => c.is_active && stats.monthlyTransactions.some(tx => tx.customer_id === c.id && tx.status === 'Successful')).reduce((sum, c) => sum + c.daily_amount, 0).toLocaleString()}
               </p>
               <p className="text-[10px] text-slate-400 font-semibold text-slate-500">
@@ -5036,13 +5308,13 @@ function AdminDashboard({
       )}
 
       {activeTab === 'settings' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in text-slate-850">
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
-            <h3 className="text-md font-black text-emerald-955 mb-1 uppercase tracking-wider flex items-center gap-1.5 font-bold">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in text-slate-800">
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
+            <h3 className="text-sm font-bold text-emerald-950 mb-1 uppercase tracking-wide flex items-center gap-1.5 font-bold">
               <Settings className="w-5 h-5 text-emerald-700" />
               Support Settings Control Panel
             </h3>
-            <p className="text-xs text-slate-505 mb-4 font-medium">Edit the support shortcuts and banking details displayed to customers.</p>
+            <p className="text-xs text-slate-500 mb-4 font-medium">Edit the support shortcuts and banking details displayed to customers.</p>
             
             <form onSubmit={handleSupportSave} className="space-y-4">
               <div>
@@ -5053,7 +5325,7 @@ function AdminDashboard({
                   placeholder="+234 803 461 2345"
                   value={supportPhone}
                   onChange={(e) => setSupportPhone(e.target.value)}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 font-medium"
+                  className="input-green text-sm focus:ring-2 focus:ring-emerald-500 font-medium"
                 />
               </div>
 
@@ -5065,7 +5337,7 @@ function AdminDashboard({
                   placeholder="+234 803 461 2345"
                   value={supportWhatsapp}
                   onChange={(e) => setSupportWhatsapp(e.target.value)}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-505 font-medium"
+                  className="input-green text-sm focus:ring-2 focus:ring-emerald-500 font-medium"
                 />
               </div>
 
@@ -5077,12 +5349,12 @@ function AdminDashboard({
                   placeholder="support@hiremercy.com"
                   value={supportEmail}
                   onChange={(e) => setSupportEmail(e.target.value)}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 font-medium"
+                  className="input-green text-sm focus:ring-2 focus:ring-emerald-500 font-medium"
                 />
               </div>
 
               <div className="border-t border-emerald-100 pt-4 space-y-4">
-                <h4 className="text-xs font-black text-emerald-955 uppercase tracking-wider">Advertisement Banner Control</h4>
+                <h4 className="text-xs font-black text-emerald-950 uppercase tracking-wide">Advertisement Banner Control</h4>
                 <label className="flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-xs font-bold text-emerald-900">
                   <span>Show advertisement banner to customers</span>
                   <input
@@ -5099,7 +5371,7 @@ function AdminDashboard({
                     placeholder="Daily contributions made simple"
                     value={advertTitle}
                     onChange={(e) => setAdvertTitle(e.target.value)}
-                    className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-sm font-medium"
+                    className="input-green text-sm font-medium"
                   />
                 </div>
                 <div>
@@ -5109,7 +5381,7 @@ function AdminDashboard({
                     placeholder="Describe the banner message"
                     value={advertDescription}
                     onChange={(e) => setAdvertDescription(e.target.value)}
-                    className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-sm font-medium"
+                    className="input-green text-sm font-medium"
                   />
                 </div>
                 <div>
@@ -5131,7 +5403,7 @@ function AdminDashboard({
                       <span className="text-xs text-emerald-700 font-bold animate-pulse">Uploading image...</span>
                     ) : advertImageUrl ? (
                       <div className="w-full space-y-2">
-                        <img src={advertImageUrl} alt="Preview" className="w-full h-28 object-cover rounded-lg" />
+                        <img src={advertImageUrl} alt="Preview" className="w-full h-28 object-cover rounded-xl" />
                         <span className="text-[10px] text-emerald-700 font-bold block text-center">Tap to replace</span>
                       </div>
                     ) : (
@@ -5179,7 +5451,7 @@ function AdminDashboard({
                       <span className="text-xs text-emerald-700 font-bold animate-pulse">Uploading video...</span>
                     ) : advertVideoUrl ? (
                       <div className="w-full space-y-2">
-                        <video src={advertVideoUrl} className="w-full h-28 object-cover rounded-lg" muted controls />
+                        <video src={advertVideoUrl} className="w-full h-28 object-cover rounded-xl" muted controls />
                         <span className="text-[10px] text-emerald-700 font-bold block text-center">Tap to replace</span>
                       </div>
                     ) : (
@@ -5207,7 +5479,7 @@ function AdminDashboard({
                     </button>
                   )}
                 </div>
-                <h4 className="text-xs font-black text-emerald-955 uppercase tracking-wider">App Theme</h4>
+                <h4 className="text-xs font-black text-emerald-950 uppercase tracking-wide">App Theme</h4>
                 <div>
                   <label className="block text-xs font-bold text-emerald-800 mb-1">Background Color</label>
                   <div className="flex items-center gap-3">
@@ -5215,7 +5487,7 @@ function AdminDashboard({
                       type="color"
                       value={themeBackgroundColor}
                       onChange={(e) => setThemeBackgroundColor(e.target.value)}
-                      className="h-10 w-16 rounded-lg border border-emerald-200 cursor-pointer"
+                      className="h-10 w-16 rounded-xl border border-emerald-200 cursor-pointer"
                     />
                     <input
                       type="text"
@@ -5225,13 +5497,13 @@ function AdminDashboard({
                     />
                   </div>
                 </div>
-                <h4 className="text-xs font-black text-emerald-955 uppercase tracking-wider">Company Bank Account Settings (For Deposits)</h4>
+                <h4 className="text-xs font-black text-emerald-950 uppercase tracking-wide">Company Bank Account Settings (For Deposits)</h4>
                 <div>
                   <label className="block text-xs font-bold text-emerald-800 mb-1">Bank Name</label>
                   <select
                     value={adminBankName}
                     onChange={(e) => setAdminBankName(e.target.value)}
-                    className="w-full px-3 py-2 border border-emerald-200 rounded-xl bg-white text-xs font-medium"
+                    className="input-green bg-white text-xs font-medium"
                   >
                     {nigerianBanks.map(b => (
                       <option key={b} value={b}>{b}</option>
@@ -5247,7 +5519,7 @@ function AdminDashboard({
                     maxLength={10}
                     value={adminAccountNumber}
                     onChange={(e) => setAdminAccountNumber(e.target.value.replace(/\D/g, ''))}
-                    className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-sm font-medium"
+                    className="input-green text-sm font-medium"
                   />
                 </div>
                 <div>
@@ -5258,27 +5530,27 @@ function AdminDashboard({
                     placeholder="e.g. HireMercy Ajo Enterprise"
                     value={adminAccountName}
                     onChange={(e) => setAdminAccountName(e.target.value)}
-                    className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-sm font-medium"
+                    className="input-green text-sm font-medium"
                   />
                 </div>
               </div>
 
               <button 
                 type="submit" 
-                className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl transition duration-150 text-sm shadow-md"
+                className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl transition-all duration-200 text-sm shadow-md"
               >
                 Save Settings & Bank Details
               </button>
             </form>
           </div>
 
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm flex flex-col justify-between">
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs flex flex-col justify-between">
             <div>
-              <h3 className="text-md font-black text-emerald-955 mb-1 uppercase tracking-wider flex items-center gap-1.5 font-bold font-bold">
+              <h3 className="text-sm font-bold text-emerald-950 mb-1 uppercase tracking-wide flex items-center gap-1.5 font-bold font-bold">
                 <HelpCircle className="w-5 h-5 text-emerald-700" />
                 Live Preview
               </h3>
-              <p className="text-xs text-slate-555 mb-6 font-medium">This is how your clients see their support widget.</p>
+              <p className="text-xs text-slate-500 mb-6 font-medium">This is how your clients see their support widget.</p>
               
               <div className="p-4 bg-emerald-50/30 rounded-2xl border border-emerald-100 space-y-3 mb-6 text-slate-800 font-semibold font-bold">
                 <div className="flex items-center gap-2.5 text-xs font-bold">
@@ -5295,7 +5567,7 @@ function AdminDashboard({
                 </div>
               </div>
 
-              <h4 className="text-xs font-black text-emerald-955 uppercase tracking-wider mb-2 font-bold font-bold">Customer Deposit Banking coordinates preview:</h4>
+              <h4 className="text-xs font-black text-emerald-950 uppercase tracking-wide mb-2 font-bold font-bold">Customer Deposit Banking coordinates preview:</h4>
               <div className="p-4 bg-amber-50/30 border border-amber-200 rounded-2xl space-y-1.5 text-xs text-slate-800 font-bold">
                 <p>Bank: <strong className="text-slate-900 font-bold">{adminBankName}</strong></p>
                 <p>Account Number: <strong className="text-slate-900 font-bold">{adminAccountNumber}</strong></p>
@@ -5309,12 +5581,12 @@ function AdminDashboard({
           </div>
 
           {/* Quick Notepad - mini spreadsheet scratchpad */}
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
-            <h3 className="text-md font-black text-emerald-955 mb-1 uppercase tracking-wider flex items-center gap-1.5 font-bold">
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
+            <h3 className="text-sm font-bold text-emerald-950 mb-1 uppercase tracking-wide flex items-center gap-1.5 font-bold">
               <FileText className="w-5 h-5 text-emerald-700" />
               Quick Notepad
             </h3>
-            <p className="text-xs text-slate-505 mb-4 font-medium">Jot down ad-hoc items like daily expenses. Saves automatically.</p>
+            <p className="text-xs text-slate-500 mb-4 font-medium">Jot down ad-hoc items like daily expenses. Saves automatically.</p>
             <div className="overflow-x-auto">
               <table className="w-full text-xs border-collapse">
                 <thead>
@@ -5332,7 +5604,7 @@ function AdminDashboard({
                           type="text"
                           value={row.description}
                           onChange={e => updateNotepadCell(idx, 'description', e.target.value)}
-                          className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs"
+                          className="w-full border border-slate-200 rounded-xl px-2 py-1.5 text-xs"
                           placeholder="e.g. Transport"
                         />
                       </td>
@@ -5341,7 +5613,7 @@ function AdminDashboard({
                           type="text"
                           value={row.amount}
                           onChange={e => updateNotepadCell(idx, 'amount', e.target.value)}
-                          className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs"
+                          className="w-full border border-slate-200 rounded-xl px-2 py-1.5 text-xs"
                           placeholder="₦0"
                         />
                       </td>
@@ -5350,7 +5622,7 @@ function AdminDashboard({
                           type="date"
                           value={row.date}
                           onChange={e => updateNotepadCell(idx, 'date', e.target.value)}
-                          className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs"
+                          className="w-full border border-slate-200 rounded-xl px-2 py-1.5 text-xs"
                         />
                       </td>
                     </tr>
@@ -5368,12 +5640,12 @@ function AdminDashboard({
           </div>
 
           {/* Admin-to-Customer Messaging */}
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
-            <h3 className="text-md font-black text-emerald-955 mb-1 uppercase tracking-wider flex items-center gap-1.5 font-bold">
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
+            <h3 className="text-sm font-bold text-emerald-950 mb-1 uppercase tracking-wide flex items-center gap-1.5 font-bold">
               <MessageSquare className="w-5 h-5 text-emerald-700" />
               Customer Note
             </h3>
-            <p className="text-xs text-slate-505 mb-4 font-medium">Appears directly below the balance card on the selected customer's dashboard. Only the latest note shows - editing replaces it, deleting removes it immediately.</p>
+            <p className="text-xs text-slate-500 mb-4 font-medium">Appears directly below the balance card on the selected customer's dashboard. Only the latest note shows - editing replaces it, deleting removes it immediately.</p>
             <div className="space-y-3">
               <SearchableCustomerSelect
                 customers={profiles.filter(p => p.role === 'Customer')}
@@ -5386,7 +5658,7 @@ function AdminDashboard({
                 value={noteText}
                 onChange={e => setNoteText(e.target.value)}
                 placeholder="e.g. Your payout has been scheduled for Friday."
-                className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-sm font-medium"
+                className="input-green text-sm font-medium"
               />
               <div className="flex gap-2">
                 <button
@@ -5411,6 +5683,7 @@ function AdminDashboard({
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
@@ -5466,21 +5739,21 @@ function StaffDashboard({
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
+    <div className="space-y-5 sm:space-y-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 card-green">
         <div>
-          <h2 className="text-xl font-black text-emerald-700 flex items-center gap-2">
-            <Briefcase className="w-6 h-6" />
-            Field Agent Management Desk
+          <h2 className="text-lg sm:text-xl font-black text-emerald-800 flex items-center gap-2">
+            <span className="icon-circle w-9 h-9 sm:w-10 sm:h-10"><Briefcase className="w-5 h-5" /></span>
+            Field Agent Desk
           </h2>
-          <p className="text-xs text-slate-505">Collect daily targets or onboard branch customers locally</p>
+          <p className="text-xs text-slate-500 mt-1">Collect daily targets or onboard branch customers locally</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 w-full md:w-auto">
           <button 
             type="button"
             onClick={() => setActiveTab('collect')}
-            className={`px-4 py-1.5 rounded-xl text-xs font-black uppercase ${
-              activeTab === 'collect' ? 'bg-emerald-700 text-white shadow-sm' : 'bg-emerald-50 text-emerald-800'
+            className={`flex-1 md:flex-none px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wide transition-all duration-200 ${
+              activeTab === 'collect' ? 'bg-emerald-700 text-white shadow-sm' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
             }`}
           >
             Collect Deposit
@@ -5488,8 +5761,8 @@ function StaffDashboard({
           <button 
             type="button"
             onClick={() => setActiveTab('onboard')}
-            className={`px-4 py-1.5 rounded-xl text-xs font-black uppercase ${
-              activeTab === 'onboard' ? 'bg-emerald-700 text-white shadow-sm font-bold' : 'bg-emerald-50 text-emerald-800 font-bold'
+            className={`flex-1 md:flex-none px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wide transition-all duration-200 ${
+              activeTab === 'onboard' ? 'bg-emerald-700 text-white shadow-sm' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
             }`}
           >
             Onboard Customer
@@ -5498,12 +5771,12 @@ function StaffDashboard({
       </div>
 
       {activeTab === 'collect' ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm lg:col-span-1 h-fit text-slate-800">
-            <h3 className="text-md font-black text-emerald-955 mb-4 uppercase tracking-wider font-bold">Collect Deposit</h3>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-6">
+          <div className="card-green lg:col-span-1 h-fit text-slate-800">
+            <h3 className="text-sm font-bold text-emerald-950 mb-4 uppercase tracking-wide">Collect Deposit</h3>
             <form onSubmit={handlePost} className="space-y-4">
               <div>
-                <label className="block text-xs font-black text-emerald-800 mb-1 font-bold">Select Branch Customer *</label>
+                <label className="block text-xs font-bold text-emerald-800 mb-1.5">Select Branch Customer *</label>
                 <SearchableCustomerSelect 
                   customers={customers} 
                   selectedId={selectedCustomerId} 
@@ -5513,23 +5786,23 @@ function StaffDashboard({
               </div>
 
               <div>
-                <label className="block text-xs font-black text-emerald-800 mb-1 font-bold">Deposit Amount (₦)</label>
+                <label className="block text-xs font-bold text-emerald-800 mb-1.5">Deposit Amount (₦)</label>
                 <input 
                   type="number" 
                   required
                   placeholder="e.g. 5000"
                   value={depositAmount}
                   onChange={(e) => setDepositAmount(e.target.value)}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-sm font-semibold"
+                  className="input-green text-sm font-semibold"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-black text-emerald-800 mb-1 font-bold">Payment Method</label>
+                <label className="block text-xs font-bold text-emerald-800 mb-1.5">Payment Method</label>
                 <select 
                   value={paymentMethod} 
                   onChange={(e) => setPaymentMethod(e.target.value as any)}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl bg-white text-sm"
+                  className="input-green bg-white text-sm"
                 >
                   <option value="Cash">Cash</option>
                   <option value="Bank Transfer">Bank Transfer</option>
@@ -5539,15 +5812,15 @@ function StaffDashboard({
 
               <button 
                 type="submit" 
-                className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl transition duration-150 text-sm shadow-md font-bold uppercase text-xs"
+                className="w-full bg-emerald-700 hover:bg-emerald-800 active:scale-[0.98] text-white font-bold py-3 rounded-xl transition-all duration-200 text-xs uppercase tracking-wide shadow-md"
               >
                 Post Contribution
               </button>
             </form>
           </div>
 
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm lg:col-span-2 space-y-4">
-            <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider">Branch Directory Progress</h3>
+          <div className="card-green lg:col-span-2 space-y-4">
+            <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide">Branch Directory Progress</h3>
             
             {/* Conditional Rendering: Only show 32-day tracking table once selected */}
             {selectedCustomerId ? (
@@ -5555,14 +5828,14 @@ function StaffDashboard({
                 const cust = customers.find(c => c.id === selectedCustomerId);
                 if (!cust) return null;
                 return (
-                  <div className="p-4 bg-emerald-50/20 border border-emerald-100 rounded-2xl space-y-3 animate-fade-in text-slate-850 font-bold">
-                    <div className="flex justify-between items-center">
+                  <div className="p-4 sm:p-5 bg-emerald-50/40 border border-emerald-100 rounded-2xl space-y-3 fade-in text-slate-800">
+                    <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
                       <div>
-                        <h4 className="font-bold text-emerald-955">{cust.name}</h4>
-                        <p className="text-[10px] text-slate-550 font-bold">Contact: {cust.phone} | Pace: ₦{cust.daily_amount.toLocaleString()}/day</p>
+                        <h4 className="font-bold text-emerald-950">{cust.name}</h4>
+                        <p className="text-[11px] text-slate-500 font-medium mt-0.5">Contact: {cust.phone} · Pace: ₦{cust.daily_amount.toLocaleString()}/day</p>
                       </div>
-                      <div className="text-right">
-                        <span className="text-[10px] bg-amber-500 text-emerald-955 font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider font-bold">
+                      <div>
+                        <span className="text-[10px] bg-amber-500 text-emerald-950 font-bold px-2.5 py-1 rounded-full uppercase tracking-wide">
                           {(markedDays[cust.id] || []).length} / 32 Days Marked
                         </span>
                       </div>
@@ -5572,7 +5845,7 @@ function StaffDashboard({
                 );
               })()
             ) : (
-              <div className="text-center py-12 bg-emerald-50/10 border border-dashed border-emerald-200 rounded-2xl">
+              <div className="text-center py-12 bg-emerald-50/40 border border-dashed border-emerald-200 rounded-2xl">
                 <p className="text-xs text-slate-400 px-4">Please search and choose a customer account to view their contribution tracking table.</p>
               </div>
             )}
@@ -5580,28 +5853,28 @@ function StaffDashboard({
         </div>
       ) : (
         /* Staff Onboarding Customer directly from Staff Dashboard */
-        <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm max-w-md mx-auto animate-fade-in text-slate-800 font-bold">
-          <h3 className="text-md font-black text-emerald-955 mb-3 uppercase tracking-wider flex items-center gap-1.5 font-bold">
-            <UserPlus className="w-5 h-5 text-emerald-700" />
+        <div className="card-green max-w-md mx-auto fade-in text-slate-800">
+          <h3 className="text-sm font-bold text-emerald-950 mb-1 uppercase tracking-wide flex items-center gap-2">
+            <span className="icon-circle-light w-8 h-8"><UserPlus className="w-4 h-4" /></span>
             Onboard Branch Customer
           </h3>
-          <p className="text-[10px] text-slate-555 mb-4">Customer will be automatically assigned to your branch: <strong>{branches.find(b => b.id === staffProfile.branch_id)?.name || 'Home Branch'}</strong>.</p>
+          <p className="text-[11px] text-slate-500 mb-4 mt-2">Customer will be automatically assigned to your branch: <strong className="text-emerald-800">{branches.find(b => b.id === staffProfile.branch_id)?.name || 'Home Branch'}</strong>.</p>
 
-          <form onSubmit={handleStaffCustomerOnboard} className="space-y-4 text-xs font-semibold">
+          <form onSubmit={handleStaffCustomerOnboard} className="space-y-4 text-xs font-medium">
             <div>
-              <label className="block text-xs font-bold text-emerald-800 mb-1">Full Name *</label>
-              <input type="text" name="name" required value={cName} onChange={(e) => setCName(e.target.value)} className="w-full px-3 py-2 border border-emerald-200 rounded-xl" />
+              <label className="block text-xs font-bold text-emerald-800 mb-1.5">Full Name *</label>
+              <input type="text" name="name" required value={cName} onChange={(e) => setCName(e.target.value)} className="input-green" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-emerald-800 mb-1">Phone Line *</label>
-              <input type="text" name="phone" required placeholder="080XXXXXXXX" value={cPhone} onChange={(e) => setCPhone(e.target.value)} className="w-full px-3 py-2 border border-emerald-200 rounded-xl" />
+              <label className="block text-xs font-bold text-emerald-800 mb-1.5">Phone Line *</label>
+              <input type="text" name="phone" required placeholder="080XXXXXXXX" value={cPhone} onChange={(e) => setCPhone(e.target.value)} className="input-green" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-emerald-800 mb-1">Email Address</label>
-              <input type="email" name="email" placeholder="name@domain.com (optional)" value={cEmail} onChange={(e) => setCEmail(e.target.value)} className="w-full px-3 py-2 border border-emerald-200 rounded-xl" />
+              <label className="block text-xs font-bold text-emerald-800 mb-1.5">Email Address</label>
+              <input type="email" name="email" placeholder="name@domain.com (optional)" value={cEmail} onChange={(e) => setCEmail(e.target.value)} className="input-green" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-emerald-800 mb-1">Daily Target (₦) *</label>
+              <label className="block text-xs font-bold text-emerald-800 mb-1.5">Daily Target (₦) *</label>
               <input 
                 type="number" 
                 name="daily_amount" 
@@ -5610,11 +5883,11 @@ function StaffDashboard({
                 placeholder="Minimum ₦300"
                 value={cDailyAmount} 
                 onChange={(e) => setCDailyAmount(e.target.value)} 
-                className="w-full px-3 py-2 border border-emerald-200 rounded-xl font-bold" 
+                className="input-green font-bold" 
               />
-              <span className="text-[9px] text-slate-400 block mt-1">Acceptable limit: Minimum ₦300/day</span>
+              <span className="text-[10px] text-slate-400 block mt-1.5">Acceptable limit: Minimum ₦300/day</span>
             </div>
-            <button type="submit" className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl text-xs shadow-md font-bold uppercase">
+            <button type="submit" className="w-full bg-emerald-700 hover:bg-emerald-800 active:scale-[0.98] text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wide shadow-md transition-all duration-200">
               Onboard Customer
             </button>
           </form>
@@ -5640,6 +5913,9 @@ function CustomerDashboard({
   onSelfEnrollMonthly: () => void
 }) {
   const [customerTab, setCustomerTab] = useState<'tracker' | 'transactions' | 'deposit' | 'settings' | 'history' | 'monthly-savings'>('tracker');
+  const [selectedTrackerMonthKey, setSelectedTrackerMonthKey] = useState<string | null>(null);
+  const [showSupportOptions, setShowSupportOptions] = useState(false);
+  const [showLoanDetails, setShowLoanDetails] = useState(false);
 
   const myTransactions = transactions.filter(t => t.customer_id === customer.id);
 
@@ -5820,42 +6096,57 @@ function CustomerDashboard({
   };
 
   return (
-    <div className="space-y-6">
-      {/* Dynamic Header */}
-      <div className="bg-gradient-to-r from-emerald-800 via-emerald-700 to-emerald-955 text-white p-6 sm:p-8 rounded-3xl border-b-4 border-amber-505 shadow-lg relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-amber-505 opacity-10 rounded-full transform translate-x-12 -translate-y-12"></div>
-        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="space-y-2">
-            <span className="bg-amber-505 text-emerald-955 text-[10px] font-black uppercase px-2.5 py-1 rounded-full tracking-widest font-bold">
-              Personal Saver Deck
-            </span>
-            <h2 className="text-2xl sm:text-3xl font-black">Welcome, {customer.name}!</h2>
-            <p className="text-emerald-100 text-xs max-w-xl font-bold">
-              Watch your contribution metrics climb across your continuous 32-day savings campaign.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {(['tracker', 'history', 'transactions', 'deposit', 'settings', ...(myMonthlySavingsPlan ? ['monthly-savings'] : [])] as const).map((tab: any) => (
-              <button
-                key={tab}
-                onClick={() => setCustomerTab(tab)}
-                className={`px-4 py-2 rounded-xl text-xs font-black tracking-wide uppercase transition ${
-                  customerTab === tab 
-                    ? 'bg-amber-505 text-emerald-955 shadow-md font-bold' 
-                    : 'bg-emerald-900/60 text-emerald-100 hover:bg-emerald-900 font-bold'
-                }`}
-              >
-                {tab === 'tracker' && 'My Tracker'}
-                {tab === 'history' && 'My 32-Day History'}
-                {tab === 'transactions' && 'Statement History'}
-                {tab === 'deposit' && 'Deposit Funds'}
-                {tab === 'settings' && 'Plan Settings'}
-                {tab === 'monthly-savings' && '📅 Monthly Savings'}
-              </button>
-            ))}
-          </div>
+    <div className="space-y-5 sm:space-y-6 pb-20 sm:pb-6">
+      {/* Slim identity + tab bar (hero banner above already carries the visual "welcome" moment) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base sm:text-lg font-black text-emerald-950">Welcome, {customer.name.split(' ')[0]}!</h2>
+          <p className="text-[11px] text-slate-500">Your personal 32-day savings tracker</p>
+        </div>
+        <div className="hidden sm:flex gap-2 overflow-x-auto -mx-1 px-1 pb-1">
+          {(['tracker', 'history', 'transactions', 'deposit', 'settings', ...(myMonthlySavingsPlan ? ['monthly-savings'] : [])] as const).map((tab: any) => (
+            <button
+              key={tab}
+              onClick={() => setCustomerTab(tab)}
+              className={`shrink-0 px-3.5 py-2 rounded-xl text-[11px] font-bold tracking-wide uppercase transition-all duration-200 ${
+                customerTab === tab 
+                  ? 'bg-emerald-700 text-white shadow-sm' 
+                  : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+              }`}
+            >
+              {tab === 'tracker' && 'My Tracker'}
+              {tab === 'history' && '32-Day History'}
+              {tab === 'transactions' && 'Statement'}
+              {tab === 'deposit' && 'Deposit Funds'}
+              {tab === 'settings' && 'Settings'}
+              {tab === 'monthly-savings' && 'Monthly Savings'}
+            </button>
+          ))}
         </div>
       </div>
+
+      {customerTab !== 'tracker' && (
+        <div className="sm:hidden flex gap-2 overflow-x-auto -mx-1 px-1 pb-1">
+          {(['tracker', 'history', 'transactions', 'deposit', 'settings', ...(myMonthlySavingsPlan ? ['monthly-savings'] : [])] as const).map((tab: any) => (
+            <button
+              key={tab}
+              onClick={() => setCustomerTab(tab)}
+              className={`shrink-0 px-3.5 py-2 rounded-xl text-[11px] font-bold tracking-wide uppercase transition-all duration-200 ${
+                customerTab === tab 
+                  ? 'bg-emerald-700 text-white shadow-sm' 
+                  : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+              }`}
+            >
+              {tab === 'tracker' && 'My Tracker'}
+              {tab === 'history' && '32-Day History'}
+              {tab === 'transactions' && 'Statement'}
+              {tab === 'deposit' && 'Deposit Funds'}
+              {tab === 'settings' && 'Settings'}
+              {tab === 'monthly-savings' && 'Monthly Savings'}
+            </button>
+          ))}
+        </div>
+      )}
 
       {customerTab === 'history' && (() => {
         const myHistory = buildTrackingHistory(markedDays, savedMonths, cycleArchives);
@@ -5869,21 +6160,21 @@ function CustomerDashboard({
           <div className="space-y-4">
             {/* Savings Account summary - accumulates and never clears until an
                 explicit admin-approved payout removes a specific month */}
-            <div className="bg-emerald-955 text-white p-6 rounded-3xl shadow-sm">
-              <p className="text-[11px] uppercase font-black tracking-wider text-amber-400">My Savings Account</p>
-              <p className="text-3xl sm:text-4xl font-black mt-1 text-[#166534]">₦{(totalActiveCycle + uncollectedTotal).toLocaleString()}</p>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2.5 text-xs font-black text-emerald-50">
+            <div className="bg-gradient-to-br from-emerald-900 to-emerald-950 text-white p-5 sm:p-6 rounded-3xl shadow-md">
+              <p className="text-[11px] uppercase font-bold tracking-wider text-amber-400">My Savings Account</p>
+              <p className="text-3xl sm:text-4xl font-black mt-1.5 text-white">₦{(totalActiveCycle + uncollectedTotal).toLocaleString()}</p>
+              <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3 text-xs font-semibold text-emerald-100">
                 <span>Running: ₦{totalActiveCycle.toLocaleString()}</span>
                 <span>Uncollected: ₦{uncollectedTotal.toLocaleString()}</span>
                 <span>Lifetime Collected: ₦{collectedTotal.toLocaleString()}</span>
               </div>
             </div>
 
-            <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
-              <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider mb-1 font-bold">My 32-Day Tracking History</h3>
-              <p className="text-xs text-slate-505 mb-4 font-medium">Every 32-day cycle you've run, from the one currently in progress to fully paid-out months. Click a month for details.</p>
+            <div className="card-green">
+              <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide mb-1">My 32-Day Tracking History</h3>
+              <p className="text-xs text-slate-500 mb-4 font-medium">Every 32-day cycle you've run, from the one currently in progress to fully paid-out months. Tap a month for details.</p>
               {myHistory.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-emerald-200 p-4 text-center text-slate-400">No tracking history yet - your first contribution will start Day 1.</div>
+                <div className="rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/40 p-6 text-center text-slate-400 text-sm">No tracking history yet — your first contribution will start Day 1.</div>
               ) : (
                 <div className="space-y-2">
                   {myHistory.map(entry => <TrackingHistoryCard key={entry.key} entry={entry} />)}
@@ -5894,311 +6185,406 @@ function CustomerDashboard({
         );
       })()}
 
-      {customerTab === 'tracker' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="space-y-6 lg:col-span-1">
-            {/* Balance Card */}
-            <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4 text-slate-800 font-bold">
+      {customerTab === 'tracker' && (() => {
+        const myHistory = buildTrackingHistory(markedDays, savedMonths, cycleArchives);
+        const selectedEntry = selectedTrackerMonthKey
+          ? myHistory.find(h => h.key === selectedTrackerMonthKey)
+          : (myHistory.find(h => h.period_key === activePeriodKey) || myHistory[0]);
+        const isViewingRunningCycle = !selectedEntry || selectedEntry.status === 'Running';
+
+        return (
+        <div className="space-y-5 sm:space-y-6">
+          {/* Balance Card */}
+          <div className="card-green">
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-5 sm:gap-6 items-center">
               <div>
-                <p className="text-[10px] text-slate-505 uppercase font-black tracking-wider">Total Balance With HireMercy AJO</p>
-                <p className="text-3xl font-black text-emerald-800 mt-1 font-bold">₦{totalSaved.toLocaleString()}</p>
-                <div className="flex gap-3 mt-1.5 text-[10px] font-bold text-slate-500">
+                <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Total Balance With HireMercy AJO</p>
+                <p className="text-3xl sm:text-4xl font-black text-emerald-800 mt-1.5">₦{totalSaved.toLocaleString()}</p>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11px] font-semibold text-slate-500">
                   <span>Running: ₦{totalActiveCycle.toLocaleString()}</span>
                   <span>•</span>
                   <span>Uncollected: ₦{totalUncollected.toLocaleString()}</span>
                 </div>
               </div>
-              
-              <div className="pt-4 border-t border-emerald-50 flex justify-between text-xs font-bold">
+              <div className="hidden sm:flex icon-circle w-16 h-16 shrink-0"><Wallet className="w-7 h-7" /></div>
+              <div className="flex sm:flex-col gap-4 sm:gap-2 sm:text-right border-t sm:border-t-0 sm:border-l border-emerald-100 pt-3 sm:pt-0 sm:pl-6">
                 <div>
-                  <span className="text-slate-400 block font-bold text-[10px]">Daily Target Plan</span>
-                  <span className="font-bold text-slate-800">₦{customer.daily_amount.toLocaleString()} / Day</span>
+                  <span className="text-slate-400 block font-semibold text-[10px] uppercase tracking-wide flex items-center gap-1 sm:justify-end"><Target className="w-3 h-3" /> Daily Target Plan</span>
+                  <span className="font-bold text-slate-800 text-sm">₦{customer.daily_amount.toLocaleString()} / Day</span>
                 </div>
-                <div className="text-right">
-                  <span className="text-slate-400 block font-bold text-[10px]">Current Cycle</span>
-                  <span className="font-bold text-amber-650">32-Day Thrift</span>
+                <div>
+                  <span className="text-slate-400 block font-semibold text-[10px] uppercase tracking-wide flex items-center gap-1 sm:justify-end"><Calendar className="w-3 h-3" /> Current Cycle</span>
+                  <span className="font-bold text-amber-600 text-sm">32-Day Thrift</span>
                 </div>
               </div>
-
-              {activeLoan && (
-                <div className="pt-4 border-t border-emerald-50">
-                  <span className="text-slate-400 block font-bold text-[10px] uppercase">Loan Balance</span>
-                  <p className="text-2xl font-black mt-0.5 text-red-600">
-                    -₦{Math.max(0, activeLoan.repayment_amount - activeLoan.amount_repaid).toLocaleString()}
-                  </p>
-                </div>
-              )}
-              {!activeLoan && justClearedLoan && (
-                <div className="pt-4 border-t border-emerald-50">
-                  <p className="text-sm font-black text-green-600">Loan Repayment Complete</p>
-                </div>
-              )}
-
-              {creditBalance && creditBalance.credit_amount > 0 && (
-                <div className="pt-4 border-t border-emerald-50">
-                  <span className="text-slate-400 block font-bold text-[10px] uppercase">Credit Balance</span>
-                  <p className="text-xl font-black mt-0.5 text-blue-600">₦{creditBalance.credit_amount.toLocaleString()}</p>
-                  <p className="text-[10px] text-slate-500 mt-0.5 font-semibold">
-                    You have ₦{creditBalance.credit_amount.toLocaleString()} credit from an earlier overpayment. This will be applied to your next contribution automatically — you only need to pay ₦{Math.max(0, customer.daily_amount - creditBalance.credit_amount).toLocaleString()} more to mark the next day.
-                  </p>
-                </div>
-              )}
-
-              {activeLoan ? (
-                <p className="text-[10px] text-center text-red-700 font-semibold bg-red-50 p-2 rounded-xl">
-                  You have an active loan to repay. Savings withdrawal is unavailable until your loan has been fully repaid.
-                </p>
-              ) : uncollectedSavedMonths.length > 0 ? (
-                <button 
-                  type="button"
-                  onClick={() => setShowWithdrawModal(true)}
-                  className="w-full bg-amber-505 hover:bg-amber-606 text-emerald-955 font-black py-2.5 rounded-xl text-xs transition duration-150 shadow-md flex items-center justify-center gap-1.5 font-bold"
-                >
-                  <Coins className="w-4 h-4" />
-                  Request Payout / Withdrawal ({uncollectedSavedMonths.length} saved)
-                </button>
-              ) : (
-                <p className="text-[10px] text-center text-slate-400 font-semibold bg-slate-50 p-2 rounded-xl">
-                  Complete a full 32-day cycle to unlock a payout for that month.
-                </p>
-              )}
             </div>
 
-            <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
-              <div className="flex justify-between items-center mb-1">
-                <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider">Loan Information</h3>
-                {canRequestLoan && !pendingLoanRequest && (
-                  <button
-                    type="button"
-                    onClick={() => setShowLoanRequestModal(true)}
-                    className="bg-amber-500 hover:bg-amber-600 text-emerald-955 font-black px-3 py-1.5 rounded-xl text-[11px] uppercase transition"
-                  >
-                    Request Loan
-                  </button>
-                )}
+            {activeLoan && (
+              <div className="pt-4 mt-4 border-t border-emerald-100">
+                <span className="text-slate-400 block font-bold text-[10px] uppercase">Loan Balance</span>
+                <p className="text-2xl font-black mt-0.5 text-red-600">
+                  -₦{Math.max(0, activeLoan.repayment_amount - activeLoan.amount_repaid).toLocaleString()}
+                </p>
+              </div>
+            )}
+            {!activeLoan && justClearedLoan && (
+              <div className="pt-4 mt-4 border-t border-emerald-100">
+                <p className="text-sm font-black text-green-600">Loan Repayment Complete</p>
+              </div>
+            )}
+            {creditBalance && creditBalance.credit_amount > 0 && (
+              <div className="pt-4 mt-4 border-t border-emerald-100">
+                <span className="text-slate-400 block font-bold text-[10px] uppercase">Credit Balance</span>
+                <p className="text-xl font-black mt-0.5 text-blue-600">₦{creditBalance.credit_amount.toLocaleString()}</p>
+                <p className="text-[10px] text-slate-500 mt-0.5 font-semibold">
+                  You have ₦{creditBalance.credit_amount.toLocaleString()} credit from an earlier overpayment. This will be applied to your next contribution automatically — you only need to pay ₦{Math.max(0, customer.daily_amount - creditBalance.credit_amount).toLocaleString()} more to mark the next day.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Unlock / withdrawal status banner */}
+          {activeLoan ? (
+            <div className="rounded-2xl bg-red-50 border border-red-200 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+              <span className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0"><LockIcon className="w-5 h-5" /></span>
+              <p className="text-xs font-semibold text-red-700 flex-1">You have an active loan to repay. Savings withdrawal is unavailable until your loan has been fully repaid.</p>
+            </div>
+          ) : uncollectedSavedMonths.length > 0 ? (
+            <div className="rounded-2xl bg-gradient-to-r from-amber-500 to-amber-400 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+              <span className="w-10 h-10 rounded-xl bg-white/30 text-emerald-950 flex items-center justify-center shrink-0"><Coins className="w-5 h-5" /></span>
+              <p className="text-xs font-bold text-emerald-950 flex-1">You have {uncollectedSavedMonths.length} completed cycle{uncollectedSavedMonths.length > 1 ? 's' : ''} ready for payout.</p>
+              <button
+                type="button"
+                onClick={() => setShowWithdrawModal(true)}
+                className="bg-emerald-950 hover:bg-emerald-900 active:scale-[0.98] text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 shrink-0"
+              >
+                Request Payout <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <div className="rounded-2xl bg-gradient-to-r from-emerald-800 to-emerald-900 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+              <span className="w-10 h-10 rounded-xl bg-amber-400 text-emerald-950 flex items-center justify-center shrink-0"><LockIcon className="w-5 h-5" /></span>
+              <p className="text-xs font-semibold text-white flex-1">Complete a full 32-day cycle to unlock a payout for that month.</p>
+              <button
+                type="button"
+                onClick={() => setCustomerTab('history')}
+                className="bg-amber-400 hover:bg-amber-300 active:scale-[0.98] text-emerald-950 text-xs font-bold px-4 py-2.5 rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 shrink-0"
+              >
+                View My Progress <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* Quick action icon row */}
+          <div className="card-green">
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 sm:gap-4 text-center">
+              {([
+                { tab: 'tracker', label: 'My Tracker', icon: Target },
+                { tab: 'history', label: '32-Day History', icon: Calendar },
+                { tab: 'transactions', label: 'Statement', icon: FileText },
+                { tab: 'deposit', label: 'Deposit Funds', icon: Wallet },
+                { tab: 'settings', label: 'Plan Settings', icon: Settings },
+              ] as const).map(({ tab, label, icon: Icon }) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setCustomerTab(tab)}
+                  className="flex flex-col items-center gap-2 group"
+                >
+                  <span className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 ${
+                    customerTab === tab ? 'bg-emerald-700 text-white shadow-md' : 'bg-emerald-50 text-emerald-700 group-hover:bg-emerald-100'
+                  }`}>
+                    <Icon className="w-5 h-5" />
+                  </span>
+                  <span className="text-[10px] font-semibold text-slate-600 leading-tight">{label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 3-card row: Loan / Monthly Savings / Support */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5">
+            {/* Loan Information (compact) */}
+            <div className="card-green flex flex-col">
+              <div className="flex items-center gap-2.5 mb-2">
+                <span className="icon-circle-light w-9 h-9"><HandCoins className="w-4 h-4" /></span>
+                <h3 className="text-xs font-bold text-emerald-950 uppercase tracking-wide">Loan Information</h3>
               </div>
               {pendingLoanRequest ? (
-                <p className="text-xs text-amber-700 font-bold mt-2">Your loan request is pending admin approval.</p>
+                <p className="text-xs text-amber-700 font-semibold flex-1">Your loan request is pending admin approval.</p>
               ) : activeLoan ? (
-                <div className="mt-2 space-y-2 text-xs">
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 font-semibold">
-                    <div><p className="text-slate-500">Loan Status</p><p className="font-bold">{activeLoan.status === 'Loan Cleared' ? 'Loan Repaid' : activeLoan.status}</p></div>
-                    <div><p className="text-slate-500">Loan ID</p><p className="font-bold text-[10px]">{activeLoan.id.slice(0, 8)}</p></div>
-                    <div><p className="text-slate-500">Loan Amount</p><p className="font-bold">₦{activeLoan.loan_amount.toLocaleString()}</p></div>
-                    <div><p className="text-slate-500">Repayment Amount</p><p className="font-bold">₦{activeLoan.repayment_amount.toLocaleString()}</p></div>
-                    <div><p className="text-slate-500">Amount Already Counted</p><p className="font-bold">₦{activeLoan.amount_already_counted.toLocaleString()}</p></div>
-                    <div><p className="text-slate-500">Amount Repaid</p><p className="font-bold">₦{activeLoan.amount_repaid.toLocaleString()}</p></div>
-                    <div><p className="text-slate-500">Outstanding Balance</p><p className="font-bold text-red-600">₦{activeLoan.amount_remaining.toLocaleString()}</p></div>
-                    <div><p className="text-slate-500">Current Daily Contribution</p><p className="font-bold">₦{customer.daily_amount.toLocaleString()}</p></div>
-                    <div><p className="text-slate-500">Days Repaid</p><p className="font-bold">{activeLoan.days_repaid} / {activeLoan.total_days}</p></div>
-                    <div><p className="text-slate-500">Remaining Days</p><p className="font-bold">{Math.max(0, activeLoan.total_days - activeLoan.days_repaid)}</p></div>
-                    <div><p className="text-slate-500">Approval Date</p><p className="font-bold">{activeLoan.date_issued ? new Date(activeLoan.date_issued).toLocaleDateString() : '—'}</p></div>
-                    <div><p className="text-slate-500">Approved By</p><p className="font-bold">{profiles.find(p => p.id === activeLoan.approved_by)?.name || '—'}</p></div>
-                  </div>
-                  <div className="pt-1">
-                    <div className="w-full bg-slate-100 rounded-full h-2.5">
-                      <div
-                        className="bg-emerald-600 h-2.5 rounded-full transition-all"
-                        style={{ width: `${Math.min(100, (activeLoan.days_repaid / activeLoan.total_days) * 100)}%` }}
-                      />
-                    </div>
-                    <p className="text-[10px] font-bold text-slate-500 mt-1">{activeLoan.days_repaid} / {activeLoan.total_days} Days Completed</p>
-                  </div>
+                <div className="flex-1 space-y-2">
+                  <p className="text-xs text-slate-500 font-medium">Outstanding balance</p>
+                  <p className="text-lg font-black text-red-600">₦{activeLoan.amount_remaining.toLocaleString()}</p>
+                  <button type="button" onClick={() => setShowLoanDetails(v => !v)} className="text-[11px] font-bold text-emerald-700 hover:underline flex items-center gap-1">
+                    {showLoanDetails ? 'Hide details' : 'View full details'} <ChevronRight className={`w-3 h-3 transition-transform ${showLoanDetails ? 'rotate-90' : ''}`} />
+                  </button>
                 </div>
               ) : (
-                <p className="text-xs text-slate-400 font-semibold mt-2">
+                <p className="text-xs text-slate-500 font-medium flex-1">
                   {customer.is_active ? 'You have no active loan.' : 'Your account must be active to request a loan.'}
                 </p>
               )}
+              {canRequestLoan && !pendingLoanRequest && !activeLoan && (
+                <button
+                  type="button"
+                  onClick={() => setShowLoanRequestModal(true)}
+                  className="mt-3 w-full bg-emerald-700 hover:bg-emerald-800 active:scale-[0.98] text-white font-bold py-2.5 rounded-xl text-xs transition-all duration-200 flex items-center justify-center gap-1"
+                >
+                  Request Loan <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
-            {showLoanRequestModal && (
-              <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowLoanRequestModal(false)}>
-                <div className="bg-white rounded-3xl max-w-sm w-full p-6" onClick={(e) => e.stopPropagation()}>
-                  <h3 className="text-md font-black text-emerald-955 mb-3">Loan Request</h3>
-                  {(() => {
-                    const { maxLoan, repaymentAmount } = computeLoanEligibility(customer.daily_amount);
-                    const completedDays = markedDays.length;
-                    const amountAlreadyCounted = Math.min(totalActiveCycle, repaymentAmount);
-                    const remainingRepayment = Math.max(0, repaymentAmount - amountAlreadyCounted);
-                    return (
-                      <div className="space-y-1.5 text-xs font-semibold mb-4">
-                        <p><span className="text-slate-500">Customer Name:</span> {customer.name}</p>
-                        <p><span className="text-slate-500">Daily Contribution:</span> ₦{customer.daily_amount.toLocaleString()}</p>
-                        <p><span className="text-slate-500">Maximum Loan Eligible:</span> ₦{maxLoan.toLocaleString()}</p>
-                        <p><span className="text-slate-500">Repayment Amount:</span> ₦{repaymentAmount.toLocaleString()}</p>
-                        <p><span className="text-slate-500">Completed Days:</span> {completedDays}</p>
-                        <p><span className="text-slate-500">Amount Already Counted:</span> ₦{amountAlreadyCounted.toLocaleString()}</p>
-                        <p className="font-black text-emerald-800">Remaining Repayment Amount: ₦{remainingRepayment.toLocaleString()}</p>
-                      </div>
-                    );
-                  })()}
-                  <button
-                    type="button"
-                    onClick={() => { onRequestLoan(customer.id); setShowLoanRequestModal(false); }}
-                    className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-black py-2.5 rounded-xl text-xs uppercase"
-                  >
-                    Submit Loan Request
-                  </button>
-                </div>
+            {/* Monthly Savings Plan (compact) */}
+            <div className="card-green flex flex-col">
+              <div className="flex items-center gap-2.5 mb-2">
+                <span className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center"><CalendarRange className="w-4 h-4" /></span>
+                <h3 className="text-xs font-bold text-emerald-950 uppercase tracking-wide">Monthly Savings Plan</h3>
               </div>
-            )}
+              {myMonthlySavingsPlan ? (
+                <div className="flex-1 space-y-1">
+                  <p className="text-xs text-slate-500 font-medium">Saved this year ({myMonthlySavingsPlan.year})</p>
+                  <p className="text-lg font-black text-emerald-700">₦{myMonthlySavingsPlan.total_saved.toLocaleString()}</p>
+                  <p className="text-[11px] text-slate-500 font-semibold">{myMonthlySavingsMonths.filter(m => m.plan_id === myMonthlySavingsPlan!.id && m.is_complete).length}/12 months complete</p>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500 font-medium flex-1">You are not currently enrolled in the Monthly Salary Savings Plan.</p>
+              )}
+              <button
+                type="button"
+                onClick={() => myMonthlySavingsPlan ? setCustomerTab('monthly-savings') : onSelfEnrollMonthly()}
+                className="mt-3 w-full bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-emerald-950 font-bold py-2.5 rounded-xl text-xs transition-all duration-200 flex items-center justify-center gap-1"
+              >
+                {myMonthlySavingsPlan ? 'View Plan' : 'Get Started'} <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
 
-            {/* Monthly Salary Savings Plan */}
-            {myMonthlySavingsPlan ? (
-              <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
-                <div className="flex justify-between items-center mb-3">
-                  <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider">Monthly Savings Plan</h3>
-                  <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">{myMonthlySavingsPlan.year}</span>
-                </div>
-                <div className="flex gap-4 text-xs mb-3 font-semibold text-slate-600">
-                  <span>Total Saved: <span className="font-black text-emerald-700">₦{myMonthlySavingsPlan.total_saved.toLocaleString()}</span></span>
-                  <span>Completed: <span className="font-black">{myMonthlySavingsMonths.filter(m => m.plan_id === myMonthlySavingsPlan.id && m.is_complete).length}/12</span></span>
-                </div>
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                  {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((name, idx) => {
-                    const monthNum = idx + 1;
-                    const md = myMonthlySavingsMonths.find(m => m.plan_id === myMonthlySavingsPlan!.id && m.month_number === monthNum);
-                    const isCurrentMonth = monthNum === new Date().getMonth() + 1;
-                    return (
-                      <div key={monthNum} className={`rounded-xl p-2 text-center border ${
-                        md?.is_complete ? 'bg-emerald-600 border-emerald-600 text-white' :
-                        md && md.total_deposited > 0 ? 'bg-amber-50 border-amber-300' :
-                        isCurrentMonth ? 'bg-blue-50 border-blue-200' :
-                        'bg-slate-50 border-slate-100'
-                      }`}>
-                        <p className={`text-[10px] font-black ${md?.is_complete ? 'text-white' : 'text-slate-600'}`}>{name}</p>
-                        {md ? (
-                          <p className={`text-[10px] font-bold mt-0.5 ${md.is_complete ? 'text-emerald-100' : 'text-amber-700'}`}>
-                            {md.is_complete ? '✓' : `₦${md.total_deposited.toLocaleString()}`}
-                          </p>
-                        ) : (
-                          <p className="text-[10px] text-slate-300 mt-0.5">—</p>
-                        )}
-                        {md && !md.is_complete && md.total_deposited > 0 && (
-                          <p className="text-[9px] text-amber-600 font-bold">₦{(5000 - md.total_deposited).toLocaleString()} left</p>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                <p className="text-[10px] text-slate-400 mt-3 font-semibold">Minimum ₦5,000 per month. Green = complete. Contact your agent to make a deposit.</p>
+            {/* Need Assistance (compact) */}
+            <div className="card-green flex flex-col">
+              <div className="flex items-center gap-2.5 mb-2">
+                <span className="w-9 h-9 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center"><Headphones className="w-4 h-4" /></span>
+                <h3 className="text-xs font-bold text-emerald-950 uppercase tracking-wide">Need Assistance?</h3>
               </div>
-            ) : (
-              <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-                <h3 className="text-md font-black text-slate-400 uppercase tracking-wider mb-1">Monthly Savings Plan</h3>
-                <p className="text-xs text-slate-400 font-semibold">You are not currently enrolled in the Monthly Salary Savings Plan. Contact your agent to get started.</p>
-              </div>
-            )}
-
-            {customer.admin_note && customer.admin_note.trim() !== '' && (
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
-                <MessageSquare className="w-5 h-5 text-amber-700 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-wider text-amber-700 mb-1">Note from HireMercy AJO</p>
-                  <p className="text-xs font-semibold text-amber-900">{customer.admin_note}</p>
-                </div>
-              </div>
-            )}
-
-            <SupportWidget details={supportDetails} />
+              <p className="text-xs text-slate-500 font-medium flex-1">Our support team is here to help you.</p>
+              {showSupportOptions ? (
+                <div className="mt-3"><SupportWidget details={supportDetails} /></div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowSupportOptions(true)}
+                  className="mt-3 w-full bg-violet-600 hover:bg-violet-700 active:scale-[0.98] text-white font-bold py-2.5 rounded-xl text-xs transition-all duration-200 flex items-center justify-center gap-1"
+                >
+                  Contact Support <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4">
-              <div>
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider font-bold">My 32-Day Contribution Grid</h3>
-                  <span className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-[11px] font-black text-emerald-800">
-                    {periodLabelFromKey(activePeriodKey)}
-                  </span>
-                </div>
-                {markedDays.length === 0 && savedMonths.length > 0 ? (
-                  <div className="mt-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
-                    <p className="text-xs font-black text-emerald-800">
-                      ✓ Previous cycle complete — {periodLabelFromKey(activePeriodKey)} is ready
-                    </p>
-                    <p className="text-[11px] text-emerald-600 font-semibold mt-0.5">
-                      Your next contribution will automatically start Day 1 of {periodLabelFromKey(activePeriodKey)}.
-                    </p>
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate-505 mt-0.5 font-bold">Stars indicate approved/marked allocations corresponding to confirmed payments.</p>
-                )}
-                <p className="text-xs font-bold text-slate-500 mt-1">{markedDays.length} / 32 Days</p>
+          {/* Expanded loan details (kept intact, just tucked under a toggle to match the compact card above) */}
+          {showLoanDetails && activeLoan && (
+            <div className="card-green">
+              <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide mb-3">Loan Details</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs font-semibold">
+                <div><p className="text-slate-500">Loan Status</p><p className="font-bold">{activeLoan.status === 'Loan Cleared' ? 'Loan Repaid' : activeLoan.status}</p></div>
+                <div><p className="text-slate-500">Loan ID</p><p className="font-bold text-[10px]">{activeLoan.id.slice(0, 8)}</p></div>
+                <div><p className="text-slate-500">Loan Amount</p><p className="font-bold">₦{activeLoan.loan_amount.toLocaleString()}</p></div>
+                <div><p className="text-slate-500">Repayment Amount</p><p className="font-bold">₦{activeLoan.repayment_amount.toLocaleString()}</p></div>
+                <div><p className="text-slate-500">Amount Already Counted</p><p className="font-bold">₦{activeLoan.amount_already_counted.toLocaleString()}</p></div>
+                <div><p className="text-slate-500">Amount Repaid</p><p className="font-bold">₦{activeLoan.amount_repaid.toLocaleString()}</p></div>
+                <div><p className="text-slate-500">Outstanding Balance</p><p className="font-bold text-red-600">₦{activeLoan.amount_remaining.toLocaleString()}</p></div>
+                <div><p className="text-slate-500">Current Daily Contribution</p><p className="font-bold">₦{customer.daily_amount.toLocaleString()}</p></div>
+                <div><p className="text-slate-500">Days Repaid</p><p className="font-bold">{activeLoan.days_repaid} / {activeLoan.total_days}</p></div>
+                <div><p className="text-slate-500">Remaining Days</p><p className="font-bold">{Math.max(0, activeLoan.total_days - activeLoan.days_repaid)}</p></div>
+                <div><p className="text-slate-500">Approval Date</p><p className="font-bold">{activeLoan.date_issued ? new Date(activeLoan.date_issued).toLocaleDateString() : '—'}</p></div>
+                <div><p className="text-slate-500">Approved By</p><p className="font-bold">{profiles.find(p => p.id === activeLoan.approved_by)?.name || '—'}</p></div>
               </div>
-              <Grid32 trackingDays={markedDays} dailyAmount={customer.daily_amount} />
+              <div className="pt-3">
+                <div className="w-full bg-slate-100 rounded-full h-2.5">
+                  <div
+                    className="bg-emerald-600 h-2.5 rounded-full transition-all"
+                    style={{ width: `${Math.min(100, (activeLoan.days_repaid / activeLoan.total_days) * 100)}%` }}
+                  />
+                </div>
+                <p className="text-[10px] font-bold text-slate-500 mt-1">{activeLoan.days_repaid} / {activeLoan.total_days} Days Completed</p>
+              </div>
+            </div>
+          )}
+
+          {showLoanRequestModal && (
+            <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setShowLoanRequestModal(false)}>
+              <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-sm w-full p-6" onClick={(e) => e.stopPropagation()}>
+                <h3 className="text-sm font-bold text-emerald-950 mb-3">Loan Request</h3>
+                {(() => {
+                  const { maxLoan, repaymentAmount } = computeLoanEligibility(customer.daily_amount);
+                  const completedDays = markedDays.length;
+                  const amountAlreadyCounted = Math.min(totalActiveCycle, repaymentAmount);
+                  const remainingRepayment = Math.max(0, repaymentAmount - amountAlreadyCounted);
+                  return (
+                    <div className="space-y-1.5 text-xs font-semibold mb-4">
+                      <p><span className="text-slate-500">Customer Name:</span> {customer.name}</p>
+                      <p><span className="text-slate-500">Daily Contribution:</span> ₦{customer.daily_amount.toLocaleString()}</p>
+                      <p><span className="text-slate-500">Maximum Loan Eligible:</span> ₦{maxLoan.toLocaleString()}</p>
+                      <p><span className="text-slate-500">Repayment Amount:</span> ₦{repaymentAmount.toLocaleString()}</p>
+                      <p><span className="text-slate-500">Completed Days:</span> {completedDays}</p>
+                      <p><span className="text-slate-500">Amount Already Counted:</span> ₦{amountAlreadyCounted.toLocaleString()}</p>
+                      <p className="font-black text-emerald-800">Remaining Repayment Amount: ₦{remainingRepayment.toLocaleString()}</p>
+                    </div>
+                  );
+                })()}
+                <button
+                  type="button"
+                  onClick={() => { onRequestLoan(customer.id); setShowLoanRequestModal(false); }}
+                  className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-black py-2.5 rounded-xl text-xs uppercase"
+                >
+                  Submit Loan Request
+                </button>
+              </div>
+            </div>
+          )}
+
+          {customer.admin_note && customer.admin_note.trim() !== '' && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
+              <MessageSquare className="w-5 h-5 text-amber-700 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-wide text-amber-700 mb-1">Note from HireMercy AJO</p>
+                <p className="text-xs font-semibold text-amber-900">{customer.admin_note}</p>
+              </div>
+            </div>
+          )}
+
+          {/* 32-Day Contribution Progress with month selector */}
+          <div className="card-green space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5">
+                  <span className="text-amber-500">★</span> My 32-Day Contribution Progress
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">Stars indicate approved/marked allocations corresponding to confirmed payments.</p>
+              </div>
+              {myHistory.length > 0 && (
+                <select
+                  value={selectedEntry?.key || ''}
+                  onChange={(e) => setSelectedTrackerMonthKey(e.target.value)}
+                  className="input-green bg-white text-xs py-2 w-full sm:w-48"
+                >
+                  {myHistory.map(h => (
+                    <option key={h.key} value={h.key}>{h.month_label} {h.status === 'Running' ? '(Current)' : `(${h.status})`}</option>
+                  ))}
+                </select>
+              )}
             </div>
 
-            {/* Payout records table */}
-            <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4">
-              <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider flex items-center gap-1.5 font-bold">
-                <FileText className="w-5 h-5 text-emerald-700" />
-                My Payout & Reset History
-              </h3>
-              <div className="overflow-x-auto text-slate-800 font-bold">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-emerald-50/50 text-emerald-900 font-extrabold border-b border-emerald-200">
-                      <th className="p-3">Requested At</th>
-                      <th className="p-3">Recipient Account</th>
-                      <th className="p-3">Cleared Period</th>
-                      <th className="p-3">Accrued Sum</th>
-                      <th className="p-3 text-emerald-800">Payout (Accrued - 1 Day)</th>
-                      <th className="p-3">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-emerald-50 bg-white">
-                    {payoutHistory.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="p-4 text-center text-slate-400">No previous payout logs.</td>
-                      </tr>
-                    ) : (
-                      payoutHistory.map(h => (
-                        <tr key={h.id}>
-                          <td className="p-3 text-slate-550">
-                            {new Date(h.created_at).toLocaleDateString()}
-                          </td>
-                          <td className="p-3 text-slate-700 font-bold">
-                            {h.payout_method === 'Cash' ? (
-                              <strong className="block">Cash Payment</strong>
-                            ) : (
-                              <>
-                                <strong className="block">{h.account_name}</strong>
-                                {h.bank_name} • {h.account_number}
-                              </>
-                            )}
-                          </td>
-                          <td className="p-3 font-bold text-amber-800">{h.month_paid || 'N/A'}</td>
-                          <td className="p-3">₦{h.amount.toLocaleString()}</td>
-                          <td className="p-3 font-bold text-emerald-800">₦{h.payout_amount.toLocaleString()}</td>
-                          <td className="p-3">
-                            <span className={`px-2.5 py-0.5 rounded-full font-black uppercase text-[9px] ${
-                              h.status === 'Pending' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
-                            }`}>
-                              {h.status === 'Successful' ? 'Successful' : h.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+            {markedDays.length === 0 && savedMonths.length > 0 && isViewingRunningCycle && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
+                <p className="text-xs font-black text-emerald-800">
+                  ✓ Previous cycle complete — {periodLabelFromKey(activePeriodKey)} is ready
+                </p>
+                <p className="text-[11px] text-emerald-600 font-semibold mt-0.5">
+                  Your next contribution will automatically start Day 1 of {periodLabelFromKey(activePeriodKey)}.
+                </p>
               </div>
+            )}
+
+            {isViewingRunningCycle ? (
+              <>
+                <p className="text-xs font-bold text-emerald-700">{markedDays.length} / 32 Days Completed</p>
+                <Grid32 trackingDays={markedDays} dailyAmount={customer.daily_amount} />
+              </>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-emerald-50/60 rounded-xl p-3 text-center">
+                  <p className="text-[10px] text-slate-500 uppercase font-bold">Month</p>
+                  <p className="text-sm font-black text-emerald-900 mt-0.5">{selectedEntry?.month_label}</p>
+                </div>
+                <div className="bg-emerald-50/60 rounded-xl p-3 text-center">
+                  <p className="text-[10px] text-slate-500 uppercase font-bold">Days Completed</p>
+                  <p className="text-sm font-black text-emerald-900 mt-0.5">{selectedEntry?.total_days} / 32</p>
+                </div>
+                <div className="bg-emerald-50/60 rounded-xl p-3 text-center">
+                  <p className="text-[10px] text-slate-500 uppercase font-bold">Total Amount</p>
+                  <p className="text-sm font-black text-emerald-900 mt-0.5">₦{selectedEntry?.total_amount.toLocaleString()}</p>
+                </div>
+                <div className="bg-emerald-50/60 rounded-xl p-3 text-center">
+                  <p className="text-[10px] text-slate-500 uppercase font-bold">Status</p>
+                  <p className="text-sm font-black text-emerald-900 mt-0.5">{selectedEntry?.status}</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Payout records table */}
+          <div className="card-green space-y-4">
+            <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5">
+              <FileText className="w-5 h-5 text-emerald-700" />
+              My Payout & Reset History
+            </h3>
+            <div className="overflow-x-auto text-slate-800 font-bold">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-emerald-50/50 text-emerald-900 font-extrabold border-b border-emerald-200">
+                    <th className="p-3">Requested At</th>
+                    <th className="p-3">Recipient Account</th>
+                    <th className="p-3">Cleared Period</th>
+                    <th className="p-3">Accrued Sum</th>
+                    <th className="p-3 text-emerald-800">Payout (Accrued - 1 Day)</th>
+                    <th className="p-3">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-emerald-50 bg-white">
+                  {payoutHistory.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="p-4 text-center text-slate-400 font-medium">
+                        <FileText className="w-5 h-5 mx-auto mb-1 text-slate-300" />
+                        No previous payout logs.
+                      </td>
+                    </tr>
+                  ) : (
+                    payoutHistory.map(h => (
+                      <tr key={h.id}>
+                        <td className="p-3 text-slate-500">
+                          {new Date(h.created_at).toLocaleDateString()}
+                        </td>
+                        <td className="p-3 text-slate-700 font-bold">
+                          {h.payout_method === 'Cash' ? (
+                            <strong className="block">Cash Payment</strong>
+                          ) : (
+                            <>
+                              <strong className="block">{h.account_name}</strong>
+                              {h.bank_name} • {h.account_number}
+                            </>
+                          )}
+                        </td>
+                        <td className="p-3 font-bold text-amber-800">{h.month_paid || 'N/A'}</td>
+                        <td className="p-3">₦{h.amount.toLocaleString()}</td>
+                        <td className="p-3 font-bold text-emerald-800">₦{h.payout_amount.toLocaleString()}</td>
+                        <td className="p-3">
+                          <span className={`px-2.5 py-0.5 rounded-full font-black uppercase text-[9px] ${
+                            h.status === 'Pending' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                          }`}>
+                            {h.status === 'Successful' ? 'Successful' : h.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Statement History Tab */}
       {customerTab === 'transactions' && (
-        <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm animate-fade-in space-y-4">
+        <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs animate-fade-in space-y-4">
           <div>
-            <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider flex items-center gap-1.5 font-bold font-bold">
+            <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5 font-bold font-bold">
               <FileText className="w-5 h-5 text-emerald-700" />
               Statement History Ledger
             </h3>
-            <p className="text-xs text-slate-505 font-medium font-bold">Review your past contribution deposits, including both pending approvals and confirmed payouts.</p>
+            <p className="text-xs text-slate-500 font-medium font-bold">Review your past contribution deposits, including both pending approvals and confirmed payouts.</p>
           </div>
           <div className="overflow-x-auto text-slate-800 font-medium">
             <table className="w-full text-left text-xs border-collapse">
@@ -6219,12 +6605,12 @@ function CustomerDashboard({
                 ) : (
                   myTransactions.map(t => (
                     <tr key={t.id} className="hover:bg-emerald-50/20 transition">
-                      <td className="p-3 text-slate-555">{t.date}</td>
+                      <td className="p-3 text-slate-500">{t.date}</td>
                       <td className="p-3 font-semibold text-slate-700">{t.payment_method}</td>
                       <td className="p-3 font-bold text-emerald-800">₦{t.amount.toLocaleString()}</td>
                       <td className="p-3">
                         {t.status === 'Successful' ? (
-                          <span className="bg-amber-100 text-amber-955 font-black px-2 py-0.5 rounded">
+                          <span className="bg-amber-100 text-amber-950 font-black px-2 py-0.5 rounded">
                             Days {t.start_day} - {t.end_day} ({t.days_covered} Days)
                           </span>
                         ) : (
@@ -6250,12 +6636,12 @@ function CustomerDashboard({
       {/* Deposit Funds / Add Funds Tab */}
       {customerTab === 'deposit' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in text-slate-800 font-bold font-bold">
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4">
-            <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider flex items-center gap-1.5 font-bold font-bold">
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs space-y-4">
+            <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5 font-bold font-bold">
               <Coins className="w-5 h-5 text-emerald-700" />
               Add Savings Contribution
             </h3>
-            <p className="text-xs text-slate-505 font-medium font-bold">Follow the steps below to fund your 32-day plan: </p>
+            <p className="text-xs text-slate-500 font-medium font-bold">Follow the steps below to fund your 32-day plan: </p>
             
             <div className="space-y-3 text-xs bg-emerald-50/30 p-4 rounded-2xl border border-emerald-100 leading-relaxed font-semibold">
               <p className="text-emerald-900 font-extrabold text-sm">Instructions:</p>
@@ -6274,7 +6660,7 @@ function CustomerDashboard({
                   placeholder="e.g. 10000"
                   value={depositAmountInput}
                   onChange={(e) => setDepositAmountInput(e.target.value)}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-sm"
+                  className="input-green text-sm"
                 />
               </div>
 
@@ -6291,7 +6677,7 @@ function CustomerDashboard({
                   required
                   value={selectedSenderBank}
                   onChange={(e) => setSelectedSenderBank(e.target.value)}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl bg-white text-sm font-semibold"
+                  className="input-green bg-white text-sm font-semibold"
                 >
                   <option value="">-- Choose Your Bank --</option>
                   {nigerianBanks.map(b => (
@@ -6302,20 +6688,20 @@ function CustomerDashboard({
 
               <button 
                 type="submit"
-                className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl transition duration-150 text-sm shadow-md"
+                className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl transition-all duration-200 text-sm shadow-md"
               >
                 Complete Transaction & Open App
               </button>
             </form>
           </div>
 
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm flex flex-col justify-between">
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs flex flex-col justify-between">
             <div className="space-y-4">
-              <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider flex items-center gap-1.5 font-bold">
+              <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5 font-bold">
                 <Landmark className="w-5 h-5 text-emerald-700" />
                 Company Banking Coordinates
               </h3>
-              <p className="text-xs text-slate-505 font-medium font-bold">Transfer exact targets strictly to this verified account only:</p>
+              <p className="text-xs text-slate-500 font-medium font-bold">Transfer exact targets strictly to this verified account only:</p>
               
               <div className="p-5 bg-amber-50/50 border border-amber-200 rounded-3xl space-y-3 text-xs leading-loose text-slate-800 shadow-inner font-bold">
                 <div>
@@ -6333,7 +6719,7 @@ function CustomerDashboard({
               </div>
             </div>
             
-            <div className="text-[10px] text-slate-450 font-semibold bg-slate-50 p-3 rounded-xl border border-slate-100 mt-4 leading-relaxed font-bold font-bold">
+            <div className="text-[10px] text-slate-400 font-semibold bg-slate-50 p-3 rounded-xl border border-slate-100 mt-4 leading-relaxed font-bold font-bold">
               ⚠️ Warning: Do not transfer funds to any other account coordinates. Contact support instantly if you experience technical issues.
             </div>
           </div>
@@ -6343,10 +6729,10 @@ function CustomerDashboard({
       {/* Plan Settings Tab */}
       {customerTab === 'settings' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in max-w-4xl mx-auto text-slate-800 font-bold">
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4">
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs space-y-4">
             <div>
-              <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider font-bold">Plan Settings Dashboard</h3>
-              <p className="text-xs text-slate-550 mt-0.5 font-medium">Keep your details up to date and configure target pace constraints.</p>
+              <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide font-bold">Plan Settings Dashboard</h3>
+              <p className="text-xs text-slate-500 mt-0.5 font-medium">Keep your details up to date and configure target pace constraints.</p>
             </div>
 
             <form onSubmit={handleSettingsSubmit} className="space-y-4 text-xs font-bold">
@@ -6357,7 +6743,7 @@ function CustomerDashboard({
                   required
                   value={custSettingsPhone}
                   onChange={(e) => setCustSettingsPhone(e.target.value)}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl font-medium"
+                  className="input-green font-medium"
                 />
               </div>
 
@@ -6370,11 +6756,11 @@ function CustomerDashboard({
                   placeholder="Minimum ₦300"
                   value={custSettingsDailyAmount.toString()}
                   onChange={(e) => setCustSettingsDailyAmount(Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl disabled:bg-slate-100 disabled:text-slate-400 font-bold"
+                  className="input-green disabled:bg-slate-100 disabled:text-slate-400 font-bold"
                 />
 
                 {!canChangeAmount ? (
-                  <span className="text-[10px] text-amber-700 bg-amber-50 p-2.5 rounded-lg border border-amber-200 block mt-2 font-medium leading-relaxed">
+                  <span className="text-[10px] text-amber-700 bg-amber-50 p-2.5 rounded-xl border border-amber-200 block mt-2 font-medium leading-relaxed">
                     🔒 You can only modify your contribution plan once a calendar month. If you need to make urgent updates, please request Admin to grant permission.
                   </span>
                 ) : (
@@ -6412,9 +6798,9 @@ function CustomerDashboard({
           </div>
 
           {/* Secure change password widget for Customers */}
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4 h-fit">
-            <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider font-bold">Change Account Password</h3>
-            <p className="text-xs text-slate-555 font-medium">Update your password security. Passwords must be at least 6 characters.</p>
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs space-y-4 h-fit">
+            <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide font-bold">Change Account Password</h3>
+            <p className="text-xs text-slate-500 font-medium">Update your password security. Passwords must be at least 6 characters.</p>
             
             <form onSubmit={handleChangePasswordSubmit} className="space-y-4 text-xs">
               <div>
@@ -6425,7 +6811,7 @@ function CustomerDashboard({
                   placeholder="••••••••"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl"
+                  className="input-green"
                 />
               </div>
               <button 
@@ -6443,10 +6829,10 @@ function CustomerDashboard({
       {/* Monthly Savings Dashboard Tab */}
       {customerTab === 'monthly-savings' && myMonthlySavingsPlan && (
         <div className="space-y-6 animate-fade-in">
-          <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
             <div className="flex justify-between items-center mb-4">
               <div>
-                <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider">My Monthly Savings</h3>
+                <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide">My Monthly Savings</h3>
                 <p className="text-xs text-slate-500 mt-0.5 font-semibold">{myMonthlySavingsPlan.year} Plan • Minimum ₦5,000/month</p>
               </div>
               <div className="text-right">
@@ -6463,7 +6849,7 @@ function CustomerDashboard({
               ].map(c => (
                 <div key={c.label} className="bg-emerald-50 rounded-2xl p-3 text-center">
                   <p className="text-[10px] font-black uppercase text-emerald-700">{c.label}</p>
-                  <p className="text-sm font-black text-emerald-955 mt-1">{c.value}</p>
+                  <p className="text-sm font-black text-emerald-950 mt-1">{c.value}</p>
                 </div>
               ))}
             </div>
@@ -6519,8 +6905,8 @@ function CustomerDashboard({
 
       {/* Monthly Savings Terms Modal (self-enroll) */}
       {showMsTermsModal && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowMsTermsModal(false)}>
-          <div className="bg-white rounded-3xl max-w-lg w-full max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setShowMsTermsModal(false)}>
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="bg-emerald-800 text-white p-5 rounded-t-3xl">
               <h3 className="text-base font-black">Monthly Salary Savings Plan</h3>
               <p className="text-emerald-200 text-xs mt-0.5">Terms and Conditions — Please read carefully before enrolling</p>
@@ -6560,9 +6946,9 @@ function CustomerDashboard({
       {/* Withdrawal Form Modal */}
       {showWithdrawModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <form onSubmit={handleWithdrawSubmit} className="bg-white rounded-3xl max-w-md w-full p-6 border border-emerald-100 shadow-2xl space-y-4 text-slate-800 font-bold font-bold">
+          <form onSubmit={handleWithdrawSubmit} className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full p-6 border border-emerald-100 shadow-2xl space-y-4 text-slate-800 font-bold font-bold">
             <div className="flex justify-between items-center border-b border-emerald-50 pb-3">
-              <h3 className="text-md font-black text-emerald-955 uppercase tracking-wider">Request Settlement Payout</h3>
+              <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide">Request Settlement Payout</h3>
               <button 
                 type="button"
                 onClick={() => setShowWithdrawModal(false)}
@@ -6581,7 +6967,7 @@ function CustomerDashboard({
                   uncollectedSavedMonths.map(m => (
                     <label
                       key={m.id}
-                      className="flex items-center justify-between gap-2 p-2 rounded-lg border border-emerald-50 hover:bg-emerald-50/40 cursor-pointer text-xs"
+                      className="flex items-center justify-between gap-2 p-2 rounded-xl border border-emerald-50 hover:bg-emerald-50/40 cursor-pointer text-xs"
                     >
                       <span className="flex items-center gap-2">
                         <input
@@ -6616,7 +7002,7 @@ function CustomerDashboard({
                   required
                   value={bankName}
                   onChange={(e) => setBankName(e.target.value)}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl bg-white text-xs font-bold font-bold"
+                  className="input-green bg-white text-xs font-bold font-bold"
                 >
                   <option value="">-- Choose Recipient Bank --</option>
                   {nigerianBanks.map(b => (
@@ -6634,7 +7020,7 @@ function CustomerDashboard({
                   maxLength={10}
                   value={accountNumber}
                   onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ''))}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-xs font-bold font-bold"
+                  className="input-green text-xs font-bold font-bold"
                 />
               </div>
 
@@ -6646,7 +7032,7 @@ function CustomerDashboard({
                   placeholder="e.g. Sarah Alabi"
                   value={accountName}
                   onChange={(e) => setAccountName(e.target.value)}
-                  className="w-full px-3 py-2 border border-emerald-200 rounded-xl text-xs font-bold font-bold"
+                  className="input-green text-xs font-bold font-bold"
                 />
               </div>
             </div>
@@ -6654,13 +7040,36 @@ function CustomerDashboard({
             <button 
               type="submit"
               disabled={selectedMonthIds.length === 0}
-              className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-2.5 rounded-xl text-xs transition duration-150 shadow-md mt-4"
+              className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-2.5 rounded-xl text-xs transition-all duration-200 shadow-md mt-4"
             >
               Submit Settlement Request
             </button>
           </form>
         </div>
       )}
+
+      {/* Fixed bottom navigation - mobile only */}
+      <nav className="sm:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-emerald-100 shadow-[0_-4px_16px_rgba(6,78,59,0.08)] px-2 py-2 flex items-center justify-around">
+        {([
+          { tab: 'tracker', label: 'Home', icon: LayoutDashboard },
+          { tab: 'deposit', label: 'Deposit', icon: Wallet },
+          { tab: 'history', label: 'Tracker', icon: Target },
+          { tab: 'transactions', label: 'History', icon: FileText },
+          { tab: 'settings', label: 'Profile', icon: UserIcon },
+        ] as const).map(({ tab, label, icon: Icon }) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setCustomerTab(tab)}
+            className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-xl transition-colors duration-200 ${
+              customerTab === tab ? 'text-emerald-700' : 'text-slate-400'
+            }`}
+          >
+            <Icon className={`w-5 h-5 ${customerTab === tab ? 'text-emerald-700' : 'text-slate-400'}`} />
+            <span className="text-[9px] font-bold">{label}</span>
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }
@@ -8808,7 +9217,7 @@ export default function App() {
         <div className="fixed bottom-4 left-4 right-4 z-50 bg-emerald-900 text-white p-4 rounded-2xl shadow-2xl border border-emerald-700 animate-fade-in">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h4 className="text-xs font-black uppercase tracking-wider text-amber-400">Install HireMercy AJO</h4>
+              <h4 className="text-xs font-black uppercase tracking-wide text-amber-400">Install HireMercy AJO</h4>
               <p className="text-[11px] text-emerald-100 mt-1">Add this app to your home screen for faster access and offline support.</p>
             </div>
             <div className="flex gap-2 items-center">
@@ -8835,7 +9244,7 @@ export default function App() {
         <div className="fixed bottom-4 left-4 right-4 z-50 bg-emerald-900 text-white p-4 rounded-2xl shadow-2xl border border-emerald-700 animate-fade-in">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
             <div>
-              <h4 className="text-xs font-black uppercase tracking-wider text-amber-400">Can't Install From Here</h4>
+              <h4 className="text-xs font-black uppercase tracking-wide text-amber-400">Can't Install From Here</h4>
               <p className="text-[11px] text-emerald-100 mt-1 leading-relaxed">
                 You opened this link inside WhatsApp/Facebook/Instagram, which blocks app installation.
                 Tap the <strong>⋮</strong> or <strong>•••</strong> menu at the top right and choose
@@ -8857,7 +9266,7 @@ export default function App() {
         <div className="fixed bottom-4 left-4 right-4 z-50 bg-emerald-900 text-white p-4 rounded-2xl shadow-2xl border border-emerald-700 animate-fade-in">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
             <div>
-              <h4 className="text-xs font-black uppercase tracking-wider text-amber-400">Install on iPhone/iPad</h4>
+              <h4 className="text-xs font-black uppercase tracking-wide text-amber-400">Install on iPhone/iPad</h4>
               <p className="text-[11px] text-emerald-100 mt-1 leading-relaxed">
                 Tap the <strong>Share</strong> icon (square with an arrow) in Safari's toolbar, then scroll down and
                 select <strong>"Add to Home Screen"</strong>.
@@ -8877,7 +9286,7 @@ export default function App() {
         <div className="fixed bottom-24 left-4 right-4 z-50 bg-amber-500 text-emerald-950 p-4 rounded-2xl shadow-2xl border border-amber-400 animate-fade-in">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
-              <p className="text-[11px] font-black uppercase tracking-wider">HireMercyAJO Reminder</p>
+              <p className="text-[11px] font-black uppercase tracking-wide">HireMercyAJO Reminder</p>
               <p className="text-[12px] mt-1">{alarmMessage}</p>
             </div>
             <button
@@ -8908,29 +9317,29 @@ export default function App() {
       )}
 
       {/* Header bar */}
-      <header className="bg-gradient-to-r from-emerald-800 to-emerald-955 text-white shadow-md py-4 px-6 border-b-4 border-amber-505 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
-          <div className="flex items-center space-x-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-3xl bg-gradient-to-br from-amber-400 via-amber-300 to-emerald-900 shadow-2xl border border-emerald-700">
-              <span className="text-lg font-extrabold uppercase tracking-[0.35em] text-white">HI</span>
+      <header className="bg-gradient-to-r from-emerald-800 to-emerald-950 text-white shadow-md py-3.5 px-4 sm:px-6 border-b-4 border-amber-500 sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto flex flex-row justify-between items-center gap-3 sm:gap-4">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-2xl sm:rounded-3xl bg-gradient-to-br from-amber-400 via-amber-300 to-emerald-900 shadow-lg border border-emerald-700">
+              <span className="text-sm sm:text-lg font-extrabold uppercase tracking-[0.25em] sm:tracking-[0.35em] text-white">HI</span>
             </div>
-            <div>
-              <h1 className="text-2xl font-black tracking-wider">
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-2xl font-black tracking-wide truncate">
                 HireMercy<span className="text-amber-400">AJO</span>
               </h1>
-              <p className="text-xs text-emerald-100">Intelligent 32-Day Savings Management</p>
+              <p className="text-[10px] sm:text-xs text-emerald-100 hidden sm:block">Intelligent 32-Day Savings Management</p>
             </div>
           </div>
           
           {currentUser ? (
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 sm:gap-4">
               {/* Notification Bell Panel Dropdown */}
               <div className="relative">
                 {currentUser.role !== 'Customer' && transactions.some(tx => tx.status === 'Pending') && (
                   <button
                     type="button"
                     onClick={() => setAdminDashboardRoute('transactions')}
-                    className="mr-2 rounded-xl border border-amber-400/60 bg-amber-500/90 px-3 py-2 text-[11px] font-black uppercase tracking-wide text-emerald-950 shadow-sm transition hover:bg-amber-400"
+                    className="hidden sm:inline-flex mr-2 rounded-xl border border-amber-400/60 bg-amber-500/90 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-emerald-950 shadow-sm transition-all duration-200 hover:bg-amber-400"
                   >
                     {transactions.filter(tx => tx.status === 'Pending').length} pending
                   </button>
@@ -8940,12 +9349,12 @@ export default function App() {
                     setShowNotifications(!showNotifications);
                     if (!showNotifications) handleMarkNotificationsRead();
                   }}
-                  className="p-2 bg-emerald-900 hover:bg-emerald-800 rounded-xl text-amber-400 relative transition duration-150"
+                  className="p-2 sm:p-2.5 bg-emerald-900 hover:bg-emerald-800 rounded-xl text-amber-400 relative transition-all duration-200"
                   title="Notifications & Activity Logs"
                 >
                   <Bell className="w-5 h-5" />
                   {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-amber-505 text-emerald-955 text-[9px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-emerald-900">
+                    <span className="absolute -top-1 -right-1 bg-amber-500 text-emerald-950 text-[9px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-emerald-900">
                       {unreadCount}
                     </span>
                   )}
@@ -8954,16 +9363,16 @@ export default function App() {
                   <button
                     type="button"
                     onClick={handleInstallClick}
-                    className="ml-3 px-3 py-2 rounded-xl bg-amber-500 text-emerald-950 font-bold text-xs uppercase tracking-[0.08em] hover:bg-amber-600 transition"
+                    className="hidden sm:inline-flex ml-3 px-3 py-2 rounded-xl bg-amber-500 text-emerald-950 font-bold text-xs uppercase tracking-[0.08em] hover:bg-amber-600 transition-all duration-200"
                   >
                     Install App
                   </button>
                 )}
 
                 {showNotifications && (
-                  <div className="absolute right-0 mt-3 w-80 bg-white rounded-2xl shadow-xl border border-emerald-100 py-3 text-slate-800 z-50 animate-fade-in-down">
+                  <div className="fixed inset-x-3 top-16 sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-3 sm:w-80 bg-white rounded-2xl shadow-xl border border-emerald-100 py-3 text-slate-800 z-50 fade-in">
                     <div className="px-4 pb-2 border-b border-emerald-50 flex justify-between items-center">
-                      <span className="font-extrabold text-xs text-emerald-955 uppercase tracking-wider">
+                      <span className="font-bold text-xs text-emerald-950 uppercase tracking-wide">
                         {currentUser.role === 'Customer' ? 'My Notifications' : 'Audit Activity Alerts'}
                       </span>
                       <div className="flex items-center gap-2.5">
@@ -8994,9 +9403,9 @@ export default function App() {
                         <div className="p-4 text-center text-slate-400">No activity alerts logged.</div>
                       ) : (
                         notifications.map(n => (
-                          <div key={n.id} className={`p-3.5 transition duration-150 hover:bg-emerald-50/20 ${!n.is_read && currentUser.role === 'Customer' ? 'bg-amber-50/30' : ''}`}>
-                            <p className="font-bold text-emerald-955 mb-0.5">{n.title}</p>
-                            <p className="text-slate-655 text-[11px] leading-relaxed mb-1">{n.message}</p>
+                          <div key={n.id} className={`p-3.5 transition-all duration-200 hover:bg-emerald-50/40 ${!n.is_read && currentUser.role === 'Customer' ? 'bg-amber-50/50' : ''}`}>
+                            <p className="font-bold text-emerald-950 mb-0.5">{n.title}</p>
+                            <p className="text-slate-600 text-[11px] leading-relaxed mb-1">{n.message}</p>
                             <span className="text-[9px] text-slate-400">
                               {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
@@ -9008,34 +9417,36 @@ export default function App() {
                 )}
               </div>
 
-              <div className="text-right">
-                <p className="text-sm font-bold text-white">{currentUser.name}</p>
-                <span className="text-[10px] bg-amber-505 text-emerald-955 px-2.5 py-0.5 rounded-full font-black uppercase tracking-widest font-bold">
+              <div className="text-right hidden sm:block">
+                <p className="text-xs sm:text-sm font-bold text-white truncate max-w-[110px] sm:max-w-none">{currentUser.name}</p>
+                <span className="text-[9px] sm:text-[10px] bg-amber-500 text-emerald-950 px-2 sm:px-2.5 py-0.5 rounded-full font-bold uppercase tracking-widest">
                   {currentUser.role}
                 </span>
               </div>
               
               <button 
                 onClick={handleLogout} 
-                className="p-2 bg-emerald-900 hover:bg-emerald-800 border border-emerald-700 rounded-lg text-amber-400 hover:text-amber-300 transition duration-150"
+                className="p-2 sm:p-2.5 bg-emerald-900 hover:bg-emerald-800 border border-emerald-700 rounded-xl text-amber-400 hover:text-amber-300 transition-all duration-200"
               >
                 <LogOut className="w-5 h-5" />
               </button>
             </div>
           ) : (
-            <span className="text-xs bg-emerald-900/40 text-emerald-200 px-3 py-1.5 rounded-lg border border-emerald-700 flex items-center gap-1.5">
-              <Info className="w-4 h-4 text-amber-400" />
-              Live Supabase Integration Active
+            <span className="text-[10px] sm:text-xs bg-emerald-900/40 text-emerald-200 px-2.5 sm:px-3 py-1.5 rounded-xl border border-emerald-700 flex items-center gap-1.5">
+              <Info className="w-4 h-4 text-amber-400 shrink-0" />
+              <span className="hidden sm:inline">Live Supabase Integration Active</span>
+              <span className="sm:hidden">Live</span>
             </span>
           )}
         </div>
       </header>
 
       {/* Main workspace */}
-      <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6">
+      <main className="max-w-7xl mx-auto py-5 sm:py-8 px-3 sm:px-6">
         <AdvertisementBanner details={supportDetails} />
         {isLoading && (
-          <div className="text-center py-6 text-emerald-800 font-bold animate-pulse font-bold">
+          <div className="flex items-center justify-center gap-2 py-6 text-emerald-700 font-semibold text-sm">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             Processing database sync request...
           </div>
         )}

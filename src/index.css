@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,27 +6,27 @@
 
 @layer base {
   :root {
-    --background: 150 30% 97%;
-    --foreground: 150 40% 10%;
+    --background: 150 25% 98%;
+    --foreground: 155 45% 8%;
     --card: 0 0% 100%;
-    --card-foreground: 150 40% 10%;
+    --card-foreground: 155 45% 8%;
     --popover: 0 0% 100%;
-    --popover-foreground: 150 40% 10%;
-    --primary: 150 70% 35%;
+    --popover-foreground: 155 45% 8%;
+    --primary: 155 65% 28%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 150 30% 92%;
-    --secondary-foreground: 150 40% 15%;
-    --muted: 150 20% 95%;
-    --muted-foreground: 150 15% 45%;
-    --accent: 145 65% 45%;
+    --secondary: 150 25% 94%;
+    --secondary-foreground: 155 40% 15%;
+    --muted: 150 18% 95.5%;
+    --muted-foreground: 155 12% 42%;
+    --accent: 152 60% 40%;
     --accent-foreground: 0 0% 100%;
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 98%;
-    --border: 150 25% 88%;
-    --input: 150 25% 88%;
-    --ring: 150 70% 35%;
+    --border: 150 20% 89%;
+    --input: 150 20% 89%;
+    --ring: 155 65% 28%;
     --radius: 0.75rem;
-    
+
     /* Custom Green Theme Colors */
     --emerald-50: #ecfdf5;
     --emerald-100: #d1fae5;
@@ -38,7 +38,7 @@
     --emerald-700: #047857;
     --emerald-800: #065f46;
     --emerald-900: #064e3b;
-    
+
     --green-50: #f0fdf4;
     --green-100: #dcfce7;
     --green-200: #bbf7d0;
@@ -49,7 +49,7 @@
     --green-700: #15803d;
     --green-800: #166534;
     --green-900: #14532d;
-    
+
     --teal-50: #f0fdfa;
     --teal-100: #ccfbf1;
     --teal-200: #99f6e4;
@@ -60,7 +60,7 @@
     --teal-700: #0f766e;
     --teal-800: #115e59;
     --teal-900: #134e4a;
-    
+
     --lime-50: #f7fee7;
     --lime-100: #ecfccb;
     --lime-200: #d9f99d;
@@ -71,6 +71,13 @@
     --lime-700: #4d7c0f;
     --lime-800: #3f6212;
     --lime-900: #365314;
+
+    /* Elevation system - soft, premium shadows */
+    --shadow-xs: 0 1px 2px rgba(6, 78, 59, 0.05);
+    --shadow-sm: 0 2px 8px rgba(6, 78, 59, 0.06);
+    --shadow-md: 0 6px 20px rgba(6, 78, 59, 0.08);
+    --shadow-lg: 0 12px 32px rgba(6, 78, 59, 0.12);
+    --shadow-xl: 0 20px 48px rgba(6, 78, 59, 0.16);
   }
 }
 
@@ -78,154 +85,182 @@
   * {
     @apply border-border;
   }
-  
+
   html {
     scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
   }
-  
+
   body {
     @apply bg-background text-foreground antialiased;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-feature-settings: 'cv11', 'ss01';
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    letter-spacing: -0.01em;
+  }
+
+  /* Mobile-first: prevent iOS input zoom + keep tap targets comfortable */
+  input, select, textarea, button {
+    font-size: 16px;
+  }
+  @media (min-width: 640px) {
+    input, select, textarea {
+      font-size: inherit;
+    }
+  }
+
+  /* Never allow unwanted horizontal scroll on the app shell */
+  html, body, #root {
+    max-width: 100%;
+    overflow-x: hidden;
   }
 }
 
 @layer components {
   .gradient-green {
-    background: linear-gradient(135deg, var(--emerald-600) 0%, var(--green-600) 50%, var(--teal-600) 100%);
+    background: linear-gradient(135deg, var(--emerald-700) 0%, var(--green-600) 55%, var(--teal-600) 100%);
   }
-  
+
   .gradient-green-light {
     background: linear-gradient(135deg, var(--emerald-50) 0%, var(--green-50) 50%, var(--teal-50) 100%);
   }
-  
+
   .gradient-card {
     background: linear-gradient(145deg, #ffffff 0%, var(--emerald-50) 100%);
   }
-  
+
   .glass-green {
     background: rgba(255, 255, 255, 0.85);
     backdrop-filter: blur(12px);
     border: 1px solid rgba(16, 185, 129, 0.15);
   }
-  
+
+  /* Elevated surface used across dashboards for summary/stat tiles */
   .stat-card {
-    @apply relative overflow-hidden rounded-2xl p-6 transition-all duration-300;
+    @apply relative overflow-hidden rounded-2xl p-5 sm:p-6 transition-all duration-300;
     background: linear-gradient(145deg, #ffffff 0%, var(--emerald-50) 100%);
     border: 1px solid rgba(16, 185, 129, 0.12);
-    box-shadow: 0 4px 20px rgba(16, 185, 129, 0.08);
+    box-shadow: var(--shadow-sm);
   }
-  
+
   .stat-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 12px 40px rgba(16, 185, 129, 0.15);
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-lg);
     border-color: rgba(16, 185, 129, 0.25);
   }
-  
+
   .btn-primary-green {
-    @apply px-6 py-3 rounded-xl font-semibold text-white transition-all duration-300;
+    @apply px-5 py-3 rounded-xl font-semibold text-white transition-all duration-200 active:scale-[0.98];
     background: linear-gradient(135deg, var(--emerald-600) 0%, var(--green-600) 100%);
-    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.35);
+    box-shadow: var(--shadow-sm);
   }
-  
+
   .btn-primary-green:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 25px rgba(16, 185, 129, 0.45);
+    box-shadow: var(--shadow-md);
+    filter: brightness(1.03);
   }
-  
+
   .btn-secondary-green {
-    @apply px-6 py-3 rounded-xl font-semibold transition-all duration-300;
-    background: linear-gradient(135deg, var(--emerald-100) 0%, var(--green-100) 100%);
+    @apply px-5 py-3 rounded-xl font-semibold transition-all duration-200 active:scale-[0.98];
+    background: var(--emerald-50);
     color: var(--emerald-800);
-    border: 1px solid rgba(16, 185, 129, 0.2);
+    border: 1px solid rgba(16, 185, 129, 0.25);
   }
-  
+
   .btn-secondary-green:hover {
-    background: linear-gradient(135deg, var(--emerald-200) 0%, var(--green-200) 100%);
+    background: var(--emerald-100);
   }
-  
+
   .nav-item {
-    @apply flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 cursor-pointer;
-    color: var(--emerald-700);
+    @apply flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 cursor-pointer text-sm font-medium;
+    color: var(--emerald-800);
   }
-  
+
   .nav-item:hover {
-    background: linear-gradient(135deg, var(--emerald-100) 0%, var(--green-100) 100%);
+    background: var(--emerald-50);
     color: var(--emerald-900);
   }
-  
+
   .nav-item.active {
     background: linear-gradient(135deg, var(--emerald-600) 0%, var(--green-600) 100%);
     color: white;
-    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.35);
+    box-shadow: var(--shadow-sm);
   }
-  
+
   .table-header-green {
-    background: linear-gradient(135deg, var(--emerald-600) 0%, var(--green-600) 100%);
-    @apply text-white font-semibold;
+    background: var(--emerald-800);
+    @apply text-white font-semibold text-xs uppercase tracking-wide;
   }
-  
+
   .badge-green {
-    @apply px-3 py-1 rounded-full text-xs font-medium;
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold;
     background: var(--emerald-100);
     color: var(--emerald-800);
   }
-  
+
   .badge-green-solid {
-    @apply px-3 py-1 rounded-full text-xs font-medium text-white;
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold text-white;
     background: linear-gradient(135deg, var(--emerald-600) 0%, var(--green-600) 100%);
   }
-  
+
   .input-green {
-    @apply px-4 py-3 rounded-xl border-2 transition-all duration-300 outline-none;
-    border-color: rgba(16, 185, 129, 0.2);
+    @apply px-4 py-3 rounded-xl border transition-all duration-200 outline-none w-full;
+    border-color: var(--border);
     background: white;
   }
-  
+
   .input-green:focus {
     border-color: var(--emerald-500);
-    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.15);
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
   }
-  
+
   .card-green {
-    @apply rounded-2xl p-6;
-    background: linear-gradient(145deg, #ffffff 0%, var(--emerald-50) 100%);
-    border: 1px solid rgba(16, 185, 129, 0.12);
-    box-shadow: 0 4px 20px rgba(16, 185, 129, 0.06);
+    @apply rounded-2xl p-5 sm:p-6;
+    background: #ffffff;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-xs);
   }
-  
+
   .section-title {
-    @apply text-2xl font-bold mb-6;
-    background: linear-gradient(135deg, var(--emerald-800) 0%, var(--green-700) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    @apply text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-emerald-950;
   }
-  
+
   .icon-circle {
-    @apply w-12 h-12 rounded-xl flex items-center justify-center;
+    @apply w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0;
     background: linear-gradient(135deg, var(--emerald-500) 0%, var(--green-500) 100%);
     color: white;
   }
-  
+
   .icon-circle-light {
-    @apply w-12 h-12 rounded-xl flex items-center justify-center;
-    background: linear-gradient(135deg, var(--emerald-100) 0%, var(--green-100) 100%);
+    @apply w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0;
+    background: var(--emerald-100);
     color: var(--emerald-700);
   }
-  
+
   .progress-bar-green {
     @apply h-2 rounded-full overflow-hidden;
     background: var(--emerald-100);
   }
-  
+
   .progress-bar-green > div {
     background: linear-gradient(90deg, var(--emerald-500) 0%, var(--green-500) 100%);
   }
-  
+
+  /* Responsive table helper: on small screens, tables scroll horizontally
+     inside a bounded, bordered container instead of blowing out the page */
+  .table-scroll-mobile {
+    @apply w-full overflow-x-auto rounded-2xl border border-border;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .animate-pulse-green {
     animation: pulse-green 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
-  
+
   @keyframes pulse-green {
     0%, 100% {
       opacity: 1;
@@ -236,7 +271,7 @@
       box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
     }
   }
-  
+
   .floating-shape {
     position: absolute;
     border-radius: 50%;
@@ -244,7 +279,7 @@
     opacity: 0.15;
     pointer-events: none;
   }
-  
+
   .shape-1 {
     width: 400px;
     height: 400px;
@@ -252,7 +287,7 @@
     top: -100px;
     right: -100px;
   }
-  
+
   .shape-2 {
     width: 300px;
     height: 300px;
@@ -260,13 +295,26 @@
     bottom: -50px;
     left: -50px;
   }
-  
+
   .shape-3 {
     width: 200px;
     height: 200px;
     background: var(--teal-400);
     top: 50%;
     left: 30%;
+  }
+
+  /* Skeleton loading block for async data */
+  .skeleton-green {
+    @apply rounded-xl;
+    background: linear-gradient(90deg, var(--emerald-50) 25%, var(--emerald-100) 37%, var(--emerald-50) 63%);
+    background-size: 400% 100%;
+    animation: skeleton-shimmer 1.4s ease infinite;
+  }
+
+  @keyframes skeleton-shimmer {
+    0% { background-position: 100% 50%; }
+    100% { background-position: 0 50%; }
   }
 }
 
@@ -281,23 +329,23 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(135deg, var(--emerald-400) 0%, var(--green-400) 100%);
+  background: var(--emerald-300);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(135deg, var(--emerald-500) 0%, var(--green-500) 100%);
+  background: var(--emerald-400);
 }
 
 /* Animation Classes */
 .fade-in {
-  animation: fadeIn 0.5s ease-out;
+  animation: fadeIn 0.4s ease-out;
 }
 
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -306,13 +354,13 @@
 }
 
 .slide-in-left {
-  animation: slideInLeft 0.5s ease-out;
+  animation: slideInLeft 0.4s ease-out;
 }
 
 @keyframes slideInLeft {
   from {
     opacity: 0;
-    transform: translateX(-20px);
+    transform: translateX(-16px);
   }
   to {
     opacity: 1;
