@@ -97,6 +97,13 @@
     font-feature-settings: 'cv11', 'ss01';
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior-y: none;
+    /* Prevent stray horizontal scroll without breaking vertical scroll.
+       This must stay on <body> only - NOT <html> or #root - since the app
+       uses position:fixed elements (sidebar drawer, bottom nav, modals)
+       that lose vertical scrollability on many mobile browsers when
+       overflow-x:hidden is set on <html> instead. */
+    max-width: 100%;
+    overflow-x: hidden;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -111,12 +118,6 @@
     input, select, textarea {
       font-size: inherit;
     }
-  }
-
-  /* Never allow unwanted horizontal scroll on the app shell */
-  html, body, #root {
-    max-width: 100%;
-    overflow-x: hidden;
   }
 }
 
