@@ -6812,26 +6812,16 @@ export default function App() {
     // Track whether the Realtime websocket is actually connected, so the
     // fallback poll below only ever runs when Realtime genuinely isn't
     // delivering events - not unconditionally alongside it.
-    channel.subscribe((status) => {
-      isRealtimeConnectedRef.current = status === 'SUBSCRIBED';
-      console.debug('Realtime channel status:', status);
-    });
-
-    // 2. Fallback polling - now a true fallback instead of running
-    //    unconditionally. Previously this fired every 3 seconds no matter
-    //    what, re-fetching ~10 tables in full every 3 seconds, 24/7, even
-    //    while Realtime was connected and already pushing live updates -
-    //    this was the main driver of the excess Supabase egress. It now
-    //    only fires while Realtime is not connected (e.g. during the
-    //    RealtimeDisabledForTenant outage, or while briefly reconnecting),
-    //    and at a much slower 20-second cadence rather than 3 seconds.
+    // pollingTimerRef is the single source of truth for "is the fallback
+    // currently running" - startFallbackPolling/stopFallbackPolling are
+    // both idempotent, so no matter how many times Realtime's status
+    // flips, at most one interval can ever exist.
     const FALLBACK_POLL_MS = 20000;
+    const pollingTimerRef = { current: null as ReturnType<typeof setInterval> | null };
 
     // Admin-only background throttling: when the Admin Dashboard is hidden
     // (tab inactive, app minimized, or screen off), drop from 20s to a
-    // 5-minute cadence instead of stopping the interval outright - this
-    // keeps the same single timer/cleanup path and is simpler to reason
-    // about than tearing the interval down and recreating it. Staff and
+    // 5-minute cadence rather than the normal fallback rate. Staff and
     // Customer are untouched: isAdmin gates every part of this behavior.
     const isAdmin = currentUser.role === 'Admin';
     const ADMIN_HIDDEN_POLL_MS = 5 * 60 * 1000; // 5 minutes
@@ -6841,7 +6831,7 @@ export default function App() {
       isPageVisibleRef.current = isVisible;
       if (isVisible) {
         // Admin Dashboard just became active again - fetch fresh data
-        // immediately, then let the normal 20s interval resume from here.
+        // immediately (independent of the fallback interval's own cadence).
         lastAdminPollRef.current = Date.now();
         triggerSync();
       }
@@ -6851,9 +6841,7 @@ export default function App() {
       document.addEventListener('visibilitychange', handleVisibilityChange);
     }
 
-    const pollingTimer = setInterval(() => {
-      if (isRealtimeConnectedRef.current) return;
-
+    const runFallbackTick = () => {
       if (isAdmin && !isPageVisibleRef.current) {
         // Hidden Admin Dashboard: only poll once every 5 minutes.
         const now = Date.now();
@@ -6864,13 +6852,45 @@ export default function App() {
       } else if (isAdmin) {
         lastAdminPollRef.current = Date.now();
       }
-
       triggerSync();
-    }, FALLBACK_POLL_MS);
+    };
+
+    const startFallbackPolling = () => {
+      if (pollingTimerRef.current) return; // already running
+      pollingTimerRef.current = setInterval(runFallbackTick, FALLBACK_POLL_MS);
+    };
+
+    const stopFallbackPolling = () => {
+      if (pollingTimerRef.current) {
+        clearInterval(pollingTimerRef.current);
+        pollingTimerRef.current = null;
+      }
+    };
+
+    channel.subscribe((status) => {
+      const connected = status === 'SUBSCRIBED';
+      isRealtimeConnectedRef.current = connected;
+      console.debug('Realtime channel status:', status);
+      if (connected) {
+        // Realtime is healthy and delivering events - the REST fallback
+        // is not needed right now.
+        stopFallbackPolling();
+      } else {
+        // status is 'CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED', or the brief
+        // pre-connect state - make sure the fallback is running so data
+        // still stays fresh while Realtime is unavailable.
+        startFallbackPolling();
+      }
+    });
+
+    // Start the fallback right away too, covering the brief window before
+    // the first subscribe() status callback fires - it will be stopped
+    // immediately once/if that callback reports 'SUBSCRIBED'.
+    startFallbackPolling();
 
     return () => {
       supabase.removeChannel(channel);
-      clearInterval(pollingTimer);
+      stopFallbackPolling();
       if (isAdmin && typeof document !== 'undefined') {
         document.removeEventListener('visibilitychange', handleVisibilityChange);
       }
