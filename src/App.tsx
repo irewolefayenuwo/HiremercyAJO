@@ -85,6 +85,7 @@ export interface MonthlySavingsPlan {
   year: number;
   status: 'Active' | 'Completed' | 'Withdrawn';
   total_saved: number;
+  monthly_target_amount: number;
   created_at: string;
   created_by?: string;
 }
@@ -1117,6 +1118,7 @@ function RegisterScreen({ onBack, onRegister, branches }: { onBack: () => void, 
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [dailyAmount, setDailyAmount] = useState('1000');
+  const [monthlyTargetAmount, setMonthlyTargetAmount] = useState('5000');
   const [branchId, setBranchId] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [savingsType, setSavingsType] = useState<'daily' | 'monthly' | 'both'>('daily');
@@ -1133,12 +1135,16 @@ function RegisterScreen({ onBack, onRegister, branches }: { onBack: () => void, 
       alert("Daily Contribution must be a minimum of ₦300.");
       return;
     }
+    if ((savingsType === 'monthly' || savingsType === 'both') && Number(monthlyTargetAmount) < 5000) {
+      alert("Monthly Savings Target must be a minimum of ₦5,000.");
+      return;
+    }
     if (needsTerms && !termsAccepted) {
       setPendingSubmit(true);
       setShowTerms(true);
       return;
     }
-    onRegister({ name, email: email || '', phone, password, daily_amount: Number(dailyAmount), branch_id: branchId, savings_type: savingsType, monthly_savings_terms_accepted: termsAccepted });
+    onRegister({ name, email: email || '', phone, password, daily_amount: Number(dailyAmount), monthly_target_amount: Number(monthlyTargetAmount), branch_id: branchId, savings_type: savingsType, monthly_savings_terms_accepted: termsAccepted });
   };
 
   return (
@@ -1199,6 +1205,14 @@ function RegisterScreen({ onBack, onRegister, branches }: { onBack: () => void, 
             <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Daily Contribution Target (₦) *</label>
             <input type="number" required min={300} placeholder="Minimum ₦300" value={dailyAmount} onChange={(e) => setDailyAmount(e.target.value)} className="input-green text-sm font-semibold" />
             <span className="text-[11px] text-slate-400 block mt-1.5">Minimum ₦300 per day.</span>
+          </div>
+        )}
+
+        {(savingsType === 'monthly' || savingsType === 'both') && (
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Monthly Savings Target (₦) *</label>
+            <input type="number" required min={5000} placeholder="Minimum ₦5,000" value={monthlyTargetAmount} onChange={(e) => setMonthlyTargetAmount(e.target.value)} className="input-green text-sm font-semibold" />
+            <span className="text-[11px] text-slate-400 block mt-1.5">Minimum ₦5,000 per month — choose how much you want to save each month.</span>
           </div>
         )}
 
@@ -1265,7 +1279,7 @@ function RegisterScreen({ onBack, onRegister, branches }: { onBack: () => void, 
                 setShowTerms(false);
                 if (pendingSubmit) {
                   setPendingSubmit(false);
-                  const syntheticData = { name, email: email || '', phone, password, daily_amount: Number(dailyAmount), branch_id: branchId, savings_type: savingsType, monthly_savings_terms_accepted: true };
+                  const syntheticData = { name, email: email || '', phone, password, daily_amount: Number(dailyAmount), monthly_target_amount: Number(monthlyTargetAmount), branch_id: branchId, savings_type: savingsType, monthly_savings_terms_accepted: true };
                   onRegister(syntheticData);
                 }
               }}
@@ -1426,10 +1440,11 @@ function MonthlySavingsAdminTab({ monthlySavingsPlans, monthlySavingsMonths, pro
   msDepositAmount: string, setMsDepositAmount: (v: string) => void,
   msDepositMethod: 'Cash' | 'Bank Transfer' | 'Mobile Money', setMsDepositMethod: (v: any) => void,
   msShowDepositModal: boolean, setMsShowDepositModal: (v: boolean) => void,
-  onEnrollMonthlySavings: (customerId: string, year: number) => void,
+  onEnrollMonthlySavings: (customerId: string, year: number, monthlyTargetAmount: number) => void,
   onRecordMonthlyDeposit: (customerId: string, year: number, month: number, amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => void
 }) {
   const currentYear = new Date().getFullYear();
+  const [msEnrollAmount, setMsEnrollAmount] = useState('5000');
   const customerPlan = msSelectedCustomer
     ? monthlySavingsPlans.find(p => p.customer_id === msSelectedCustomer && p.year === msSelectedYear)
     : null;
@@ -1470,15 +1485,23 @@ function MonthlySavingsAdminTab({ monthlySavingsPlans, monthlySavingsMonths, pro
         </div>
 
         {msSelectedCustomer && !customerPlan && (
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-3">
             <div>
               <p className="text-xs font-bold text-amber-800">Not enrolled in {msSelectedYear} Monthly Savings Plan.</p>
-              <p className="text-[10px] text-amber-600">Click Enroll to create their plan for this year.</p>
+              <p className="text-[10px] text-amber-600">Set their monthly target and enroll them for this year.</p>
             </div>
-            <button type="button" onClick={() => onEnrollMonthlySavings(msSelectedCustomer, msSelectedYear)}
-              className="bg-emerald-700 hover:bg-emerald-800 text-white font-black px-4 py-2 rounded-xl text-xs uppercase whitespace-nowrap">
-              Enroll Now
-            </button>
+            <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+              <div className="flex-1">
+                <label className="text-[10px] font-black uppercase text-amber-700 mb-1 block">Monthly Target (₦)</label>
+                <input type="number" min={5000} value={msEnrollAmount} onChange={e => setMsEnrollAmount(e.target.value)}
+                  placeholder="e.g. 5000" className="w-full border border-amber-200 rounded-xl px-3 py-2 text-xs font-semibold" />
+                <span className="text-[9px] text-amber-600 block mt-1">Minimum ₦5,000.</span>
+              </div>
+              <button type="button" onClick={() => onEnrollMonthlySavings(msSelectedCustomer, msSelectedYear, Number(msEnrollAmount))}
+                className="bg-emerald-700 hover:bg-emerald-800 text-white font-black px-4 py-2 rounded-xl text-xs uppercase whitespace-nowrap">
+                Enroll Now
+              </button>
+            </div>
           </div>
         )}
 
@@ -1511,7 +1534,7 @@ function MonthlySavingsAdminTab({ monthlySavingsPlans, monthlySavingsMonths, pro
                     const monthNum = idx + 1;
                     const md = getMonthData(monthNum);
                     const isCurrentMonth = monthNum === new Date().getMonth() + 1 && msSelectedYear === currentYear;
-                    const remaining = md ? Math.max(0, 5000 - md.total_deposited) : 5000;
+                    const remaining = md ? Math.max(0, customerPlan!.monthly_target_amount - md.total_deposited) : customerPlan!.monthly_target_amount;
                     return (
                       <tr key={monthNum} className={`transition ${isCurrentMonth ? 'bg-emerald-50/40' : 'hover:bg-slate-50/30'}`}>
                         <td className="p-2.5 font-bold text-slate-800">
@@ -1600,11 +1623,12 @@ function MonthlySavingsAdminTab({ monthlySavingsPlans, monthlySavingsMonths, pro
             <p className="text-xs text-slate-500 mb-3">{MONTH_NAMES[msDepositMonth - 1]} {msSelectedYear} — {profiles.find(p => p.id === msSelectedCustomer)?.name}</p>
             {(() => {
               const existing = getMonthData(msDepositMonth);
-              const remaining = existing ? Math.max(0, 5000 - existing.total_deposited) : 5000;
+              const planTarget = customerPlan!.monthly_target_amount;
+              const remaining = existing ? Math.max(0, planTarget - existing.total_deposited) : planTarget;
               return (
                 <div className="bg-emerald-50 rounded-xl p-3 text-xs mb-4 space-y-0.5 font-semibold">
                   <p>Already paid: <span className="font-black">₦{existing?.total_deposited.toLocaleString() || '0'}</span></p>
-                  <p>Minimum target: <span className="font-black">₦5,000</span></p>
+                  <p>Monthly target: <span className="font-black">₦{planTarget.toLocaleString()}</span></p>
                   {remaining > 0 && <p className="text-amber-700 font-black">Still needed: ₦{remaining.toLocaleString()}</p>}
                   {existing?.is_complete && <p className="text-emerald-700 font-black">✓ Month complete — any extra adds to total.</p>}
                 </div>
@@ -1660,7 +1684,7 @@ function AdminDashboard({
   profiles: Profile[], branches: Branch[], transactions: Transaction[], markedDays: Record<string, MarkedDay[]>, supportDetails: SupportSettings, payoutRequests: PayoutRequest[], savedMonths: Record<string, SavedMonth[]>, payoutHistory: PayoutHistoryRecord[], withdrawalRequests: WithdrawalRequest[], onDeleteTransaction: (id: string) => void, onAddTransaction: (cId: string, amt: number, method: any, sId: string) => void, onUpdateSupport: (phone: string, whatsapp: string, email: string, bankName: string, acctNum: string, acctName: string, advertTitle: string, advertDescription: string, advertImageUrl: string, advertEnabled: boolean, advertVideoUrl: string, themeBackgroundColor: string) => void, onApprovePayout: (reqId: string) => void, onCreateBranch: (name: string, address: string) => void, onUpdateBranch: (id: string, name: string, address: string) => void, onDeleteBranch: (id: string) => void, onCreateStaff: (name: string, phone: string, email: string, branchId: string, password: string) => void, onUpdateStaff: (id: string, name: string, phone: string, email: string, branchId: string) => void, onDeleteStaff: (id: string) => void, onRegisterCustomer: (data: any) => void,
   onDeleteCustomer: (id: string) => void, onUpdateCustomer: (id: string, name: string, phone: string, email: string, dailyAmount: number, branchId: string, allowAnytimeChange: boolean) => void, onToggleCustomerActive: (id: string, is_active: boolean) => void, onUpdateLoanStatus: (id: string, loan_status: 'No Loan' | 'Pending Approval' | 'Active Loan' | 'Loan Cleared') => void, onTriggerManualPayout: (customerId: string, method: 'Transfer' | 'Cash', bank: string, acctNum: string, acctName: string) => void, onApproveTransaction: (id: string) => void, onApproveWithdrawal: (id: string, bankName: string, accountNumber: string, accountName: string) => void, routeTarget?: AdminTab | null, onRouteHandled?: () => void, onRejectPayout?: (reqId: string) => void, triggerToast?: (message: string, type?: 'success' | 'error') => void, onResetPasswordToDefault?: (customerId: string) => void,
   loans: Loan[], loanRequests: LoanRequest[], loanHistory: any[], onApproveLoanRequest: (requestId: string) => void, onRejectLoanRequest: (requestId: string, reason: string) => void, onAssignLoan: (customerId: string, approvedAmount: number, remarks: string, disbursementDate: string) => void,
-  monthlySavingsPlans: MonthlySavingsPlan[], monthlySavingsMonths: MonthlySavingsMonth[], onEnrollMonthlySavings: (customerId: string, year: number) => void, onRecordMonthlyDeposit: (customerId: string, year: number, month: number, amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => void
+  monthlySavingsPlans: MonthlySavingsPlan[], monthlySavingsMonths: MonthlySavingsMonth[], onEnrollMonthlySavings: (customerId: string, year: number, monthlyTargetAmount: number) => void, onRecordMonthlyDeposit: (customerId: string, year: number, month: number, amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => void
 }) {
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -5910,7 +5934,7 @@ function CustomerDashboard({
   onAddCustomerPendingTransaction: (amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => void, onUpdateCustomerSettings: (phone: string, dailyAmount: number) => void,
   activeLoan: Loan | null, myLoans: Loan[], myLoanRequests: LoanRequest[], onRequestLoan: (customerId: string) => void, profiles: Profile[],
   myMonthlySavingsPlan: MonthlySavingsPlan | null, myMonthlySavingsMonths: MonthlySavingsMonth[], creditBalance: CustomerCreditBalance | null,
-  onSelfEnrollMonthly: () => void
+  onSelfEnrollMonthly: (amount: number) => void
 }) {
   const [customerTab, setCustomerTab] = useState<'tracker' | 'transactions' | 'deposit' | 'settings' | 'history' | 'monthly-savings'>('tracker');
   const [selectedTrackerMonthKey, setSelectedTrackerMonthKey] = useState<string | null>(null);
@@ -5959,6 +5983,7 @@ function CustomerDashboard({
   const canRequestLoan = customer.is_active && customer.loan_status !== 'Active Loan' && customer.loan_status !== 'Pending Approval';
   const [showLoanRequestModal, setShowLoanRequestModal] = useState(false);
   const [showMsTermsModal, setShowMsTermsModal] = useState(false);
+  const [msSelfEnrollAmount, setMsSelfEnrollAmount] = useState('5000');
 
   // Modal / Form state for Payout Request
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
@@ -6353,7 +6378,7 @@ function CustomerDashboard({
               )}
               <button
                 type="button"
-                onClick={() => myMonthlySavingsPlan ? setCustomerTab('monthly-savings') : onSelfEnrollMonthly()}
+                onClick={() => myMonthlySavingsPlan ? setCustomerTab('monthly-savings') : setShowMsTermsModal(true)}
                 className="mt-3 w-full bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-emerald-950 font-bold py-2.5 rounded-xl text-xs transition-all duration-200 flex items-center justify-center gap-1"
               >
                 {myMonthlySavingsPlan ? 'View Plan' : 'Get Started'} <ChevronRight className="w-3.5 h-3.5" />
@@ -6833,7 +6858,7 @@ function CustomerDashboard({
             <div className="flex justify-between items-center mb-4">
               <div>
                 <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide">My Monthly Savings</h3>
-                <p className="text-xs text-slate-500 mt-0.5 font-semibold">{myMonthlySavingsPlan.year} Plan • Minimum ₦5,000/month</p>
+                <p className="text-xs text-slate-500 mt-0.5 font-semibold">{myMonthlySavingsPlan.year} Plan • Target ₦{Number(myMonthlySavingsPlan.monthly_target_amount).toLocaleString()}/month</p>
               </div>
               <div className="text-right">
                 <p className="text-2xl font-black text-emerald-700">₦{Number(myMonthlySavingsPlan.total_saved).toLocaleString()}</p>
@@ -6875,7 +6900,7 @@ function CustomerDashboard({
                     ) : md && md.total_deposited > 0 ? (
                       <>
                         <p className="text-xs font-bold text-amber-800 mt-1">₦{md.total_deposited.toLocaleString()}</p>
-                        <p className="text-[9px] text-amber-600 font-bold">₦{(5000 - md.total_deposited).toLocaleString()} left</p>
+                        <p className="text-[9px] text-amber-600 font-bold">₦{Math.max(0, Number(myMonthlySavingsPlan!.monthly_target_amount) - md.total_deposited).toLocaleString()} left</p>
                       </>
                     ) : isCurrentMonth ? (
                       <p className="text-[10px] text-blue-600 font-bold mt-1">Current month</p>
@@ -6893,7 +6918,7 @@ function CustomerDashboard({
           <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
             <p className="text-xs font-black text-amber-800 mb-1">Important Reminders</p>
             <ul className="text-[11px] text-amber-700 font-semibold space-y-1 list-disc list-inside">
-              <li>Minimum ₦5,000 deposit required per month to mark it complete.</li>
+              <li>Minimum ₦{Number(myMonthlySavingsPlan.monthly_target_amount).toLocaleString()} deposit required per month to mark it complete.</li>
               <li>Withdrawals are processed by Admin only — you cannot self-withdraw from this plan.</li>
               <li>Savings are only available for withdrawal after December of this year.</li>
               <li>One month's savings is retained as a company service charge.</li>
@@ -6928,15 +6953,37 @@ function CustomerDashboard({
                 </div>
               ))}
             </div>
-            <div className="p-4 border-t border-slate-100 flex gap-2">
-              <button type="button" onClick={() => setShowMsTermsModal(false)}
-                className="flex-1 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50">
-                Cancel
-              </button>
-              <button type="button" onClick={() => { setShowMsTermsModal(false); onSelfEnrollMonthly(); }}
-                className="flex-1 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black uppercase">
-                I Accept — Enroll Me
-              </button>
+            <div className="p-4 border-t border-slate-100 space-y-3">
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">How much will you save each month? (₦) *</label>
+                <input
+                  type="number"
+                  min={5000}
+                  value={msSelfEnrollAmount}
+                  onChange={e => setMsSelfEnrollAmount(e.target.value)}
+                  placeholder="e.g. 5000"
+                  className="w-full border rounded-xl px-3 py-2 text-xs font-semibold"
+                />
+                <span className="text-[10px] text-slate-400 block mt-1">Minimum ₦5,000. This is the amount you're committing to save every month, Jan–Dec.</span>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setShowMsTermsModal(false)}
+                  className="flex-1 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50">
+                  Cancel
+                </button>
+                <button type="button" onClick={() => {
+                  const amount = Number(msSelfEnrollAmount);
+                  if (!amount || amount < 5000) {
+                    alert('Monthly Savings Target must be a minimum of ₦5,000.');
+                    return;
+                  }
+                  setShowMsTermsModal(false);
+                  onSelfEnrollMonthly(amount);
+                }}
+                  className="flex-1 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black uppercase">
+                  I Accept — Enroll Me
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -8022,6 +8069,7 @@ export default function App() {
           phone: formattedPhone,
           role: 'Customer',
           daily_amount: Number(data.daily_amount),
+          monthly_target_amount: Number(data.monthly_target_amount) || 5000,
           branch_id: data.branch_id,
           is_active: true,
           email: data.email || fallbackEmail,
@@ -8566,8 +8614,12 @@ export default function App() {
 
   // Enroll a customer in the monthly salary savings plan for the given year.
   // Creates the plan row; months are created on-demand by the deposit trigger.
-  const handleEnrollMonthlySavings = async (customerId: string, year: number) => {
+  const handleEnrollMonthlySavings = async (customerId: string, year: number, monthlyTargetAmount: number) => {
     if (!currentUser) return;
+    if (!monthlyTargetAmount || monthlyTargetAmount < 5000) {
+      triggerToast('Monthly Savings Target must be a minimum of ₦5,000.', 'error');
+      return;
+    }
     setIsLoading(true);
     const existing = monthlySavingsPlans.find(p => p.customer_id === customerId && p.year === year);
     if (existing) {
@@ -8578,21 +8630,28 @@ export default function App() {
     const { error } = await supabase.from('monthly_savings_plans').insert([{
       customer_id: customerId,
       year,
-      created_by: currentUser.id
+      created_by: currentUser.id,
+      monthly_target_amount: monthlyTargetAmount
     }]);
     setIsLoading(false);
     if (error) {
       triggerToast('Enrollment failed: ' + error.message, 'error');
     } else {
-      triggerToast('Customer enrolled in ' + year + ' Monthly Savings Plan.', 'success');
+      triggerToast('Customer enrolled in ' + year + ' Monthly Savings Plan at ₦' + monthlyTargetAmount.toLocaleString() + '/month.', 'success');
       await fetchMonthlySavings(currentUser);
     }
   };
 
   // Customer self-enrolls in monthly savings. Updates their profile
-  // savings_type and terms acceptance, then creates the plan for this year.
-  const handleCustomerSelfEnrollMonthly = async () => {
+  // savings_type and terms acceptance, then creates the plan for this year
+  // at the amount they chose (validated client-side and enforced by a DB
+  // check constraint of >= 5000).
+  const handleCustomerSelfEnrollMonthly = async (monthlyTargetAmount: number) => {
     if (!currentUser) return;
+    if (!monthlyTargetAmount || monthlyTargetAmount < 5000) {
+      triggerToast('Monthly Savings Target must be a minimum of ₦5,000.', 'error');
+      return;
+    }
     setIsLoading(true);
     const year = new Date().getFullYear();
     const existing = monthlySavingsPlans.find(p => p.customer_id === currentUser.id && p.year === year);
@@ -8615,7 +8674,8 @@ export default function App() {
       const { error: planError } = await supabase.from('monthly_savings_plans').insert([{
         customer_id: currentUser.id,
         year,
-        created_by: currentUser.id
+        created_by: currentUser.id,
+        monthly_target_amount: monthlyTargetAmount
       }]);
       if (planError) {
         triggerToast('Plan creation failed: ' + planError.message, 'error');
@@ -8625,7 +8685,7 @@ export default function App() {
     }
 
     setIsLoading(false);
-    triggerToast('You are now enrolled in the ' + year + ' Monthly Savings Plan!', 'success');
+    triggerToast('You are now enrolled in the ' + year + ' Monthly Savings Plan at ₦' + monthlyTargetAmount.toLocaleString() + '/month!', 'success');
     await fetchMonthlySavings(currentUser);
     await fetchGlobalConfiguration();
   };
