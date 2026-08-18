@@ -755,30 +755,6 @@ function MiniSparkline({ color = '#059669', positive = true }: { color?: string;
   );
 }
 
-// Small secondary tab bar used inside long admin sections (Payouts, Reports,
-// Records, etc.) so each section shows one screenful at a time instead of
-// one long continuous scroll. Presentation-only - just toggles which block
-// of already-existing content is visible.
-function SubTabBar<T extends string>({ tabs, active, onChange }: { tabs: { key: T; label: string; icon?: any }[]; active: T; onChange: (key: T) => void }) {
-  return (
-    <div className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1 mb-1">
-      {tabs.map(({ key, label, icon: Icon }) => (
-        <button
-          key={key}
-          type="button"
-          onClick={() => onChange(key)}
-          className={`shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[11px] font-bold tracking-wide uppercase transition-all duration-200 ${
-            active === key ? 'bg-emerald-700 text-white shadow-sm' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
-          }`}
-        >
-          {Icon && <Icon className="w-3.5 h-3.5" />}
-          {label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 // Reusable Autocomplete Searchable Customer Select Component
 function SearchableCustomerSelect({ 
   customers, 
@@ -1713,9 +1689,6 @@ function AdminDashboard({
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [saverPreviewSearch, setSaverPreviewSearch] = useState('');
-  const [payoutsSubTab, setPayoutsSubTab] = useState<'ledger' | 'trigger' | 'pending' | 'archive'>('ledger');
-  const [reportsSubTab, setReportsSubTab] = useState<'overview' | 'loans' | 'revenue' | 'archive'>('overview');
-  const [recordsSubTab, setRecordsSubTab] = useState<'active' | 'settled'>('active');
   const [loanSubView, setLoanSubView] = useState<'pending' | 'active' | 'completed' | 'history'>('pending');
   const [showAssignLoanModal, setShowAssignLoanModal] = useState(false);
   const [assignLoanCustomerId, setAssignLoanCustomerId] = useState('');
@@ -1893,22 +1866,38 @@ function AdminDashboard({
 
   const computeMonthMetrics = (periodKey: string) => {
     const [y, m] = periodKey.split('-').map(Number);
-    const contributions = sumCurrencyValues(
-      transactions.filter(t => {
-        if (!t.date || t.status !== 'Successful') return false;
-        const [ty, tm] = t.date.split('-').map(Number);
-        return ty === y && tm === m;
-      }).map(t => Number(t.amount || 0))
-    );
+
+    // Contributions/profit are based on which CYCLE (period_key) a payment
+    // was actually applied to via marked_days/contributions, not the
+    // calendar date it happened to be paid on. A customer who has already
+    // rolled into the next period_key (e.g. after an early payout) has
+    // their payments counted toward that period - not the calendar month
+    // they physically paid in - so August and September stay properly
+    // separated even while a customer is already mid-September and the
+    // calendar hasn't rolled over yet.
+    const periodContributions: number[] = [];
+    const contributingCustomerIds = new Set<string>();
+    customers.forEach(c => {
+      const liveTotal = sumCurrencyValues(
+        (markedDays[c.id] || []).filter(d => d.period_key === periodKey).map(d => Number(d.amount || 0))
+      );
+      const frozenTotal = sumCurrencyValues(
+        (savedMonths[c.id] || []).filter(s => s.period_key === periodKey).map(s => Number(s.total_amount || 0))
+      );
+      const total = liveTotal + frozenTotal;
+      if (total > 0) {
+        periodContributions.push(total);
+        if (c.is_active) contributingCustomerIds.add(c.id);
+      }
+    });
+    const contributions = sumCurrencyValues(periodContributions);
     const profit = sumCurrencyValues(
-      customers
-        .filter(c => c.is_active && transactions.some(tx => {
-          if (tx.customer_id !== c.id || tx.status !== 'Successful' || !tx.date) return false;
-          const [ty, tm] = tx.date.split('-').map(Number);
-          return ty === y && tm === m;
-        }))
-        .map(c => c.daily_amount)
+      customers.filter(c => contributingCustomerIds.has(c.id)).map(c => c.daily_amount)
     );
+
+    // Expenses and payouts are operational events tied to the calendar day
+    // they happened on (an expense logged today is an August expense
+    // regardless of any customer's cycle), so these stay calendar-based.
     const expenses = sumCurrencyValues(
       cashRecords.filter(r => {
         if (!r.record_date) return false;
@@ -1928,6 +1917,12 @@ function AdminDashboard({
 
   const currentPeriodKey = getCurrentPeriodKey();
   const liveMonth = computeMonthMetrics(currentPeriodKey);
+  // Next period's profit, tracked separately from the live/current period -
+  // this stays populated as soon as any customer starts contributing into
+  // it (e.g. after an early payout), well before the calendar actually
+  // reaches that month.
+  const nextMonthPeriodKey = nextPeriodKey(currentPeriodKey);
+  const nextMonth = computeMonthMetrics(nextMonthPeriodKey);
 
   // --- Registered Customers drilldown data (Overview tab) ---
   const activeCustomersList = customers.filter(c => c.is_active);
@@ -3981,19 +3976,7 @@ function AdminDashboard({
       {/* Payouts Control with Manual Triggers */}
       {activeTab === 'payouts' && (
         <div className="space-y-6 animate-fade-in text-slate-800 font-bold">
-          <SubTabBar
-            tabs={[
-              { key: 'ledger', label: 'Outstanding Ledger', icon: FileText },
-              { key: 'trigger', label: 'Trigger Payout', icon: Coins },
-              { key: 'pending', label: 'Pending Requests', icon: Clock },
-              { key: 'archive', label: 'History Archive', icon: Landmark },
-            ]}
-            active={payoutsSubTab}
-            onChange={setPayoutsSubTab}
-          />
-
           {/* FEATURE 1 (Admin): Outstanding Payout Ledger */}
-          {payoutsSubTab === 'ledger' && (
           <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
             <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide mb-1 font-bold">Outstanding Payout Ledger</h3>
             <p className="text-xs text-slate-500 mb-4 font-medium">Customers with at least one fully-frozen, uncollected 32-day cycle. Click a name to see exactly which months.</p>
@@ -4047,12 +4030,10 @@ function AdminDashboard({
               </div>
             )}
           </div>
-          )}
 
-          {payoutsSubTab === 'trigger' && (
-          <div className="grid grid-cols-1 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Trigger manual payout form */}
-            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs max-w-xl">
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs lg:col-span-1 h-fit">
               <h3 className="text-sm font-bold text-emerald-950 mb-2 uppercase tracking-wide flex items-center gap-1.5 font-bold">
                 <Coins className="w-5 h-5 text-emerald-700" />
                 Trigger Manual Payout
@@ -4162,13 +4143,9 @@ function AdminDashboard({
                 </button>
               </form>
             </div>
-          </div>
-          )}
 
-          {payoutsSubTab === 'pending' && (
-          <div className="grid grid-cols-1 gap-6">
             {/* Pending payout requests - awaiting admin approval */}
-            <div className="bg-white p-6 rounded-3xl border border-amber-200 shadow-sm">
+            <div className="bg-white p-6 rounded-3xl border border-amber-200 shadow-sm lg:col-span-2">
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide font-bold">Pending Payout Requests</h3>
                 <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">
@@ -4209,7 +4186,7 @@ function AdminDashboard({
             </div>
 
             {/* Customer Payout logs table */}
-            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs lg:col-span-2">
               <div className="mb-4">
                 <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide font-bold">Customer Withdrawal Logs</h3>
                 <p className="text-xs text-slate-500 font-medium">1-day company fee is deducted automatically when calculating the payout amount.</p>
@@ -4294,13 +4271,9 @@ function AdminDashboard({
                 </table>
               </div>
             </div>
-          </div>
-          )}
 
-          {payoutsSubTab === 'archive' && (
-          <div className="grid grid-cols-1 gap-6">
             {/* Payout History Archive - records moved off the active ledger on approval */}
-            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs lg:col-span-2">
               <div className="mb-4">
                 <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5 font-bold">
                   <Landmark className="w-4 h-4 text-emerald-700" />
@@ -4342,7 +4315,6 @@ function AdminDashboard({
               </div>
             </div>
           </div>
-          )}
         </div>
       )}
 
@@ -4583,16 +4555,7 @@ function AdminDashboard({
             <p className="text-xs text-slate-500 font-medium">View active contributors who are yet to withdraw and completed cycles.</p>
           </div>
 
-          <SubTabBar
-            tabs={[
-              { key: 'active', label: `Active Savers (${recordSheet.yetToWithdraw.length})`, icon: Clock },
-              { key: 'settled', label: 'Settled Savers', icon: CheckCircle2 },
-            ]}
-            active={recordsSubTab}
-            onChange={setRecordsSubTab}
-          />
-
-          {recordsSubTab === 'active' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div>
               <h4 className="font-extrabold text-amber-800 text-xs uppercase mb-3 flex items-center gap-1 font-bold">
                 <Clock className="w-4 h-4" />
@@ -4640,9 +4603,7 @@ function AdminDashboard({
                 </table>
               </div>
             </div>
-          )}
 
-          {recordsSubTab === 'settled' && (
             <div>
               <h4 className="font-extrabold text-emerald-900 text-xs uppercase mb-3 flex items-center gap-1 font-bold">
                 <CheckCircle2 className="w-4 h-4" />
@@ -4700,7 +4661,7 @@ function AdminDashboard({
                 </div>
               )}
             </div>
-          )}
+          </div>
         </div>
       )}
 
@@ -5109,19 +5070,6 @@ function AdminDashboard({
       {/* Corporate Profit & Earnings Reporting tab */}
       {activeTab === 'reports' && (
         <div className="space-y-6 animate-fade-in">
-          <SubTabBar
-            tabs={[
-              { key: 'overview', label: 'Overview', icon: LayoutDashboard },
-              { key: 'loans', label: 'Loan Reports', icon: HandCoins },
-              { key: 'revenue', label: 'Revenue & Profit', icon: Coins },
-              { key: 'archive', label: 'Monthly Archive', icon: FileText },
-            ]}
-            active={reportsSubTab}
-            onChange={setReportsSubTab}
-          />
-
-          {reportsSubTab === 'overview' && (
-          <>
           {/* Monthly Financial Summary Dashboard */}
           <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs space-y-4">
             <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5 font-bold">
@@ -5160,7 +5108,27 @@ function AdminDashboard({
               })}
             </div>
           </div>
-          </>
+
+          {nextMonth.contributions > 0 && (
+            <div className="bg-amber-50 p-5 sm:p-6 rounded-3xl border-2 border-amber-200 shadow-xs space-y-4">
+              <h3 className="text-sm font-bold text-amber-900 uppercase tracking-wide flex items-center gap-1.5">
+                <LayoutDashboard className="w-5 h-5 text-amber-700" />
+                {periodLabelFromKey(nextMonthPeriodKey)} — In Progress (Next Month)
+              </h3>
+              <p className="text-[11px] text-amber-700 -mt-2">
+                Some customers have already started this cycle (e.g. after an early payout). Kept separate from {periodLabelFromKey(currentPeriodKey)}'s totals above until the calendar actually reaches {periodLabelFromKey(nextMonthPeriodKey)}.
+              </p>
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="bg-white border-2 border-amber-200 rounded-2xl p-4">
+                  <p className="text-[11px] font-black uppercase tracking-wide text-amber-800">Contributions</p>
+                  <p className="text-xl sm:text-2xl font-black text-amber-950 mt-1">₦{nextMonth.contributions.toLocaleString()}</p>
+                </div>
+                <div className="bg-white border-2 border-amber-200 rounded-2xl p-4">
+                  <p className="text-[11px] font-black uppercase tracking-wide text-amber-800">Profit</p>
+                  <p className="text-xl sm:text-2xl font-black text-amber-950 mt-1">₦{nextMonth.profit.toLocaleString()}</p>
+                </div>
+              </div>
+            </div>
           )}
 
           {showPayoutDrilldown && (
@@ -5259,7 +5227,7 @@ function AdminDashboard({
           )}
 
           {/* Loan Reports */}
-          {reportsSubTab === 'loans' && (() => {
+          {(() => {
             const totalLoansIssued = loans.length;
             const pendingLoanRequests = loanRequests.filter(r => r.status === 'Pending Approval').length;
             const activeLoansCount = loans.filter(l => l.status === 'Active Loan').length;
@@ -5325,16 +5293,13 @@ function AdminDashboard({
           })()}
 
           {/* Part 5: Monthly Payout Card */}
-          {reportsSubTab === 'revenue' && (
-          <div className="bg-gradient-to-br from-emerald-900 to-emerald-950 text-white p-6 rounded-3xl shadow-md">
+          <div className="bg-emerald-950 text-white p-6 rounded-3xl shadow-sm">
             <p className="text-[10px] uppercase font-black tracking-wider text-emerald-200">Monthly Payout (Contributions − Profit)</p>
-            <p className="text-3xl font-black mt-1 text-white">₦{monthlyPayoutCard.toLocaleString()}</p>
+            <p className="text-3xl font-black mt-1 text-[#166534]">₦{monthlyPayoutCard.toLocaleString()}</p>
             <p className="text-[11px] text-emerald-300 mt-1.5">Resets automatically at the start of each new month.</p>
           </div>
-          )}
 
           {/* Monthly Archive */}
-          {reportsSubTab === 'archive' && (
           <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
             <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide mb-1 font-bold">Monthly Archive</h3>
             <p className="text-xs text-slate-500 mb-4 font-medium">Previous months archive automatically once they end. The current month always stays live above.</p>
@@ -5370,9 +5335,7 @@ function AdminDashboard({
               </div>
             )}
           </div>
-          )}
 
-          {reportsSubTab === 'revenue' && (
         <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs animate-fade-in space-y-6">
           <div>
             <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5 font-bold">
@@ -5409,7 +5372,6 @@ function AdminDashboard({
             </div>
           </div>
         </div>
-          )}
         </div>
       )}
 
