@@ -28,6 +28,9 @@ export interface Profile {
   savings_type: 'daily' | 'monthly' | 'both';
   monthly_savings_terms_accepted: boolean;
   monthly_savings_terms_accepted_at?: string;
+  paystack_customer_code?: string;
+  virtual_account_number?: string;
+  virtual_account_bank?: string;
 }
 
 export interface Loan {
@@ -1677,12 +1680,12 @@ function MonthlySavingsAdminTab({ monthlySavingsPlans, monthlySavingsMonths, pro
 
 function AdminDashboard({ 
   profiles, branches, transactions, markedDays, supportDetails, payoutRequests, savedMonths, payoutHistory, withdrawalRequests, onApprovePayout, onCreateBranch, onUpdateBranch, onDeleteBranch, onCreateStaff, onUpdateStaff, onDeleteStaff, onRegisterCustomer,
-  onDeleteTransaction, onAddTransaction, onUpdateSupport, onDeleteCustomer, onUpdateCustomer, onToggleCustomerActive, onUpdateLoanStatus, onTriggerManualPayout, onApproveTransaction, onApproveWithdrawal, routeTarget, onRouteHandled, onRejectPayout, triggerToast, onResetPasswordToDefault,
+  onDeleteTransaction, onAddTransaction, onUpdateSupport, onDeleteCustomer, onUpdateCustomer, onToggleCustomerActive, onUpdateLoanStatus, onTriggerManualPayout, onApproveTransaction, onApproveWithdrawal, routeTarget, onRouteHandled, onRejectPayout, triggerToast, onResetPasswordToDefault, onRefreshProfiles,
   loans, loanRequests, loanHistory, onApproveLoanRequest, onRejectLoanRequest, onAssignLoan,
   monthlySavingsPlans, monthlySavingsMonths, onEnrollMonthlySavings, onRecordMonthlyDeposit
 }: { 
   profiles: Profile[], branches: Branch[], transactions: Transaction[], markedDays: Record<string, MarkedDay[]>, supportDetails: SupportSettings, payoutRequests: PayoutRequest[], savedMonths: Record<string, SavedMonth[]>, payoutHistory: PayoutHistoryRecord[], withdrawalRequests: WithdrawalRequest[], onDeleteTransaction: (id: string) => void, onAddTransaction: (cId: string, amt: number, method: any, sId: string) => void, onUpdateSupport: (phone: string, whatsapp: string, email: string, bankName: string, acctNum: string, acctName: string, advertTitle: string, advertDescription: string, advertImageUrl: string, advertEnabled: boolean, advertVideoUrl: string, themeBackgroundColor: string) => void, onApprovePayout: (reqId: string) => void, onCreateBranch: (name: string, address: string) => void, onUpdateBranch: (id: string, name: string, address: string) => void, onDeleteBranch: (id: string) => void, onCreateStaff: (name: string, phone: string, email: string, branchId: string, password: string) => void, onUpdateStaff: (id: string, name: string, phone: string, email: string, branchId: string) => void, onDeleteStaff: (id: string) => void, onRegisterCustomer: (data: any) => void,
-  onDeleteCustomer: (id: string) => void, onUpdateCustomer: (id: string, name: string, phone: string, email: string, dailyAmount: number, branchId: string, allowAnytimeChange: boolean) => void, onToggleCustomerActive: (id: string, is_active: boolean) => void, onUpdateLoanStatus: (id: string, loan_status: 'No Loan' | 'Pending Approval' | 'Active Loan' | 'Loan Cleared') => void, onTriggerManualPayout: (customerId: string, method: 'Transfer' | 'Cash', bank: string, acctNum: string, acctName: string) => void, onApproveTransaction: (id: string) => void, onApproveWithdrawal: (id: string, bankName: string, accountNumber: string, accountName: string) => void, routeTarget?: AdminTab | null, onRouteHandled?: () => void, onRejectPayout?: (reqId: string) => void, triggerToast?: (message: string, type?: 'success' | 'error') => void, onResetPasswordToDefault?: (customerId: string) => void,
+  onDeleteCustomer: (id: string) => void, onUpdateCustomer: (id: string, name: string, phone: string, email: string, dailyAmount: number, branchId: string, allowAnytimeChange: boolean) => void, onToggleCustomerActive: (id: string, is_active: boolean) => void, onUpdateLoanStatus: (id: string, loan_status: 'No Loan' | 'Pending Approval' | 'Active Loan' | 'Loan Cleared') => void, onTriggerManualPayout: (customerId: string, method: 'Transfer' | 'Cash', bank: string, acctNum: string, acctName: string) => void, onApproveTransaction: (id: string) => void, onApproveWithdrawal: (id: string, bankName: string, accountNumber: string, accountName: string) => void, routeTarget?: AdminTab | null, onRouteHandled?: () => void, onRejectPayout?: (reqId: string) => void, triggerToast?: (message: string, type?: 'success' | 'error') => void, onResetPasswordToDefault?: (customerId: string) => void, onRefreshProfiles: () => void,
   loans: Loan[], loanRequests: LoanRequest[], loanHistory: any[], onApproveLoanRequest: (requestId: string) => void, onRejectLoanRequest: (requestId: string, reason: string) => void, onAssignLoan: (customerId: string, approvedAmount: number, remarks: string, disbursementDate: string) => void,
   monthlySavingsPlans: MonthlySavingsPlan[], monthlySavingsMonths: MonthlySavingsMonth[], onEnrollMonthlySavings: (customerId: string, year: number, monthlyTargetAmount: number) => void, onRecordMonthlyDeposit: (customerId: string, year: number, month: number, amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => void
 }) {
@@ -2140,6 +2143,51 @@ function AdminDashboard({
   const [showPayoutDrilldown, setShowPayoutDrilldown] = useState(false);
   const [payoutDrilldownView, setPayoutDrilldownView] = useState<'on-loan' | 'not-on-loan' | null>(null);
   const [showExpensesDrilldown, setShowExpensesDrilldown] = useState(false);
+
+  // Bulk Paystack virtual account generation (for customers who existed
+  // before this feature was added, and so never got one at signup).
+  const [bulkVAProgress, setBulkVAProgress] = useState<{ running: boolean; done: number; total: number; failed: { name: string; reason: string }[] } | null>(null);
+  const customersMissingVA = profiles.filter(p => p.role === 'Customer' && !p.virtual_account_number);
+
+  const handleBulkGenerateVirtualAccounts = async () => {
+    if (customersMissingVA.length === 0) {
+      triggerToast?.('Every customer already has a virtual account.', 'success');
+      return;
+    }
+    if (!window.confirm(`Generate a Paystack virtual account for ${customersMissingVA.length} customer(s) who don't have one yet? This may take a few minutes.`)) {
+      return;
+    }
+    setBulkVAProgress({ running: true, done: 0, total: customersMissingVA.length, failed: [] });
+    const failed: { name: string; reason: string }[] = [];
+    for (let i = 0; i < customersMissingVA.length; i++) {
+      const c = customersMissingVA[i];
+      try {
+        // Paystack requires an email to create a customer. Older accounts
+        // (created before email was collected) don't have one - assign the
+        // same auto-generated fallback used at signup (phone@hiremercy.com)
+        // rather than skipping them.
+        if (!c.email) {
+          const fallbackEmail = `${c.phone.replace(/\D/g, '')}@hiremercy.com`;
+          await supabase.from('profiles').update({ email: fallbackEmail }).eq('id', c.id);
+        }
+        const { data, error } = await supabase.functions.invoke('paystack-create-virtual-account', {
+          body: { customerId: c.id }
+        });
+        if (error || data?.error) {
+          failed.push({ name: c.name, reason: (data?.error as string) || error?.message || 'Unknown error' });
+        }
+      } catch (err: any) {
+        failed.push({ name: c.name, reason: err?.message || 'Request failed' });
+      }
+      setBulkVAProgress({ running: true, done: i + 1, total: customersMissingVA.length, failed: [...failed] });
+      // Small delay between requests so we don't hammer Paystack's API.
+      await new Promise(resolve => setTimeout(resolve, 400));
+    }
+    setBulkVAProgress({ running: false, done: customersMissingVA.length, total: customersMissingVA.length, failed });
+    await onRefreshProfiles();
+    const successCount = customersMissingVA.length - failed.length;
+    triggerToast?.(`${successCount} account(s) created${failed.length ? `, ${failed.length} failed` : ''}.`, failed.length ? 'error' : 'success');
+  };
 
   const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
   const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null);
@@ -5648,6 +5696,58 @@ function AdminDashboard({
             </div>
           </div>
 
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
+            <h3 className="text-sm font-bold text-emerald-950 mb-1 uppercase tracking-wide flex items-center gap-1.5">
+              <Landmark className="w-5 h-5 text-emerald-700" />
+              Paystack Virtual Accounts
+            </h3>
+            <p className="text-xs text-slate-500 mb-4 font-medium">
+              New customers get a personal savings account automatically at signup. Use this to generate one for customers who already existed before that feature was added.
+            </p>
+
+            <div className="p-4 bg-amber-50/50 border border-amber-200 rounded-2xl mb-4">
+              <p className="text-xs font-bold text-amber-900">
+                {customersMissingVA.length === 0
+                  ? 'All customers already have a virtual account.'
+                  : `${customersMissingVA.length} customer(s) don't have one yet.`}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleBulkGenerateVirtualAccounts}
+              disabled={bulkVAProgress?.running || customersMissingVA.length === 0}
+              className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold py-2.5 rounded-xl transition-all duration-200 text-sm shadow-md"
+            >
+              {bulkVAProgress?.running
+                ? `Generating... ${bulkVAProgress.done}/${bulkVAProgress.total}`
+                : `Generate Missing Accounts (${customersMissingVA.length})`}
+            </button>
+
+            {bulkVAProgress && (
+              <div className="mt-4 space-y-2">
+                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-600 transition-all duration-300"
+                    style={{ width: `${(bulkVAProgress.done / bulkVAProgress.total) * 100}%` }}
+                  />
+                </div>
+                {!bulkVAProgress.running && (
+                  <p className="text-xs font-bold text-slate-600">
+                    Done: {bulkVAProgress.done - bulkVAProgress.failed.length} succeeded, {bulkVAProgress.failed.length} failed.
+                  </p>
+                )}
+                {bulkVAProgress.failed.length > 0 && (
+                  <div className="max-h-40 overflow-y-auto border border-red-100 bg-red-50 rounded-xl p-3 space-y-1">
+                    {bulkVAProgress.failed.map((f, idx) => (
+                      <p key={idx} className="text-[10px] text-red-700"><strong>{f.name}:</strong> {f.reason}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Quick Notepad - mini spreadsheet scratchpad */}
           <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
             <h3 className="text-sm font-bold text-emerald-950 mb-1 uppercase tracking-wide flex items-center gap-1.5 font-bold">
@@ -5975,7 +6075,7 @@ function CustomerDashboard({
   myMonthlySavingsPlan, myMonthlySavingsMonths, creditBalance, onSelfEnrollMonthly
 }: { 
   customer: Profile, transactions: Transaction[], markedDays: MarkedDay[], supportDetails: SupportSettings, payoutRequests: PayoutRequest[], savedMonths: SavedMonth[], cycleArchives: any[], onAddPayoutRequest: (bank: string, acctNum: string, acctName: string, contributionIds: string[]) => void,
-  onAddCustomerPendingTransaction: (amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => void, onUpdateCustomerSettings: (phone: string, dailyAmount: number) => void,
+  onAddCustomerPendingTransaction: (amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => void, onUpdateCustomerSettings: (phone: string, dailyAmount: number, email: string) => void,
   activeLoan: Loan | null, myLoans: Loan[], myLoanRequests: LoanRequest[], onRequestLoan: (customerId: string) => void, profiles: Profile[],
   myMonthlySavingsPlan: MonthlySavingsPlan | null, myMonthlySavingsMonths: MonthlySavingsMonth[], creditBalance: CustomerCreditBalance | null,
   onSelfEnrollMonthly: (amount: number) => void
@@ -6042,6 +6142,7 @@ function CustomerDashboard({
 
   // Personal Settings states
   const [custSettingsPhone, setCustSettingsPhone] = useState(customer.phone);
+  const [custSettingsEmail, setCustSettingsEmail] = useState(customer.email || '');
   const [custSettingsDailyAmount, setCustSettingsDailyAmount] = useState(customer.daily_amount);
   const [newPassword, setNewPassword] = useState('');
   const [isUpdatingPass, setIsUpdatingPass] = useState(false);
@@ -6142,7 +6243,11 @@ function CustomerDashboard({
       alert("Daily Contribution must be at least ₦300.");
       return;
     }
-    onUpdateCustomerSettings(custSettingsPhone, Number(custSettingsDailyAmount));
+    if (custSettingsEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(custSettingsEmail)) {
+      alert("Please enter a valid email address.");
+      return;
+    }
+    onUpdateCustomerSettings(custSettingsPhone, Number(custSettingsDailyAmount), custSettingsEmail);
   };
 
   const handleChangePasswordSubmit = async (e: React.FormEvent) => {
@@ -6766,6 +6871,27 @@ function CustomerDashboard({
 
           <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs flex flex-col justify-between">
             <div className="space-y-4">
+              {customer.virtual_account_number && (
+                <div className="p-5 bg-emerald-50 border-2 border-emerald-300 rounded-3xl space-y-3 text-xs leading-loose text-slate-800 shadow-inner font-bold mb-2">
+                  <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5">
+                    <Landmark className="w-5 h-5 text-emerald-700" />
+                    Your Personal Savings Account
+                  </h3>
+                  <p className="text-[11px] text-emerald-700 font-semibold">Fastest way to save — transfer straight into this account, in your name, anytime. It's reflected automatically, no need to fill the form.</p>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block uppercase font-bold">Bank:</span>
+                    <strong className="text-slate-900 text-sm font-bold">{customer.virtual_account_bank}</strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block uppercase font-bold">Account Number:</span>
+                    <strong className="text-slate-900 text-lg tracking-widest block py-0.5 font-bold">{customer.virtual_account_number}</strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block uppercase font-bold">Account Name:</span>
+                    <strong className="text-slate-900 text-sm font-bold">{customer.name}</strong>
+                  </div>
+                </div>
+              )}
               <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5 font-bold">
                 <Landmark className="w-5 h-5 text-emerald-700" />
                 Company Banking Coordinates
@@ -6814,6 +6940,18 @@ function CustomerDashboard({
                   onChange={(e) => setCustSettingsPhone(e.target.value)}
                   className="input-green font-medium"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1">Email Address</label>
+                <input 
+                  type="email" 
+                  placeholder="you@example.com"
+                  value={custSettingsEmail}
+                  onChange={(e) => setCustSettingsEmail(e.target.value)}
+                  className="input-green font-medium"
+                />
+                <span className="text-[10px] text-slate-400 block mt-1">Used for account records. Your Personal Savings Account number stays the same either way.</span>
               </div>
 
               <div>
@@ -8104,7 +8242,7 @@ export default function App() {
     const formattedPhone = formatNigerianPhone(data.phone);
     const fallbackEmail = `${formattedPhone.replace(/\D/g, '')}@hiremercy.com`;
 
-    const { error } = await supabase.auth.signUp({
+    const { data: signUpData, error } = await supabase.auth.signUp({
       phone: formattedPhone,
       password: data.password || 'customer123',
       options: {
@@ -8130,6 +8268,18 @@ export default function App() {
       triggerToast('Customer registered successfully!', 'success');
       setAuthScreen('login');
       fetchGlobalConfiguration();
+
+      // Create their Paystack dedicated virtual account in the background.
+      // Non-blocking and silent on failure - registration itself already
+      // succeeded, and an account can always be generated later (e.g. from
+      // the customer's own dashboard, or by an admin) if this doesn't work
+      // right now (for example, before Paystack live keys are configured).
+      const newUserId = signUpData?.user?.id;
+      if (newUserId) {
+        supabase.functions.invoke('paystack-create-virtual-account', {
+          body: { customerId: newUserId }
+        }).catch(() => { /* silent - see comment above */ });
+      }
     }
   };
 
@@ -9246,7 +9396,7 @@ export default function App() {
     }
   };
 
-  const handleUpdateCustomerSettings = async (phone: string, dailyAmount: number) => {
+  const handleUpdateCustomerSettings = async (phone: string, dailyAmount: number, email: string) => {
     if (!currentUser) return;
     setIsLoading(true);
     const formattedPhone = formatNigerianPhone(phone);
@@ -9259,6 +9409,24 @@ export default function App() {
       updateData.allow_anytime_change = false; // consume anytime permission
     }
 
+    // Email is stored for our own records - Paystack doesn't support
+    // changing a customer's email after their virtual account is created,
+    // so this intentionally does NOT touch their Paystack customer record.
+    // Their existing virtual account number is unaffected either way.
+    const trimmedEmail = (email || '').trim();
+    let emailAuthSyncFailed = false;
+    if (trimmedEmail && trimmedEmail !== currentUser.email) {
+      updateData.email = trimmedEmail;
+      // IMPORTANT: this also syncs into auth.users.email, which is what
+      // "Forgot Password" actually looks up (not profiles.email). Without
+      // this, resetPasswordForEmail() silently finds no matching account -
+      // no error shown, no email sent - which is exactly the bug we found.
+      const { error: authEmailError } = await supabase.auth.updateUser({ email: trimmedEmail });
+      if (authEmailError) {
+        emailAuthSyncFailed = true;
+      }
+    }
+    
     const { error } = await supabase
       .from('profiles')
       .update(updateData)
@@ -9270,7 +9438,11 @@ export default function App() {
     } else {
       setCurrentUser(prev => prev ? { ...prev, ...updateData } : prev);
       setProfiles(prev => prev.map(p => p.id === currentUser.id ? { ...p, ...updateData } : p));
-      triggerToast('Your profile settings have been updated!', 'success');
+      if (emailAuthSyncFailed) {
+        triggerToast('Profile updated, but the email could not be confirmed for password recovery - please try re-entering it.', 'error');
+      } else {
+        triggerToast('Your profile settings have been updated!', 'success');
+      }
       fetchCurrentUserProfile(currentUser.id);
     }
   };
@@ -9585,6 +9757,7 @@ export default function App() {
                 withdrawalRequests={withdrawalRequests}
                 triggerToast={triggerToast}
                 onResetPasswordToDefault={handleResetPasswordToDefault}
+                onRefreshProfiles={fetchGlobalConfiguration}
                 onDeleteTransaction={deleteTransaction}
                 onAddTransaction={createTransaction}
                 onUpdateSupport={handleUpdateSupportDetails}
