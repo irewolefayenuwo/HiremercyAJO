@@ -4941,7 +4941,7 @@ function AdminDashboard({
                 const q = settledSaversSearch.trim().toLowerCase();
                 const groups = q
                   ? recordSheet.completedPayoutsByMonth
-                      .map(group => ({ ...group, records: group.records.filter(r => r.customer_name.toLowerCase().includes(q)) }))
+                      .map(group => ({ ...group, records: group.records.filter(r => (r.customer_name || '').toLowerCase().includes(q)) }))
                       .filter(group => group.records.length > 0)
                   : recordSheet.completedPayoutsByMonth;
 
