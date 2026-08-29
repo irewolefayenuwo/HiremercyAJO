@@ -5,7 +5,7 @@ import {
   CheckCircle2, XCircle, LogOut, Shield, Briefcase, Landmark, Info, Key,
   Bell, Settings, HelpCircle, MessageSquare, Building2, UserPlus, Coins, Clock, FileText, Edit2, X,
   BarChart3, ArrowLeftRight, Wallet, CalendarRange, HandCoins, PieChart, TrendingUp, ShieldCheck,
-  Sparkles, Headphones, Target, ArrowUpRight, Lock as LockIcon
+  Sparkles, Headphones, Target, ArrowUpRight, Lock as LockIcon, Save
 } from 'lucide-react';
 import { type Session, type AuthChangeEvent } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
@@ -107,6 +107,24 @@ export interface CustomerCreditBalance {
   customer_id: string;
   credit_amount: number;
   updated_at: string;
+}
+
+export interface BalanceAdjustment {
+  id: string;
+  customer_id: string;
+  amount: number;
+  note?: string;
+  created_by?: string;
+  created_at: string;
+}
+
+export interface ManualExpense {
+  id: string;
+  description?: string;
+  amount: number;
+  expense_date: string;
+  created_by?: string;
+  created_at: string;
 }
 
 export interface Transaction {
@@ -737,6 +755,30 @@ function LiveTransactionCounter({ count, label = 'Live transactions' }: { count:
     <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-black text-emerald-800 shadow-sm">
       <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
       {label}: <span className="text-emerald-950">{count}</span>
+    </div>
+  );
+}
+
+// Small secondary page-switcher used inside long admin sections (Payouts,
+// etc.) so each part shows on its own screen instead of one continuous
+// scroll. Presentation-only - just toggles which already-existing block of
+// content is visible.
+function SectionPageBar<T extends string>({ pages, active, onChange }: { pages: { key: T; label: string; icon?: any }[]; active: T; onChange: (key: T) => void }) {
+  return (
+    <div className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1 mb-1">
+      {pages.map(({ key, label, icon: Icon }) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onChange(key)}
+          className={`shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[11px] font-bold tracking-wide uppercase transition-all duration-200 ${
+            active === key ? 'bg-emerald-700 text-white shadow-sm' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+          }`}
+        >
+          {Icon && <Icon className="w-3.5 h-3.5" />}
+          {label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -1682,12 +1724,14 @@ function AdminDashboard({
   profiles, branches, transactions, markedDays, supportDetails, payoutRequests, savedMonths, payoutHistory, withdrawalRequests, onApprovePayout, onCreateBranch, onUpdateBranch, onDeleteBranch, onCreateStaff, onUpdateStaff, onDeleteStaff, onRegisterCustomer,
   onDeleteTransaction, onAddTransaction, onUpdateSupport, onDeleteCustomer, onUpdateCustomer, onToggleCustomerActive, onUpdateLoanStatus, onTriggerManualPayout, onApproveTransaction, onApproveWithdrawal, routeTarget, onRouteHandled, onRejectPayout, triggerToast, onResetPasswordToDefault, onRefreshProfiles,
   loans, loanRequests, loanHistory, onApproveLoanRequest, onRejectLoanRequest, onAssignLoan,
-  monthlySavingsPlans, monthlySavingsMonths, onEnrollMonthlySavings, onRecordMonthlyDeposit
+  monthlySavingsPlans, monthlySavingsMonths, onEnrollMonthlySavings, onRecordMonthlyDeposit,
+  currentUserId, balanceAdjustments, manualExpenses, onRefreshAdjustmentsAndExpenses
 }: { 
   profiles: Profile[], branches: Branch[], transactions: Transaction[], markedDays: Record<string, MarkedDay[]>, supportDetails: SupportSettings, payoutRequests: PayoutRequest[], savedMonths: Record<string, SavedMonth[]>, payoutHistory: PayoutHistoryRecord[], withdrawalRequests: WithdrawalRequest[], onDeleteTransaction: (id: string) => void, onAddTransaction: (cId: string, amt: number, method: any, sId: string) => void, onUpdateSupport: (phone: string, whatsapp: string, email: string, bankName: string, acctNum: string, acctName: string, advertTitle: string, advertDescription: string, advertImageUrl: string, advertEnabled: boolean, advertVideoUrl: string, themeBackgroundColor: string) => void, onApprovePayout: (reqId: string) => void, onCreateBranch: (name: string, address: string) => void, onUpdateBranch: (id: string, name: string, address: string) => void, onDeleteBranch: (id: string) => void, onCreateStaff: (name: string, phone: string, email: string, branchId: string, password: string) => void, onUpdateStaff: (id: string, name: string, phone: string, email: string, branchId: string) => void, onDeleteStaff: (id: string) => void, onRegisterCustomer: (data: any) => void,
   onDeleteCustomer: (id: string) => void, onUpdateCustomer: (id: string, name: string, phone: string, email: string, dailyAmount: number, branchId: string, allowAnytimeChange: boolean) => void, onToggleCustomerActive: (id: string, is_active: boolean) => void, onUpdateLoanStatus: (id: string, loan_status: 'No Loan' | 'Pending Approval' | 'Active Loan' | 'Loan Cleared') => void, onTriggerManualPayout: (customerId: string, method: 'Transfer' | 'Cash', bank: string, acctNum: string, acctName: string) => void, onApproveTransaction: (id: string) => void, onApproveWithdrawal: (id: string, bankName: string, accountNumber: string, accountName: string) => void, routeTarget?: AdminTab | null, onRouteHandled?: () => void, onRejectPayout?: (reqId: string) => void, triggerToast?: (message: string, type?: 'success' | 'error') => void, onResetPasswordToDefault?: (customerId: string) => void, onRefreshProfiles: () => void,
   loans: Loan[], loanRequests: LoanRequest[], loanHistory: any[], onApproveLoanRequest: (requestId: string) => void, onRejectLoanRequest: (requestId: string, reason: string) => void, onAssignLoan: (customerId: string, approvedAmount: number, remarks: string, disbursementDate: string) => void,
-  monthlySavingsPlans: MonthlySavingsPlan[], monthlySavingsMonths: MonthlySavingsMonth[], onEnrollMonthlySavings: (customerId: string, year: number, monthlyTargetAmount: number) => void, onRecordMonthlyDeposit: (customerId: string, year: number, month: number, amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => void
+  monthlySavingsPlans: MonthlySavingsPlan[], monthlySavingsMonths: MonthlySavingsMonth[], onEnrollMonthlySavings: (customerId: string, year: number, monthlyTargetAmount: number) => void, onRecordMonthlyDeposit: (customerId: string, year: number, month: number, amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => void,
+  currentUserId: string, balanceAdjustments: Record<string, BalanceAdjustment[]>, manualExpenses: ManualExpense[], onRefreshAdjustmentsAndExpenses: () => void
 }) {
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -1706,6 +1750,14 @@ function AdminDashboard({
   const [expandedOutstandingCustomerId, setExpandedOutstandingCustomerId] = useState<string | null>(null);
   const [outstandingLedgerSearch, setOutstandingLedgerSearch] = useState('');
   const [expandedSettlementMonth, setExpandedSettlementMonth] = useState<string | null>(null);
+  // --- UI-only additions: section navigation + search for Payouts/Records pages ---
+  const [payoutsPage, setPayoutsPage] = useState<'ledger' | 'trigger' | 'pending' | 'withdrawals' | 'archive'>('ledger');
+  const [withdrawalLogsSearch, setWithdrawalLogsSearch] = useState('');
+  const [payoutArchiveSearch, setPayoutArchiveSearch] = useState('');
+  const [activeSaversOpen, setActiveSaversOpen] = useState(false);
+  const [activeSaversSearch, setActiveSaversSearch] = useState('');
+  const [settledSaversSearch, setSettledSaversSearch] = useState('');
+  const [expandedFinancialMonth, setExpandedFinancialMonth] = useState<string | null>(null);
   const [previewCreditBalance, setPreviewCreditBalance] = useState<number>(0);
   const [msSelectedCustomer, setMsSelectedCustomer] = useState('');
   const [msSelectedYear, setMsSelectedYear] = useState(new Date().getFullYear());
@@ -1901,13 +1953,23 @@ function AdminDashboard({
     // Expenses and payouts are operational events tied to the calendar day
     // they happened on (an expense logged today is an August expense
     // regardless of any customer's cycle), so these stay calendar-based.
-    const expenses = sumCurrencyValues(
+    // Includes both Cash Sheet reconciliation records AND ad-hoc entries
+    // saved from the admin Quick Notepad.
+    const cashSheetExpenses = sumCurrencyValues(
       cashRecords.filter(r => {
         if (!r.record_date) return false;
         const [ry, rm] = r.record_date.split('-').map(Number);
         return ry === y && rm === m;
       }).map(r => Number(r.total_expenses || 0))
     );
+    const notepadExpenses = sumCurrencyValues(
+      manualExpenses.filter(e => {
+        if (!e.expense_date) return false;
+        const [ey, em] = e.expense_date.split('-').map(Number);
+        return ey === y && em === m;
+      }).map(e => Number(e.amount || 0))
+    );
+    const expenses = cashSheetExpenses + notepadExpenses;
     const payout = sumCurrencyValues(
       payoutHistory.filter(p => {
         if (!p.approved_at) return false;
@@ -1961,6 +2023,12 @@ function AdminDashboard({
     const [cy, cm] = currentPeriodKey.split('-').map(Number);
     return ry === cy && rm === cm && Number(r.total_expenses || 0) > 0;
   }).sort((a, b) => (a.record_date < b.record_date ? 1 : -1));
+  const currentMonthManualExpenses = manualExpenses.filter(e => {
+    if (!e.expense_date) return false;
+    const [ey, em] = e.expense_date.split('-').map(Number);
+    const [cy, cm] = currentPeriodKey.split('-').map(Number);
+    return ey === cy && em === cm;
+  }).sort((a, b) => (a.expense_date < b.expense_date ? 1 : -1));
 
   // Part 5: Monthly Payout card - a DIFFERENT metric from the "Total Monthly
   // Payout" above (which is real money actually paid out via approved
@@ -2035,9 +2103,39 @@ function AdminDashboard({
     });
   };
 
+  // Commits every notepad row with a non-zero amount into manual_expenses,
+  // where it's picked up by the Reports tab's Total Expenses figure. Rows
+  // with no date default to today. After saving, the notepad resets to a
+  // single blank row so the same entries can't accidentally be saved twice.
+  const handleSaveNotepadToExpenses = async () => {
+    const validRows = notepadRows.filter(r => r.amount && Number(r.amount) !== 0);
+    if (validRows.length === 0) {
+      triggerToast?.('No amounts entered yet - nothing to save.', 'error');
+      return;
+    }
+    const payload = validRows.map(r => ({
+      description: r.description || null,
+      amount: Number(r.amount),
+      expense_date: r.date || new Date().toISOString().slice(0, 10),
+      created_by: currentUserId || null
+    }));
+    const { error } = await supabase.from('manual_expenses').insert(payload);
+    if (error) {
+      triggerToast?.(`Failed to save expenses: ${error.message}`, 'error');
+      return;
+    }
+    const total = sumCurrencyValues(payload.map(p => p.amount));
+    triggerToast?.(`${validRows.length} expense entr${validRows.length === 1 ? 'y' : 'ies'} (₦${total.toLocaleString()}) saved to Reports.`, 'success');
+    const resetRows = [{ description: '', amount: '', date: '' }];
+    setNotepadRows(resetRows);
+    saveNotepad(resetRows);
+    onRefreshAdjustmentsAndExpenses();
+  };
+
   // --- Admin-to-Customer Messaging ---
   const [noteCustomerId, setNoteCustomerId] = useState('');
   const [noteText, setNoteText] = useState('');
+  const [noteAmount, setNoteAmount] = useState('');
 
   // When a customer is selected, load their existing note (if any) into the
   // textarea so the admin is editing the current note, not overwriting blind.
@@ -2045,6 +2143,7 @@ function AdminDashboard({
     setNoteCustomerId(id);
     const target = profiles.find(p => p.id === id);
     setNoteText(target?.admin_note || '');
+    setNoteAmount('');
   };
 
   const handleSendCustomerNote = async () => {
@@ -2054,8 +2153,36 @@ function AdminDashboard({
       triggerToast?.(`Failed to send note: ${error.message}`, 'error');
       return;
     }
-    triggerToast?.('Note sent to customer.', 'success');
+
+    // Optional balance adjustment: a negative amount (e.g. -10000) reduces
+    // the customer's balance right away - for things like a quick partial
+    // withdrawal that isn't a full payout of a saved/uncollected month.
+    // This is intentionally separate from the payout system - it's a
+    // lightweight top-level adjustment, and it's also subtracted from any
+    // later full payout calculation for this customer so they can't be
+    // double-paid for money already sent this way.
+    const amountNum = Number(noteAmount);
+    if (noteAmount.trim() !== '' && !isNaN(amountNum) && amountNum !== 0) {
+      const { error: adjError } = await supabase.from('balance_adjustments').insert([{
+        customer_id: noteCustomerId,
+        amount: amountNum,
+        note: noteText || null,
+        created_by: currentUserId || null
+      }]);
+      if (adjError) {
+        triggerToast?.(`Note sent, but balance adjustment failed: ${adjError.message}`, 'error');
+        setNoteText('');
+        setNoteAmount('');
+        setNoteCustomerId('');
+        return;
+      }
+      onRefreshAdjustmentsAndExpenses();
+      triggerToast?.(`Note sent and ₦${Math.abs(amountNum).toLocaleString()} ${amountNum < 0 ? 'deducted from' : 'added to'} their balance.`, 'success');
+    } else {
+      triggerToast?.('Note sent to customer.', 'success');
+    }
     setNoteText('');
+    setNoteAmount('');
     setNoteCustomerId('');
   };
 
@@ -2071,6 +2198,7 @@ function AdminDashboard({
     }
     triggerToast?.('Note deleted from customer dashboard.', 'success');
     setNoteText('');
+    setNoteAmount('');
     setNoteCustomerId('');
   };
 
@@ -2407,12 +2535,14 @@ function AdminDashboard({
 
     const completedPayouts = payoutRequests.filter(p => p.status === 'Successful');
 
-    // Archive completed payouts by month, most recent month first. Grouped
-    // by the settled month label already shown per-row (falls back to the
-    // request's created_at month if month_paid is missing), so an admin can
-    // collapse the log down to just the months they care about.
+    // Archive completed payouts by real calendar month (the month the payout
+    // was actually settled in), most recent month first - so all of August's
+    // payouts land in one "August 2026" folder, all of July's in "July 2026",
+    // etc., regardless of which 32-day cycle label each individual record
+    // carries. The per-record cycle label (month_paid) still displays inside
+    // each row - only the folder grouping key changed.
     const groupKey = (p: PayoutRequest) =>
-      p.month_paid || new Date(p.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      new Date(p.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
     const byMonth = new Map<string, PayoutRequest[]>();
     completedPayouts.forEach(p => {
       const key = groupKey(p);
@@ -2601,17 +2731,24 @@ function AdminDashboard({
     const totalFee = isPartialPayout
       ? target.daily_amount
       : sumCurrencyValues(uncollectedMonths.map(monthHistoricalDailyRate));
-    const payoutAmount = Math.max(0, totalAmount - totalFee);
+    // Manual balance adjustments (e.g. a quick partial withdrawal sent via
+    // the Customer Note box) are folded in here too - a negative adjustment
+    // means money was already sent outside this payout flow, so it reduces
+    // what's still owed. A positive adjustment (a correction/bonus) adds to
+    // it. Same sign convention as everywhere else this total is shown.
+    const adjustmentTotal = sumCurrencyValues((balanceAdjustments[manualPayoutCustomerId] || []).map(a => Number(a.amount)));
+    const payoutAmount = Math.max(0, totalAmount - totalFee + adjustmentTotal);
     return {
       uncollectedMonths,
       totalDays: isPartialPayout ? runningDays.length : uncollectedMonths.reduce((s, m) => s + m.total_days, 0),
       totalAmount,
       totalFee,
+      adjustmentTotal,
       payoutAmount,
       target,
       isPartialPayout
     };
-  }, [manualPayoutCustomerId, savedMonths, customers]);
+  }, [manualPayoutCustomerId, savedMonths, customers, balanceAdjustments]);
 
   const pendingTransactions = useMemo(() => {
     return transactions.filter(t => t.status === 'Pending');
@@ -3295,6 +3432,22 @@ function AdminDashboard({
                         <p className="text-[11px] text-slate-500 font-bold">
                           Balance/Amount: ₦{((markedDays[cust.id] || []).reduce((s, d) => s + d.amount, 0)).toLocaleString()}
                         </p>
+                        {(() => {
+                          const custAdjustmentTotal = sumCurrencyValues((balanceAdjustments[cust.id] || []).map(a => Number(a.amount)));
+                          const custUncollected = sumCurrencyValues((savedMonths[cust.id] || []).filter(m => m.status === 'saved' || m.status === 'requested').map(m => m.total_amount));
+                          const custActiveCycle = (markedDays[cust.id] || []).reduce((s, d) => s + d.amount, 0);
+                          if (custAdjustmentTotal === 0) return null;
+                          return (
+                            <>
+                              <p className={`text-[11px] font-bold ${custAdjustmentTotal < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                                Adjustments: {custAdjustmentTotal > 0 ? '+' : ''}₦{custAdjustmentTotal.toLocaleString()}
+                              </p>
+                              <p className="text-[11px] text-slate-500 font-bold">
+                                Total Balance (incl. adjustments): ₦{(custActiveCycle + custUncollected + custAdjustmentTotal).toLocaleString()}
+                              </p>
+                            </>
+                          );
+                        })()}
                         <p className="text-[11px] text-slate-500 font-bold">
                           Month: {(() => {
                             const days = markedDays[cust.id] || [];
@@ -4024,6 +4177,20 @@ function AdminDashboard({
       {/* Payouts Control with Manual Triggers */}
       {activeTab === 'payouts' && (
         <div className="space-y-6 animate-fade-in text-slate-800 font-bold">
+          <SectionPageBar
+            pages={[
+              { key: 'ledger', label: 'Outstanding Ledger', icon: FileText },
+              { key: 'trigger', label: 'Trigger Payout', icon: Coins },
+              { key: 'pending', label: 'Pending Requests', icon: Clock },
+              { key: 'withdrawals', label: 'Withdrawal Logs', icon: FileText },
+              { key: 'archive', label: 'Payout Archive', icon: Landmark },
+            ]}
+            active={payoutsPage}
+            onChange={setPayoutsPage}
+          />
+
+          {payoutsPage === 'ledger' && (
+          <>
           {/* FEATURE 1 (Admin): Outstanding Payout Ledger */}
           <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
             <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide mb-1 font-bold">Outstanding Payout Ledger</h3>
@@ -4078,10 +4245,13 @@ function AdminDashboard({
               </div>
             )}
           </div>
+          </>
+          )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {payoutsPage === 'trigger' && (
+          <div className="grid grid-cols-1 gap-6">
             {/* Trigger manual payout form */}
-            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs lg:col-span-1 h-fit">
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs max-w-xl">
               <h3 className="text-sm font-bold text-emerald-950 mb-2 uppercase tracking-wide flex items-center gap-1.5 font-bold">
                 <Coins className="w-5 h-5 text-emerald-700" />
                 Trigger Manual Payout
@@ -4114,6 +4284,12 @@ function AdminDashboard({
                     )}
                     <p>Saved Accumulation: ₦{manualPayoutCalculation.totalAmount.toLocaleString()}</p>
                     <p>Company Fee ({manualPayoutCalculation.isPartialPayout ? 1 : manualPayoutCalculation.uncollectedMonths.length} × 1 Day, at each month's own saved rate): - ₦{manualPayoutCalculation.totalFee.toLocaleString()}</p>
+                    {manualPayoutCalculation.adjustmentTotal !== 0 && (
+                      <p className={manualPayoutCalculation.adjustmentTotal < 0 ? 'text-red-700' : 'text-emerald-800'}>
+                        Prior Balance Adjustments: {manualPayoutCalculation.adjustmentTotal > 0 ? '+' : ''}₦{manualPayoutCalculation.adjustmentTotal.toLocaleString()}
+                        {manualPayoutCalculation.adjustmentTotal < 0 ? ' (already sent, deducted here)' : ''}
+                      </p>
+                    )}
                     <p className="text-emerald-800 border-t border-amber-200 pt-1 font-black">
                       Expected Payout: ₦{manualPayoutCalculation.payoutAmount.toLocaleString()}
                     </p>
@@ -4191,9 +4367,13 @@ function AdminDashboard({
                 </button>
               </form>
             </div>
+          </div>
+          )}
 
+          {payoutsPage === 'pending' && (
+          <div className="grid grid-cols-1 gap-6">
             {/* Pending payout requests - awaiting admin approval */}
-            <div className="bg-white p-6 rounded-3xl border border-amber-200 shadow-sm lg:col-span-2">
+            <div className="bg-white p-6 rounded-3xl border border-amber-200 shadow-sm">
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide font-bold">Pending Payout Requests</h3>
                 <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">
@@ -4232,12 +4412,26 @@ function AdminDashboard({
                 </div>
               )}
             </div>
+          </div>
+          )}
 
+          {payoutsPage === 'withdrawals' && (
+          <div className="grid grid-cols-1 gap-6">
             {/* Customer Payout logs table */}
-            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs lg:col-span-2">
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
               <div className="mb-4">
                 <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide font-bold">Customer Withdrawal Logs</h3>
                 <p className="text-xs text-slate-500 font-medium">1-day company fee is deducted automatically when calculating the payout amount.</p>
+              </div>
+              <div className="relative mb-4">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={withdrawalLogsSearch}
+                  onChange={(e) => setWithdrawalLogsSearch(e.target.value)}
+                  placeholder="Search by customer name..."
+                  className="w-full pl-9 pr-3 py-2.5 border border-emerald-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                />
               </div>
               <div className="overflow-x-auto text-slate-800 font-semibold">
                 <table className="w-full text-left text-xs border-collapse">
@@ -4254,16 +4448,27 @@ function AdminDashboard({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-emerald-50">
-                    {payoutRequests.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="p-4 text-center text-slate-400 font-medium">No previous payout logs.</td>
-                      </tr>
-                    ) : (
-                      payoutRequests.slice().sort((a, b) => {
+                    {(() => {
+                      const q = withdrawalLogsSearch.trim().toLowerCase();
+                      const rows = payoutRequests.slice().sort((a, b) => {
                         const nameA = profiles.find(p => p.id === a.customer_id)?.name || a.customer_name || '';
                         const nameB = profiles.find(p => p.id === b.customer_id)?.name || b.customer_name || '';
                         return nameA.localeCompare(nameB);
-                      }).map(h => (
+                      }).filter(h => {
+                        if (!q) return true;
+                        const name = profiles.find(p => p.id === h.customer_id)?.name || h.customer_name || '';
+                        return name.toLowerCase().includes(q);
+                      });
+                      if (rows.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={8} className="p-4 text-center text-slate-400 font-medium">
+                              {q ? 'No withdrawal logs match that search.' : 'No previous payout logs.'}
+                            </td>
+                          </tr>
+                        );
+                      }
+                      return rows.map(h => (
                         <tr key={h.id}>
                           <td className="p-3 text-slate-500">
                             {new Date(h.created_at).toLocaleDateString()}
@@ -4313,21 +4518,35 @@ function AdminDashboard({
                             )}
                           </td>
                         </tr>
-                      ))
-                    )}
+                      ));
+                    })()}
                   </tbody>
                 </table>
               </div>
             </div>
+          </div>
+          )}
 
+          {payoutsPage === 'archive' && (
+          <div className="grid grid-cols-1 gap-6">
             {/* Payout History Archive - records moved off the active ledger on approval */}
-            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs lg:col-span-2">
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
               <div className="mb-4">
                 <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5 font-bold">
                   <Landmark className="w-4 h-4 text-emerald-700" />
                   Payout History Archive
                 </h3>
                 <p className="text-xs text-slate-500 font-medium">Settled saved-month records that have been removed from the active contributions ledger.</p>
+              </div>
+              <div className="relative mb-4">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={payoutArchiveSearch}
+                  onChange={(e) => setPayoutArchiveSearch(e.target.value)}
+                  placeholder="Search by customer name..."
+                  className="w-full pl-9 pr-3 py-2.5 border border-emerald-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                />
               </div>
               <div className="overflow-x-auto text-slate-800 font-semibold">
                 <table className="w-full text-left text-xs border-collapse">
@@ -4342,12 +4561,22 @@ function AdminDashboard({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-emerald-50">
-                    {payoutHistory.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="p-4 text-center text-slate-400 font-medium">No archived payouts yet.</td>
-                      </tr>
-                    ) : (
-                      payoutHistory.slice(0, 25).map(h => (
+                    {(() => {
+                      const q = payoutArchiveSearch.trim().toLowerCase();
+                      const filtered = q
+                        ? payoutHistory.filter(h => (profiles.find(p => p.id === h.customer_id)?.name || h.customer_name || '').toLowerCase().includes(q))
+                        : payoutHistory;
+                      const rows = q ? filtered : filtered.slice(0, 25);
+                      if (rows.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={6} className="p-4 text-center text-slate-400 font-medium">
+                              {q ? 'No archived payouts match that search.' : 'No archived payouts yet.'}
+                            </td>
+                          </tr>
+                        );
+                      }
+                      return rows.map(h => (
                         <tr key={h.id}>
                           <td className="p-3 text-slate-500">{new Date(h.approved_at).toLocaleDateString()}</td>
                           <td className="p-3 font-bold text-slate-700">{profiles.find(p => p.id === h.customer_id)?.name || h.customer_name || h.customer_id}</td>
@@ -4356,13 +4585,14 @@ function AdminDashboard({
                           <td className="p-3 font-bold text-emerald-800">₦{h.payout_amount.toLocaleString()}</td>
                           <td className="p-3 font-medium text-slate-700">{h.payout_method === 'Cash' ? 'Cash Payment' : `${h.bank_name} • ${h.account_number}`}</td>
                         </tr>
-                      ))
-                    )}
+                      ));
+                    })()}
                   </tbody>
                 </table>
               </div>
             </div>
           </div>
+          )}
         </div>
       )}
 
@@ -4604,52 +4834,92 @@ function AdminDashboard({
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div>
-              <h4 className="font-extrabold text-amber-800 text-xs uppercase mb-3 flex items-center gap-1 font-bold">
-                <Clock className="w-4 h-4" />
-                Active Savers (Yet to Withdraw this Cycle)
-              </h4>
-              <div className="overflow-x-auto border border-emerald-100 rounded-2xl">
-                <table className="w-full text-left text-[11px] border-collapse">
-                  <thead>
-                    <tr className="bg-amber-50 text-amber-900 font-extrabold border-b border-amber-200">
-                      <th className="p-3">Customer</th>
-                      <th className="p-3">Pace</th>
-                      <th className="p-3">Days Marked</th>
-                      <th className="p-3 text-right">Active Balance</th>
-                      <th className="p-3 text-right">Uncollected Saved</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-emerald-50 bg-white text-slate-800 font-semibold">
-                    {recordSheet.yetToWithdraw.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="p-3 text-center text-slate-400 font-medium">No active savers yet.</td>
-                      </tr>
-                    ) : (
-                      recordSheet.yetToWithdraw.map(c => {
-                        const markedCount = (markedDays[c.id] || []).length;
-                        const balance = markedCount * c.daily_amount;
-                        const uncollectedTotal = sumCurrencyValues(
-                          (savedMonths[c.id] || [])
-                            .filter(m => m.status === 'saved' || m.status === 'requested')
-                            .map(m => m.total_amount)
-                        );
-                        return (
-                          <tr key={c.id}>
-                            <td className="p-3 font-bold">{c.name}</td>
-                            <td className="p-3">₦{c.daily_amount.toLocaleString()}/day</td>
-                            <td className="p-3">{markedCount} / 32</td>
-                            <td className="p-3 text-right font-bold text-emerald-800">₦{balance.toLocaleString()}</td>
-                            <td className="p-3 text-right font-bold text-slate-700">
-                              {uncollectedTotal > 0 ? `₦${uncollectedTotal.toLocaleString()}` : '—'}
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
+            <div className="rounded-2xl border border-slate-100 overflow-hidden h-fit">
+              <button
+                type="button"
+                onClick={() => setActiveSaversOpen(v => !v)}
+                className="w-full flex items-center justify-between gap-3 p-3.5 bg-amber-50 hover:bg-amber-100/70 transition text-left"
+              >
+                <h4 className="font-extrabold text-amber-800 text-xs uppercase flex items-center gap-1 font-bold">
+                  <Clock className="w-4 h-4" />
+                  Active Savers (Yet to Withdraw this Cycle)
+                </h4>
+                <span className="flex items-center gap-2 text-[11px] shrink-0">
+                  <span className="rounded-full bg-amber-100 text-amber-800 border border-amber-200 px-2.5 py-0.5 font-black">
+                    {recordSheet.yetToWithdraw.length}
+                  </span>
+                  {activeSaversOpen ? <ChevronDown className="h-4 w-4 text-amber-800" /> : <ChevronRight className="h-4 w-4 text-amber-800" />}
+                </span>
+              </button>
+              {activeSaversOpen && (
+                <div className="p-3.5 bg-white space-y-3">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <input
+                      type="text"
+                      value={activeSaversSearch}
+                      onChange={(e) => setActiveSaversSearch(e.target.value)}
+                      placeholder="Search by customer name..."
+                      className="w-full pl-9 pr-3 py-2.5 border border-emerald-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                    />
+                  </div>
+                  <div className="overflow-x-auto border border-emerald-100 rounded-2xl">
+                    <table className="w-full text-left text-[11px] border-collapse">
+                      <thead>
+                        <tr className="bg-amber-50 text-amber-900 font-extrabold border-b border-amber-200">
+                          <th className="p-3">Customer</th>
+                          <th className="p-3">Pace</th>
+                          <th className="p-3">Days Marked</th>
+                          <th className="p-3 text-right">Active Balance</th>
+                          <th className="p-3 text-right">Uncollected Saved</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-emerald-50 bg-white text-slate-800 font-semibold">
+                        {(() => {
+                          const q = activeSaversSearch.trim().toLowerCase();
+                          const filtered = q ? recordSheet.yetToWithdraw.filter(c => c.name.toLowerCase().includes(q)) : recordSheet.yetToWithdraw;
+                          if (filtered.length === 0) {
+                            return (
+                              <tr>
+                                <td colSpan={5} className="p-3 text-center text-slate-400 font-medium">
+                                  {q ? 'No active savers match that search.' : 'No active savers yet.'}
+                                </td>
+                              </tr>
+                            );
+                          }
+                          return filtered.map(c => {
+                            const markedCount = (markedDays[c.id] || []).length;
+                            const balance = markedCount * c.daily_amount;
+                            const uncollectedTotal = sumCurrencyValues(
+                              (savedMonths[c.id] || [])
+                                .filter(m => m.status === 'saved' || m.status === 'requested')
+                                .map(m => m.total_amount)
+                            );
+                            const adjustmentTotal = sumCurrencyValues((balanceAdjustments[c.id] || []).map(a => Number(a.amount)));
+                            const uncollectedWithAdjustments = uncollectedTotal + adjustmentTotal;
+                            return (
+                              <tr key={c.id}>
+                                <td className="p-3 font-bold">{c.name}</td>
+                                <td className="p-3">₦{c.daily_amount.toLocaleString()}/day</td>
+                                <td className="p-3">{markedCount} / 32</td>
+                                <td className="p-3 text-right font-bold text-emerald-800">₦{balance.toLocaleString()}</td>
+                                <td className="p-3 text-right font-bold text-slate-700">
+                                  {uncollectedWithAdjustments !== 0 ? `₦${uncollectedWithAdjustments.toLocaleString()}` : '—'}
+                                  {adjustmentTotal !== 0 && (
+                                    <span className={`block text-[9px] font-bold ${adjustmentTotal < 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+                                      (adj. {adjustmentTotal > 0 ? '+' : ''}₦{adjustmentTotal.toLocaleString()})
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          });
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div>
@@ -4657,57 +4927,146 @@ function AdminDashboard({
                 <CheckCircle2 className="w-4 h-4" />
                 Settled Savers (Paid Out Logs)
               </h4>
-              {recordSheet.completedPayoutsByMonth.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-emerald-200 p-4 text-center text-slate-400 text-xs">No previous payouts completed.</div>
-              ) : (
-                <div className="space-y-2">
-                  {recordSheet.completedPayoutsByMonth.map(group => {
-                    const isOpen = expandedSettlementMonth === group.month;
-                    return (
-                      <div key={group.month} className="rounded-2xl border border-slate-100 overflow-hidden">
-                        <button
-                          type="button"
-                          onClick={() => setExpandedSettlementMonth(isOpen ? null : group.month)}
-                          className="w-full flex items-center justify-between gap-3 p-3.5 bg-emerald-50/60 hover:bg-emerald-100/60 transition text-left"
-                        >
-                          <span className="text-xs font-black text-emerald-900">{group.month}</span>
-                          <span className="flex items-center gap-2 text-[11px]">
-                            <span className="rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 font-black">
-                              {group.records.length} settled
+              <div className="relative mb-3">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={settledSaversSearch}
+                  onChange={(e) => setSettledSaversSearch(e.target.value)}
+                  placeholder="Search by customer name..."
+                  className="w-full pl-9 pr-3 py-2.5 border border-emerald-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                />
+              </div>
+              {(() => {
+                const q = settledSaversSearch.trim().toLowerCase();
+                const groups = q
+                  ? recordSheet.completedPayoutsByMonth
+                      .map(group => ({ ...group, records: group.records.filter(r => r.customer_name.toLowerCase().includes(q)) }))
+                      .filter(group => group.records.length > 0)
+                  : recordSheet.completedPayoutsByMonth;
+
+                if (groups.length === 0) {
+                  return (
+                    <div className="rounded-2xl border border-dashed border-emerald-200 p-4 text-center text-slate-400 text-xs">
+                      {q ? 'No settled savers match that search.' : 'No previous payouts completed.'}
+                    </div>
+                  );
+                }
+                return (
+                  <div className="space-y-2">
+                    {groups.map(group => {
+                      const isOpen = q ? true : expandedSettlementMonth === group.month;
+                      return (
+                        <div key={group.month} className="rounded-2xl border border-slate-100 overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedSettlementMonth(isOpen && !q ? null : group.month)}
+                            className="w-full flex items-center justify-between gap-3 p-3.5 bg-emerald-50/60 hover:bg-emerald-100/60 transition text-left"
+                          >
+                            <span className="text-xs font-black text-emerald-900">{group.month}</span>
+                            <span className="flex items-center gap-2 text-[11px]">
+                              <span className="rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 font-black">
+                                {group.records.length} settled
+                              </span>
+                              <span className="font-black text-emerald-800">₦{group.totalPayout.toLocaleString()}</span>
+                              {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                             </span>
-                            <span className="font-black text-emerald-800">₦{group.totalPayout.toLocaleString()}</span>
-                            {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                          </span>
-                        </button>
-                        {isOpen && (
-                          <div className="overflow-x-auto bg-white">
-                            <table className="w-full text-left text-[11px] border-collapse">
-                              <thead>
-                                <tr className="bg-emerald-50 text-emerald-900 font-extrabold border-b border-emerald-200">
-                                  <th className="p-3">Customer</th>
-                                  <th className="p-3">Cleared Period</th>
-                                  <th className="p-3">Cleared Sum</th>
-                                  <th className="p-3 font-semibold text-emerald-800">Payout Issued</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-emerald-50 text-slate-800">
-                                {group.records.map(p => (
-                                  <tr key={p.id}>
-                                    <td className="p-3 font-bold">{p.customer_name}</td>
-                                    <td className="p-3 font-extrabold text-amber-800 text-[10px]">{p.month_paid || 'N/A'}</td>
-                                    <td className="p-3 font-medium">₦{p.amount.toLocaleString()}</td>
-                                    <td className="p-3 font-bold text-emerald-800">₦{p.payout_amount.toLocaleString()}</td>
+                          </button>
+                          {isOpen && (
+                            <div className="overflow-x-auto bg-white">
+                              <table className="w-full text-left text-[11px] border-collapse">
+                                <thead>
+                                  <tr className="bg-emerald-50 text-emerald-900 font-extrabold border-b border-emerald-200">
+                                    <th className="p-3">Customer</th>
+                                    <th className="p-3">Cleared Period</th>
+                                    <th className="p-3">Cleared Sum</th>
+                                    <th className="p-3 font-semibold text-emerald-800">Payout Issued</th>
                                   </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                                </thead>
+                                <tbody className="divide-y divide-emerald-50 text-slate-800">
+                                  {group.records.map(p => (
+                                    <tr key={p.id}>
+                                      <td className="p-3 font-bold">{p.customer_name}</td>
+                                      <td className="p-3 font-extrabold text-amber-800 text-[10px]">{p.month_paid || 'N/A'}</td>
+                                      <td className="p-3 font-medium">₦{p.amount.toLocaleString()}</td>
+                                      <td className="p-3 font-bold text-emerald-800">₦{p.payout_amount.toLocaleString()}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+
+          {/* Monthly Financial Summary, folder-by-month (live current month + archive) */}
+          <div>
+            <h4 className="font-extrabold text-emerald-900 text-xs uppercase mb-3 flex items-center gap-1 font-bold">
+              <LayoutDashboard className="w-4 h-4" />
+              Monthly Financial Summary
+            </h4>
+            <div className="space-y-2">
+              {(() => {
+                const liveEntry = {
+                  key: currentPeriodKey,
+                  label: periodLabelFromKey(currentPeriodKey),
+                  isLive: true,
+                  total_contributions: liveMonth.contributions,
+                  total_profit: liveMonth.profit,
+                  total_expenses: liveMonth.expenses,
+                  total_payout: liveMonth.payout,
+                  remaining_balance: liveMonth.remaining,
+                  date_archived: null as string | null,
+                };
+                const archivedEntries = monthlySummaries.map(s => ({
+                  key: s.id,
+                  label: s.month_label,
+                  isLive: false,
+                  total_contributions: Number(s.total_contributions),
+                  total_profit: Number(s.total_profit),
+                  total_expenses: Number(s.total_expenses),
+                  total_payout: Number(s.total_payout),
+                  remaining_balance: Number(s.remaining_balance),
+                  date_archived: s.date_archived as string,
+                }));
+                const allMonths = [liveEntry, ...archivedEntries];
+                return allMonths.map(entry => {
+                  const isOpen = expandedFinancialMonth === entry.key;
+                  return (
+                    <div key={entry.key} className="rounded-2xl border border-slate-100 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedFinancialMonth(isOpen ? null : entry.key)}
+                        className="w-full flex items-center justify-between p-4 bg-slate-50/60 hover:bg-slate-100/60 transition"
+                      >
+                        <span className="text-xs font-black text-slate-800 flex items-center gap-2">
+                          {entry.label}
+                          {entry.isLive && (
+                            <span className="rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 text-[9px] font-black uppercase">Live</span>
+                          )}
+                        </span>
+                        {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                      </button>
+                      {isOpen && (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 bg-white text-sm">
+                          <div><span className="text-slate-600 block font-bold text-[10px] uppercase">Total Collected</span><span className="font-black text-emerald-900 text-base">₦{entry.total_contributions.toLocaleString()}</span></div>
+                          <div><span className="text-slate-600 block font-bold text-[10px] uppercase">Total Profit</span><span className="font-black text-emerald-900 text-base">₦{entry.total_profit.toLocaleString()}</span></div>
+                          <div><span className="text-slate-600 block font-bold text-[10px] uppercase">Total Expenses</span><span className="font-black text-slate-900 text-base">₦{entry.total_expenses.toLocaleString()}</span></div>
+                          <div><span className="text-slate-600 block font-bold text-[10px] uppercase">Total Paid Out</span><span className="font-black text-slate-900 text-base">₦{entry.total_payout.toLocaleString()}</span></div>
+                          <div><span className="text-slate-600 block font-bold text-[10px] uppercase">Remaining Balance</span><span className="font-black text-amber-800 text-base">₦{entry.remaining_balance.toLocaleString()}</span></div>
+                          <div><span className="text-slate-600 block font-bold text-[10px] uppercase">{entry.isLive ? 'Status' : 'Date Archived'}</span><span className="font-black text-slate-900 text-base">{entry.isLive ? 'Still accumulating' : new Date(entry.date_archived!).toLocaleDateString()}</span></div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
             </div>
           </div>
         </div>
@@ -5251,7 +5610,7 @@ function AdminDashboard({
                 </div>
 
                 <div className="divide-y divide-slate-100 text-xs">
-                  {currentMonthExpenseRecords.length === 0 && <p className="p-3 text-slate-500">No expense entries recorded this month.</p>}
+                  {currentMonthExpenseRecords.length === 0 && currentMonthManualExpenses.length === 0 && <p className="p-3 text-slate-500">No expense entries recorded this month.</p>}
                   {currentMonthExpenseRecords.map(r => (
                     <div key={r.id} className="py-2.5">
                       <div className="flex justify-between items-center">
@@ -5261,6 +5620,18 @@ function AdminDashboard({
                       <div className="flex justify-between items-center text-[10px] text-slate-500 mt-0.5">
                         <span>{r.record_date}</span>
                         {r.notes && <span className="italic">{r.notes}</span>}
+                      </div>
+                    </div>
+                  ))}
+                  {currentMonthManualExpenses.map(e => (
+                    <div key={e.id} className="py-2.5">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-slate-800">{e.description || 'Notepad entry'}</span>
+                        <span className="font-black text-slate-900">₦{Number(e.amount).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-[10px] text-slate-500 mt-0.5">
+                        <span>{e.expense_date}</span>
+                        <span className="italic text-emerald-600">from Quick Notepad</span>
                       </div>
                     </div>
                   ))}
@@ -5805,6 +6176,13 @@ function AdminDashboard({
             >
               <Plus className="w-3.5 h-3.5" /> Add row
             </button>
+            <button
+              type="button"
+              onClick={handleSaveNotepadToExpenses}
+              className="mt-3 ml-4 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 px-4 py-2 rounded-xl inline-flex items-center gap-1.5"
+            >
+              <Save className="w-3.5 h-3.5" /> Save to Expenses
+            </button>
           </div>
 
           {/* Admin-to-Customer Messaging */}
@@ -5813,7 +6191,7 @@ function AdminDashboard({
               <MessageSquare className="w-5 h-5 text-emerald-700" />
               Customer Note
             </h3>
-            <p className="text-xs text-slate-500 mb-4 font-medium">Appears directly below the balance card on the selected customer's dashboard. Only the latest note shows - editing replaces it, deleting removes it immediately.</p>
+            <p className="text-xs text-slate-500 mb-4 font-medium">Appears directly below the balance card on the selected customer's dashboard. Only the latest note shows - editing replaces it, deleting removes it immediately. Adding an amount adjusts their balance across every board immediately (e.g. -10000 for a quick partial withdrawal).</p>
             <div className="space-y-3">
               <SearchableCustomerSelect
                 customers={profiles.filter(p => p.role === 'Customer')}
@@ -5828,6 +6206,21 @@ function AdminDashboard({
                 placeholder="e.g. Your payout has been scheduled for Friday."
                 className="input-green text-sm font-medium"
               />
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">Amount (optional)</label>
+                <input
+                  type="number"
+                  value={noteAmount}
+                  onChange={e => setNoteAmount(e.target.value)}
+                  placeholder="e.g. -10000 for a partial withdrawal"
+                  className="input-green text-sm font-semibold"
+                />
+                {noteCustomerId && (
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Current balance adjustment total for this customer: ₦{sumCurrencyValues((balanceAdjustments[noteCustomerId] || []).map(a => Number(a.amount))).toLocaleString()}
+                  </p>
+                )}
+              </div>
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -5847,6 +6240,21 @@ function AdminDashboard({
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
+              {noteCustomerId && (balanceAdjustments[noteCustomerId] || []).length > 0 && (
+                <div className="pt-2 border-t border-slate-100">
+                  <p className="text-[10px] font-black uppercase text-slate-500 mb-1.5">Recent Adjustments</p>
+                  <div className="max-h-32 overflow-y-auto space-y-1">
+                    {(balanceAdjustments[noteCustomerId] || []).slice(0, 8).map(a => (
+                      <div key={a.id} className="flex justify-between items-center text-[10px]">
+                        <span className="text-slate-500">{new Date(a.created_at).toLocaleDateString()} {a.note ? `- ${a.note}` : ''}</span>
+                        <span className={`font-black ${Number(a.amount) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                          {Number(a.amount) > 0 ? '+' : ''}₦{Number(a.amount).toLocaleString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -6072,13 +6480,13 @@ function StaffDashboard({
 function CustomerDashboard({ 
   customer, transactions, markedDays, supportDetails, onAddPayoutRequest, payoutRequests, savedMonths, cycleArchives, onAddCustomerPendingTransaction, onUpdateCustomerSettings,
   activeLoan, myLoans, myLoanRequests, onRequestLoan, profiles,
-  myMonthlySavingsPlan, myMonthlySavingsMonths, creditBalance, onSelfEnrollMonthly
+  myMonthlySavingsPlan, myMonthlySavingsMonths, creditBalance, onSelfEnrollMonthly, myBalanceAdjustments
 }: { 
   customer: Profile, transactions: Transaction[], markedDays: MarkedDay[], supportDetails: SupportSettings, payoutRequests: PayoutRequest[], savedMonths: SavedMonth[], cycleArchives: any[], onAddPayoutRequest: (bank: string, acctNum: string, acctName: string, contributionIds: string[]) => void,
   onAddCustomerPendingTransaction: (amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => void, onUpdateCustomerSettings: (phone: string, dailyAmount: number, email: string) => void,
   activeLoan: Loan | null, myLoans: Loan[], myLoanRequests: LoanRequest[], onRequestLoan: (customerId: string) => void, profiles: Profile[],
   myMonthlySavingsPlan: MonthlySavingsPlan | null, myMonthlySavingsMonths: MonthlySavingsMonth[], creditBalance: CustomerCreditBalance | null,
-  onSelfEnrollMonthly: (amount: number) => void
+  onSelfEnrollMonthly: (amount: number) => void, myBalanceAdjustments: BalanceAdjustment[]
 }) {
   const [customerTab, setCustomerTab] = useState<'tracker' | 'transactions' | 'deposit' | 'settings' | 'history' | 'monthly-savings'>('tracker');
   const [selectedTrackerMonthKey, setSelectedTrackerMonthKey] = useState<string | null>(null);
@@ -6115,8 +6523,12 @@ function CustomerDashboard({
   const totalUncollected = sumCurrencyValues(
     savedMonths.filter(m => m.status === 'saved' || m.status === 'requested').map(m => m.total_amount)
   );
+  // Manual balance adjustments (e.g. a quick partial withdrawal an admin
+  // sent outside the normal payout flow) - a negative amount here reduces
+  // the customer's balance, reflected immediately across every board.
+  const myAdjustmentTotal = sumCurrencyValues(myBalanceAdjustments.map(a => Number(a.amount)));
   // Total across everything the customer currently has with the company
-  const totalSaved = totalActiveCycle + totalUncollected;
+  const totalSaved = totalActiveCycle + totalUncollected + myAdjustmentTotal;
 
   // Loan-derived values, shared by both the default Tracker tab (the real
   // Balance Card lives there) and the History tab's summary card - computed
@@ -6336,11 +6748,16 @@ function CustomerDashboard({
                 explicit admin-approved payout removes a specific month */}
             <div className="bg-gradient-to-br from-emerald-900 to-emerald-950 text-white p-5 sm:p-6 rounded-3xl shadow-md">
               <p className="text-[11px] uppercase font-bold tracking-wider text-amber-400">My Savings Account</p>
-              <p className="text-3xl sm:text-4xl font-black mt-1.5 text-white">₦{(totalActiveCycle + uncollectedTotal).toLocaleString()}</p>
+              <p className="text-3xl sm:text-4xl font-black mt-1.5 text-white">₦{(totalActiveCycle + uncollectedTotal + myAdjustmentTotal).toLocaleString()}</p>
               <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3 text-xs font-semibold text-emerald-100">
                 <span>Running: ₦{totalActiveCycle.toLocaleString()}</span>
                 <span>Uncollected: ₦{uncollectedTotal.toLocaleString()}</span>
                 <span>Lifetime Collected: ₦{collectedTotal.toLocaleString()}</span>
+                {myAdjustmentTotal !== 0 && (
+                  <span className={myAdjustmentTotal < 0 ? 'text-red-300' : 'text-amber-200'}>
+                    Adjustments: {myAdjustmentTotal > 0 ? '+' : ''}₦{myAdjustmentTotal.toLocaleString()}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -6378,6 +6795,14 @@ function CustomerDashboard({
                   <span>Running: ₦{totalActiveCycle.toLocaleString()}</span>
                   <span>•</span>
                   <span>Uncollected: ₦{totalUncollected.toLocaleString()}</span>
+                  {myAdjustmentTotal !== 0 && (
+                    <>
+                      <span>•</span>
+                      <span className={myAdjustmentTotal < 0 ? 'text-red-500' : 'text-emerald-700'}>
+                        Adjustments: {myAdjustmentTotal > 0 ? '+' : ''}₦{myAdjustmentTotal.toLocaleString()}
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
               <div className="hidden sm:flex icon-circle w-16 h-16 shrink-0"><Wallet className="w-7 h-7" /></div>
@@ -7328,6 +7753,8 @@ export default function App() {
   const [monthlySavingsPlans, setMonthlySavingsPlans] = useState<MonthlySavingsPlan[]>([]);
   const [monthlySavingsMonths, setMonthlySavingsMonths] = useState<MonthlySavingsMonth[]>([]);
   const [customerCreditBalance, setCustomerCreditBalance] = useState<CustomerCreditBalance | null>(null);
+  const [balanceAdjustments, setBalanceAdjustments] = useState<Record<string, BalanceAdjustment[]>>({});
+  const [manualExpenses, setManualExpenses] = useState<ManualExpense[]>([]);
   const [supportDetails, setSupportDetails] = useState<SupportSettings>({
     id: 1,
     support_phone: '+234 803 461 2345',
@@ -7422,6 +7849,8 @@ export default function App() {
         await fetchLoanHistory(latestUser);
         await fetchMonthlySavings(latestUser);
         await fetchCreditBalance(latestUser);
+        await fetchBalanceAdjustments(latestUser);
+        await fetchManualExpenses(latestUser);
       } catch (err) {
         console.error("Background sync failed:", err);
       }
@@ -7435,7 +7864,7 @@ export default function App() {
     //    loans, loan_requests, payout_requests.
     const channel = supabase.channel('schema-db-changes');
 
-    const tableNames = ['transactions', 'marked_days', 'notifications', 'loans', 'loan_requests', 'payout_requests'] as const;
+    const tableNames = ['transactions', 'marked_days', 'notifications', 'loans', 'loan_requests', 'payout_requests', 'balance_adjustments', 'manual_expenses'] as const;
     const events = ['INSERT', 'UPDATE', 'DELETE'] as const;
 
     tableNames.forEach((table) => {
@@ -7769,7 +8198,9 @@ export default function App() {
         fetchLoanRequests(profile),
         fetchLoanHistory(profile),
         fetchMonthlySavings(profile),
-        fetchCreditBalance(profile)
+        fetchCreditBalance(profile),
+        fetchBalanceAdjustments(profile),
+        fetchManualExpenses(profile)
       ]);
     }
     setIsLoading(false);
@@ -7929,6 +8360,42 @@ export default function App() {
       });
       setSavedMonths(grouped);
     }
+  };
+
+  // Loads manual balance adjustments (quick partial withdrawals/corrections
+  // sent via the admin Customer Note box). Admin/Staff see everyone's;
+  // a Customer only sees their own (matches the RLS policy).
+  const fetchBalanceAdjustments = async (userProfile: Profile) => {
+    let query = supabase.from('balance_adjustments').select('*').order('created_at', { ascending: false });
+    if (userProfile.role === 'Customer') {
+      query = query.eq('customer_id', userProfile.id);
+    }
+    const { data, error } = await query;
+    if (error) {
+      console.warn('Balance adjustments fetch failed:', error.message);
+      return;
+    }
+    if (data) {
+      const grouped: Record<string, BalanceAdjustment[]> = {};
+      data.forEach((item: any) => {
+        if (!grouped[item.customer_id]) grouped[item.customer_id] = [];
+        grouped[item.customer_id].push(item);
+      });
+      setBalanceAdjustments(grouped);
+    }
+  };
+
+  // Loads ad-hoc expense entries saved from the admin Quick Notepad, counted
+  // into the monthly Total Expenses figure alongside Cash Sheet records.
+  // Admin/Staff only - Customers never see this.
+  const fetchManualExpenses = async (userProfile: Profile) => {
+    if (userProfile.role === 'Customer') return;
+    const { data, error } = await supabase.from('manual_expenses').select('*').order('expense_date', { ascending: false });
+    if (error) {
+      console.warn('Manual expenses fetch failed:', error.message);
+      return;
+    }
+    if (data) setManualExpenses(data);
   };
 
   // Loads the "payout_history" archive: completed/approved payout requests, along with
@@ -8404,6 +8871,8 @@ export default function App() {
     await fetchLoans(userProfile);
     await fetchLoanRequests(userProfile);
     await fetchCreditBalance(userProfile);
+    await fetchBalanceAdjustments(userProfile);
+    await fetchManualExpenses(userProfile);
   };
 
   const createTransaction = async (customerId: string, amount: number, paymentMethod: 'Cash' | 'Bank Transfer' | 'Mobile Money', staffId: string) => {
@@ -9245,7 +9714,15 @@ export default function App() {
     const totalFee = isPartialPayout
       ? targetCustomer.daily_amount
       : sumCurrencyValues(uncollectedMonths.map(monthHistoricalDailyRate));
-    const payoutAmount = Math.max(0, totalAmount - totalFee);
+    // Same adjustment offset as manualPayoutCalculation's preview - a
+    // negative adjustment means money was already sent via a quick
+    // withdrawal (Customer Note box), so it's subtracted here to prevent
+    // double-paying. The per-month archive rows below stay historically
+    // accurate to what each month was actually worth; only the real
+    // cash-out amount (payout_requests.payout_amount, and what's actually
+    // sent) reflects the adjustment.
+    const adjustmentTotal = sumCurrencyValues((balanceAdjustments[customerId] || []).map(a => Number(a.amount)));
+    const payoutAmount = Math.max(0, totalAmount - totalFee + adjustmentTotal);
     const monthPaidText = isPartialPayout
       ? `${getNigerianMonthName()} (early payout - ${runningDays.length}/32 days)`
       : uncollectedMonths.map(m => m.month_label).join(', ');
@@ -9354,10 +9831,23 @@ export default function App() {
     setIsLoading(false);
     triggerToast(`Payout triggered! ₦${payoutAmount.toLocaleString()} ${isPartialPayout ? '(early payout)' : `across ${uncollectedMonths.length} month(s)`} archived.`, 'success');
 
+    // The adjustment total has now been factored into this payout - clear
+    // the consumed entries so they're never subtracted from a future payout
+    // again. Any adjustment sent AFTER this point (not yet fetched here)
+    // is untouched.
+    const consumedAdjustmentIds = (balanceAdjustments[customerId] || []).map(a => a.id);
+    if (consumedAdjustmentIds.length > 0) {
+      const { error: clearAdjError } = await supabase.from('balance_adjustments').delete().in('id', consumedAdjustmentIds);
+      if (clearAdjError) {
+        console.warn('Failed to clear settled balance adjustments:', clearAdjError.message);
+      }
+    }
+
     if (currentUser) {
       await fetchPayoutRequests(currentUser);
       await fetchSavedMonths(currentUser);
       await fetchCycleArchives(currentUser);
+      await fetchBalanceAdjustments(currentUser);
     }
   };
 
@@ -9758,6 +10248,15 @@ export default function App() {
                 triggerToast={triggerToast}
                 onResetPasswordToDefault={handleResetPasswordToDefault}
                 onRefreshProfiles={fetchGlobalConfiguration}
+                currentUserId={currentUser?.id || ''}
+                balanceAdjustments={balanceAdjustments}
+                manualExpenses={manualExpenses}
+                onRefreshAdjustmentsAndExpenses={async () => {
+                  if (currentUser) {
+                    await fetchBalanceAdjustments(currentUser);
+                    await fetchManualExpenses(currentUser);
+                  }
+                }}
                 onDeleteTransaction={deleteTransaction}
                 onAddTransaction={createTransaction}
                 onUpdateSupport={handleUpdateSupportDetails}
@@ -9824,6 +10323,7 @@ export default function App() {
                 myMonthlySavingsMonths={monthlySavingsMonths.filter(m => m.customer_id === currentUser.id)}
                 creditBalance={customerCreditBalance}
                 onSelfEnrollMonthly={handleCustomerSelfEnrollMonthly}
+                myBalanceAdjustments={balanceAdjustments[currentUser.id] || []}
               />
             )}
           </div>
