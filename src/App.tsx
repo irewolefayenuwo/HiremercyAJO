@@ -2136,6 +2136,10 @@ function AdminDashboard({
   const [noteCustomerId, setNoteCustomerId] = useState('');
   const [noteText, setNoteText] = useState('');
   const [noteAmount, setNoteAmount] = useState('');
+  // Guards against rapid double/triple-tap creating duplicate balance
+  // adjustments - a real incident produced 4 identical -10,000 entries from
+  // one intended click, all within 37ms of each other.
+  const [noteSubmitting, setNoteSubmitting] = useState(false);
 
   // When a customer is selected, load their existing note (if any) into the
   // textarea so the admin is editing the current note, not overwriting blind.
@@ -2147,10 +2151,12 @@ function AdminDashboard({
   };
 
   const handleSendCustomerNote = async () => {
-    if (!noteCustomerId) return;
+    if (!noteCustomerId || noteSubmitting) return;
+    setNoteSubmitting(true);
     const { error } = await supabase.from('profiles').update({ admin_note: noteText }).eq('id', noteCustomerId);
     if (error) {
       triggerToast?.(`Failed to send note: ${error.message}`, 'error');
+      setNoteSubmitting(false);
       return;
     }
 
@@ -2174,6 +2180,7 @@ function AdminDashboard({
         setNoteText('');
         setNoteAmount('');
         setNoteCustomerId('');
+        setNoteSubmitting(false);
         return;
       }
       onRefreshAdjustmentsAndExpenses();
@@ -2184,6 +2191,7 @@ function AdminDashboard({
     setNoteText('');
     setNoteAmount('');
     setNoteCustomerId('');
+    setNoteSubmitting(false);
   };
 
   // Deleting clears admin_note entirely - since the customer dashboard only
@@ -6225,15 +6233,15 @@ function AdminDashboard({
                 <button
                   type="button"
                   onClick={handleSendCustomerNote}
-                  disabled={!noteCustomerId}
+                  disabled={!noteCustomerId || noteSubmitting}
                   className="flex-1 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 text-white font-bold py-2.5 rounded-xl transition text-sm"
                 >
-                  {profiles.find(p => p.id === noteCustomerId)?.admin_note ? 'Save Edit' : 'Send Note'}
+                  {noteSubmitting ? 'Sending...' : (profiles.find(p => p.id === noteCustomerId)?.admin_note ? 'Save Edit' : 'Send Note')}
                 </button>
                 <button
                   type="button"
                   onClick={handleDeleteCustomerNote}
-                  disabled={!noteCustomerId || !profiles.find(p => p.id === noteCustomerId)?.admin_note}
+                  disabled={!noteCustomerId || noteSubmitting || !profiles.find(p => p.id === noteCustomerId)?.admin_note}
                   className="px-4 bg-red-50 hover:bg-red-100 disabled:opacity-30 text-red-700 font-bold py-2.5 rounded-xl transition text-sm flex items-center gap-1.5"
                   title="Delete note"
                 >
@@ -6927,7 +6935,16 @@ function CustomerDashboard({
               {canRequestLoan && !pendingLoanRequest && !activeLoan && (
                 <button
                   type="button"
-                  onClick={() => setShowLoanRequestModal(true)}
+                  onClick={() => {
+                    const threeMonthsAgo = new Date();
+                    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+                    const registeredDate = customer.created_at ? new Date(customer.created_at) : new Date();
+                    if (registeredDate > threeMonthsAgo) {
+                      alert("You're not eligible. Contact your agent.");
+                      return;
+                    }
+                    setShowLoanRequestModal(true);
+                  }}
                   className="mt-3 w-full bg-emerald-700 hover:bg-emerald-800 active:scale-[0.98] text-white font-bold py-2.5 rounded-xl text-xs transition-all duration-200 flex items-center justify-center gap-1"
                 >
                   Request Loan <ChevronRight className="w-3.5 h-3.5" />
@@ -9424,6 +9441,13 @@ export default function App() {
       triggerToast('Your account must be active to request a loan.', 'error');
       return;
     }
+    const threeMonthsAgo = new Date();
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+    const registeredDate = customer.created_at ? new Date(customer.created_at) : new Date();
+    if (registeredDate > threeMonthsAgo) {
+      triggerToast("You're not eligible. Contact your agent.", 'error');
+      return;
+    }
 
     const { maxLoan, repaymentAmount, serviceCharge } = computeLoanEligibility(customer.daily_amount);
     setIsLoading(true);
@@ -9601,7 +9625,26 @@ export default function App() {
     if (!currentUser) return;
     const customer = profiles.find(p => p.id === customerId);
     if (!customer) return;
-    if (customer.loan_status === 'Active Loan' || customer.loan_status === 'Pending Approval') {
+
+    // Check the database directly rather than trusting local profile state -
+    // `profiles` isn't part of the Realtime/polling refresh cycle, so a
+    // long-lived admin session can hold a stale loan_status. This is exactly
+    // what let a duplicate loan slip through before: the cached profile
+    // still said "no active loan" days after one had actually been assigned.
+    const { data: existingActiveLoan } = await supabase
+      .from('loans')
+      .select('id')
+      .eq('customer_id', customerId)
+      .in('status', ['Active Loan'])
+      .maybeSingle();
+    const { data: existingPendingRequest } = await supabase
+      .from('loan_requests')
+      .select('id')
+      .eq('customer_id', customerId)
+      .eq('status', 'Pending Approval')
+      .maybeSingle();
+
+    if (existingActiveLoan || existingPendingRequest || customer.loan_status === 'Active Loan' || customer.loan_status === 'Pending Approval') {
       triggerToast('This customer already has an active or pending loan.', 'error');
       return;
     }
