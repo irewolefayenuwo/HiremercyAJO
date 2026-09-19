@@ -7903,37 +7903,46 @@ export default function App() {
     const FALLBACK_POLL_MS = 20000;
     const pollingTimerRef = { current: null as ReturnType<typeof setInterval> | null };
 
-    // Admin-only background throttling: when the Admin Dashboard is hidden
-    // (tab inactive, app minimized, or screen off), drop from 20s to a
-    // 5-minute cadence rather than the normal fallback rate. Staff and
-    // Customer are untouched: isAdmin gates every part of this behavior.
-    const isAdmin = currentUser.role === 'Admin';
-    const ADMIN_HIDDEN_POLL_MS = 5 * 60 * 1000; // 5 minutes
+    // Background throttling: when the dashboard is hidden (tab inactive,
+    // app minimized, or screen off), drop from the normal cadence to a
+    // 5-minute one - this now applies to every role (Admin, Staff, and
+    // Customer), not just Admin. With 200+ total users, any of them
+    // leaving the app open in a backgrounded tab was polling at full
+    // speed for no one, which was a real, avoidable contributor to
+    // egress. Nothing changes about behavior while actively viewing the
+    // screen - this only reduces polling when nobody is looking.
+    // FALLBACK_POLL_MS raised from 20s to 30s as a temporary safety
+    // margin while egress is running close to the Free plan's monthly
+    // cap - easy to revert to 20000 once that pressure eases.
+    const FALLBACK_POLL_MS = 30000;
+    const pollingTimerRef = { current: null as ReturnType<typeof setInterval> | null };
+
+    const HIDDEN_POLL_MS = 5 * 60 * 1000; // 5 minutes
 
     const handleVisibilityChange = () => {
       const isVisible = document.visibilityState === 'visible';
       isPageVisibleRef.current = isVisible;
       if (isVisible) {
-        // Admin Dashboard just became active again - fetch fresh data
+        // Dashboard just became active again - fetch fresh data
         // immediately (independent of the fallback interval's own cadence).
         lastAdminPollRef.current = Date.now();
         triggerSync();
       }
     };
 
-    if (isAdmin && typeof document !== 'undefined') {
+    if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', handleVisibilityChange);
     }
 
     const runFallbackTick = () => {
-      if (isAdmin && !isPageVisibleRef.current) {
-        // Hidden Admin Dashboard: only poll once every 5 minutes.
+      if (!isPageVisibleRef.current) {
+        // Hidden dashboard: only poll once every 5 minutes, for any role.
         const now = Date.now();
-        if (now - lastAdminPollRef.current < ADMIN_HIDDEN_POLL_MS) {
+        if (now - lastAdminPollRef.current < HIDDEN_POLL_MS) {
           return;
         }
         lastAdminPollRef.current = now;
-      } else if (isAdmin) {
+      } else {
         lastAdminPollRef.current = Date.now();
       }
       triggerSync();
@@ -7975,7 +7984,7 @@ export default function App() {
     return () => {
       supabase.removeChannel(channel);
       stopFallbackPolling();
-      if (isAdmin && typeof document !== 'undefined') {
+      if (typeof document !== 'undefined') {
         document.removeEventListener('visibilitychange', handleVisibilityChange);
       }
     };
