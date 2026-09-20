@@ -7900,9 +7900,6 @@ export default function App() {
     // currently running" - startFallbackPolling/stopFallbackPolling are
     // both idempotent, so no matter how many times Realtime's status
     // flips, at most one interval can ever exist.
-    const FALLBACK_POLL_MS = 20000;
-    const pollingTimerRef = { current: null as ReturnType<typeof setInterval> | null };
-
     // Background throttling: when the dashboard is hidden (tab inactive,
     // app minimized, or screen off), drop from the normal cadence to a
     // 5-minute one - this now applies to every role (Admin, Staff, and
