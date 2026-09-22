@@ -7878,10 +7878,15 @@ export default function App() {
     //    (Database > Replication). Listening for a table that isn't
     //    published is harmless but pointless, so this list is kept in sync
     //    with that configuration: transactions, marked_days, notifications,
-    //    loans, loan_requests, payout_requests.
+    //    loans, loan_requests, payout_requests, balance_adjustments,
+    //    manual_expenses, contributions, payout_history. The last two were
+    //    added because they're exactly what changes when a payout completes
+    //    (a contributions row is removed, a payout_history row is added) -
+    //    without them, a customer's balance only updated after a payout if
+    //    their Realtime connection happened to be down at that moment.
     const channel = supabase.channel('schema-db-changes');
 
-    const tableNames = ['transactions', 'marked_days', 'notifications', 'loans', 'loan_requests', 'payout_requests', 'balance_adjustments', 'manual_expenses'] as const;
+    const tableNames = ['transactions', 'marked_days', 'notifications', 'loans', 'loan_requests', 'payout_requests', 'balance_adjustments', 'manual_expenses', 'contributions', 'payout_history'] as const;
     const events = ['INSERT', 'UPDATE', 'DELETE'] as const;
 
     tableNames.forEach((table) => {
