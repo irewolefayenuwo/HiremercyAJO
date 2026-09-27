@@ -1725,13 +1725,15 @@ function AdminDashboard({
   onDeleteTransaction, onAddTransaction, onUpdateSupport, onDeleteCustomer, onUpdateCustomer, onToggleCustomerActive, onUpdateLoanStatus, onTriggerManualPayout, onApproveTransaction, onApproveWithdrawal, routeTarget, onRouteHandled, onRejectPayout, triggerToast, onResetPasswordToDefault, onRefreshProfiles,
   loans, loanRequests, loanHistory, onApproveLoanRequest, onRejectLoanRequest, onAssignLoan,
   monthlySavingsPlans, monthlySavingsMonths, onEnrollMonthlySavings, onRecordMonthlyDeposit,
-  currentUserId, balanceAdjustments, manualExpenses, onRefreshAdjustmentsAndExpenses
+  currentUserId, balanceAdjustments, manualExpenses, onRefreshAdjustmentsAndExpenses,
+  onEnsurePayoutHistoryLoaded, onEnsureLoanHistoryLoaded, cycleArchives
 }: { 
   profiles: Profile[], branches: Branch[], transactions: Transaction[], markedDays: Record<string, MarkedDay[]>, supportDetails: SupportSettings, payoutRequests: PayoutRequest[], savedMonths: Record<string, SavedMonth[]>, payoutHistory: PayoutHistoryRecord[], withdrawalRequests: WithdrawalRequest[], onDeleteTransaction: (id: string) => void, onAddTransaction: (cId: string, amt: number, method: any, sId: string) => void, onUpdateSupport: (phone: string, whatsapp: string, email: string, bankName: string, acctNum: string, acctName: string, advertTitle: string, advertDescription: string, advertImageUrl: string, advertEnabled: boolean, advertVideoUrl: string, themeBackgroundColor: string) => void, onApprovePayout: (reqId: string) => void, onCreateBranch: (name: string, address: string) => void, onUpdateBranch: (id: string, name: string, address: string) => void, onDeleteBranch: (id: string) => void, onCreateStaff: (name: string, phone: string, email: string, branchId: string, password: string) => void, onUpdateStaff: (id: string, name: string, phone: string, email: string, branchId: string) => void, onDeleteStaff: (id: string) => void, onRegisterCustomer: (data: any) => void,
   onDeleteCustomer: (id: string) => void, onUpdateCustomer: (id: string, name: string, phone: string, email: string, dailyAmount: number, branchId: string, allowAnytimeChange: boolean) => void, onToggleCustomerActive: (id: string, is_active: boolean) => void, onUpdateLoanStatus: (id: string, loan_status: 'No Loan' | 'Pending Approval' | 'Active Loan' | 'Loan Cleared') => void, onTriggerManualPayout: (customerId: string, method: 'Transfer' | 'Cash', bank: string, acctNum: string, acctName: string) => void, onApproveTransaction: (id: string) => void, onApproveWithdrawal: (id: string, bankName: string, accountNumber: string, accountName: string) => void, routeTarget?: AdminTab | null, onRouteHandled?: () => void, onRejectPayout?: (reqId: string) => void, triggerToast?: (message: string, type?: 'success' | 'error') => void, onResetPasswordToDefault?: (customerId: string) => void, onRefreshProfiles: () => void,
   loans: Loan[], loanRequests: LoanRequest[], loanHistory: any[], onApproveLoanRequest: (requestId: string) => void, onRejectLoanRequest: (requestId: string, reason: string) => void, onAssignLoan: (customerId: string, approvedAmount: number, remarks: string, disbursementDate: string) => void,
   monthlySavingsPlans: MonthlySavingsPlan[], monthlySavingsMonths: MonthlySavingsMonth[], onEnrollMonthlySavings: (customerId: string, year: number, monthlyTargetAmount: number) => void, onRecordMonthlyDeposit: (customerId: string, year: number, month: number, amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => void,
-  currentUserId: string, balanceAdjustments: Record<string, BalanceAdjustment[]>, manualExpenses: ManualExpense[], onRefreshAdjustmentsAndExpenses: () => void
+  currentUserId: string, balanceAdjustments: Record<string, BalanceAdjustment[]>, manualExpenses: ManualExpense[], onRefreshAdjustmentsAndExpenses: () => void,
+  onEnsurePayoutHistoryLoaded: () => void, onEnsureLoanHistoryLoaded: () => void, cycleArchives: Record<string, any[]>
 }) {
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -2243,6 +2245,19 @@ function AdminDashboard({
   const [selectedLoanStatusFilter, setSelectedLoanStatusFilter] = useState('');
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
   const [viewingCustomerDetails, setViewingCustomerDetails] = useState<Profile | null>(null);
+  // On-demand loading (Part 1 of the sync redesign): payout_history and
+  // loan_history are purely archival tables that no longer load
+  // automatically at login or on a timer - they load once, the first time
+  // something that actually needs them is opened.
+  useEffect(() => {
+    if (viewingCustomerDetails) onEnsurePayoutHistoryLoaded();
+  }, [viewingCustomerDetails, onEnsurePayoutHistoryLoaded]);
+  useEffect(() => {
+    if (payoutsPage === 'archive') onEnsurePayoutHistoryLoaded();
+  }, [payoutsPage, onEnsurePayoutHistoryLoaded]);
+  useEffect(() => {
+    if (loanSubView === 'history') onEnsureLoanHistoryLoaded();
+  }, [loanSubView, onEnsureLoanHistoryLoaded]);
   const [customerDetailsDateFilter, setCustomerDetailsDateFilter] = useState<'today' | 'week' | 'month' | 'custom'>('month');
   const [customerDetailsCustomFrom, setCustomerDetailsCustomFrom] = useState('');
   const [customerDetailsCustomTo, setCustomerDetailsCustomTo] = useState('');
@@ -2279,6 +2294,11 @@ function AdminDashboard({
   const [showPayoutDrilldown, setShowPayoutDrilldown] = useState(false);
   const [payoutDrilldownView, setPayoutDrilldownView] = useState<'on-loan' | 'not-on-loan' | null>(null);
   const [showExpensesDrilldown, setShowExpensesDrilldown] = useState(false);
+  // Outstanding Customer Balances drilldown (Reports tab): a month-by-month
+  // breakdown of money customers have saved but not yet been paid out for.
+  // Pure display roll-up of contributions data already loaded (grouped by
+  // each saved month's own month_label, summed), no new calculation.
+  const [showOutstandingBalanceDrilldown, setShowOutstandingBalanceDrilldown] = useState(false);
 
   // Bulk Paystack virtual account generation (for customers who existed
   // before this feature was added, and so never got one at signup).
@@ -2575,6 +2595,50 @@ function AdminDashboard({
       completedPayoutsByMonth
     };
   }, [customers, markedDays, payoutRequests]);
+
+  // Outstanding Customer Balances by month: current, unpaid customer money,
+  // grouped by the savings cycle (period_key) it belongs to - NOT a
+  // cumulative/running total. Each month's figure only ever reflects money
+  // still outstanding for that exact month right now.
+  //
+  // Source of truth (no new records, nothing duplicated):
+  //  - `contributions` (savedMonths), status 'saved'/'requested' = money
+  //    currently owed. Summed per period_key, this is a month's live
+  //    outstanding balance. When a payout is approved, the paid contribution
+  //    rows are deleted (see handleApprovePayout/handleTriggerManualPayout) -
+  //    so this sum drops automatically and immediately, with no separate
+  //    adjustment record involved.
+  //  - `cycle_archives` exists specifically to remember which months have
+  //    ever had a cycle paid out (see buildTrackingHistory's "Collected"
+  //    section above, sourced from this same table). A month can therefore
+  //    disappear entirely from `contributions` once fully paid - this is
+  //    what lets a fully-settled month still show up here at ₦0 instead of
+  //    vanishing, satisfying "historical months must remain visible."
+  const outstandingBalanceByMonth = useMemo(() => {
+    const allSavedMonths: SavedMonth[] = Object.values(savedMonths).flat();
+    const uncollected = allSavedMonths.filter(m => m.status === 'saved' || m.status === 'requested');
+
+    const byPeriod = new Map<string, number>();
+    uncollected.forEach(m => {
+      byPeriod.set(m.period_key, (byPeriod.get(m.period_key) || 0) + Number(m.total_amount));
+    });
+
+    // Make sure every period that ever had ANY cycle (paid or not) has an
+    // entry, even if it's currently 0 - pulls from both sources so a month
+    // never silently disappears once fully settled.
+    const knownPeriodKeys = new Set<string>(byPeriod.keys());
+    allSavedMonths.forEach(m => { if (m.period_key) knownPeriodKeys.add(m.period_key); });
+    Object.values(cycleArchives).flat().forEach((row: any) => {
+      const pk = pickField(row, ['period_key', 'month_key', 'period']);
+      if (pk) knownPeriodKeys.add(pk);
+    });
+
+    const rows = Array.from(knownPeriodKeys)
+      .map(periodKey => ({ periodKey, month: periodLabelFromKey(periodKey), total: byPeriod.get(periodKey) || 0 }))
+      .sort((a, b) => b.periodKey.localeCompare(a.periodKey));
+    const grandTotal = rows.reduce((sum, r) => sum + r.total, 0);
+    return { rows, grandTotal };
+  }, [savedMonths, cycleArchives]);
 
   const handlePost = (e: React.FormEvent) => {
     e.preventDefault();
@@ -5491,17 +5555,19 @@ function AdminDashboard({
               <LayoutDashboard className="w-5 h-5 text-emerald-700" />
               Monthly Financial Summary — {periodLabelFromKey(currentPeriodKey)}
             </h3>
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
               {[
                 { label: 'Total Contributions', value: liveMonth.contributions, color: 'emerald' },
                 { label: 'Total Profit', value: liveMonth.profit, color: 'emerald' },
                 { label: 'Total Expenses', value: liveMonth.expenses, color: 'slate' },
                 { label: 'Total Payout', value: liveMonth.payout, color: 'slate' },
                 { label: 'Remaining Balance', value: liveMonth.remaining, color: 'amber' },
+                { label: 'Outstanding Customer Balances', value: outstandingBalanceByMonth.grandTotal, color: 'blue' },
               ].map(card => {
                 const isPayout = card.label === 'Total Payout';
                 const isExpenses = card.label === 'Total Expenses';
-                const clickable = isPayout || isExpenses;
+                const isOutstanding = card.label === 'Outstanding Customer Balances';
+                const clickable = isPayout || isExpenses || isOutstanding;
                 const Tag = clickable ? 'button' : 'div';
                 return (
                   <Tag
@@ -5511,6 +5577,7 @@ function AdminDashboard({
                       onClick: () => {
                         if (isPayout) { setShowPayoutDrilldown(true); setPayoutDrilldownView(null); }
                         if (isExpenses) { setShowExpensesDrilldown(true); }
+                        if (isOutstanding) { setShowOutstandingBalanceDrilldown(true); }
                       },
                     } : {})}
                     className={`bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-4 text-left w-full ${clickable ? 'hover:border-emerald-400 transition-all duration-200 focus:outline-none' : ''}`}
@@ -5523,6 +5590,42 @@ function AdminDashboard({
               })}
             </div>
           </div>
+
+          {showOutstandingBalanceDrilldown && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4">
+              <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-6 border border-emerald-100 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto">
+                <div className="flex justify-between items-center border-b border-emerald-50 pb-3">
+                  <h3 className="text-lg font-black text-emerald-950 uppercase tracking-wide">Outstanding Customer Balances</h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowOutstandingBalanceDrilldown(false)}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <p className="text-xs text-slate-500 -mt-2">Money customers have saved but haven't been paid out for yet, broken down by which month's savings cycle it came from.</p>
+
+                <div className="rounded-2xl bg-blue-50 border border-blue-200 p-4 text-center">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-blue-700">Total Outstanding, All Months</p>
+                  <p className="text-2xl font-black text-blue-900 mt-1">₦{outstandingBalanceByMonth.grandTotal.toLocaleString()}</p>
+                </div>
+
+                {outstandingBalanceByMonth.rows.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-slate-400 text-xs">No outstanding customer balances right now.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {outstandingBalanceByMonth.rows.map(row => (
+                      <div key={row.periodKey} className="flex items-center justify-between rounded-2xl border border-slate-100 p-3.5 bg-slate-50/60">
+                        <span className="text-xs font-black text-slate-800">{row.month}</span>
+                        <span className="text-sm font-black text-blue-800">₦{row.total.toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {nextMonth.contributions > 0 && (
             <div className="bg-amber-50 p-5 sm:p-6 rounded-3xl border-2 border-amber-200 shadow-xs space-y-4">
@@ -7848,52 +7951,180 @@ export default function App() {
   const isPageVisibleRef = useRef(typeof document !== 'undefined' ? document.visibilityState === 'visible' : true);
   const lastAdminPollRef = useRef(Date.now());
 
+  // EGRESS ARCHITECTURE (Part 2 of the sync redesign): payout_history and
+  // loan_history are purely archival - needed only when an admin actually
+  // opens the Payout Archive page, a customer's detail modal, or the Loan
+  // History view. These refs track whether that on-demand full fetch has
+  // already happened this session, so re-opening the same page twice never
+  // re-downloads the same data (requirement: avoid duplicate fetches).
+  // They reset to false in the login effect below, so a fresh session
+  // always starts clean.
+  const hasLoadedFullPayoutHistoryRef = useRef(false);
+  const hasLoadedFullLoanHistoryRef = useRef(false);
+  // Populated inside the sync effect below with the real implementations,
+  // so a stable callback can be handed to AdminDashboard as a prop without
+  // needing to restart the whole realtime/polling effect whenever
+  // AdminDashboard re-renders.
+  const ensurePayoutHistoryLoadedRef = useRef<() => void>(() => {});
+  const ensureLoanHistoryLoadedRef = useRef<() => void>(() => {});
+
   useEffect(() => {
     if (!currentUser) return;
 
-    const triggerSync = async () => {
+    // Reset on-demand flags for this fresh session/role - if the same
+    // browser tab switches users, the new session starts clean rather than
+    // assuming the previous user's on-demand pages are still "loaded".
+    hasLoadedFullPayoutHistoryRef.current = false;
+    hasLoadedFullLoanHistoryRef.current = false;
+
+    // "Light" tables: naturally small/bounded (current cycle, this
+    // customer's own rows, or capped by customer count) - safe to refresh
+    // in full on every fallback tick or realtime event without it costing
+    // much. This is what the 30s fallback poll refreshes.
+    const syncLightTables = async () => {
       const latestUser = currentUserRef.current;
       if (!latestUser) return;
       try {
         await syncAllOperationalData(latestUser);
-        await fetchPayoutRequests(latestUser);
         await fetchNotifications(latestUser);
-        await fetchSavedMonths(latestUser);
-        await fetchPayoutHistory(latestUser);
-        await fetchCycleArchives(latestUser);
         await fetchLoans(latestUser);
         await fetchLoanRequests(latestUser);
-        await fetchLoanHistory(latestUser);
         await fetchMonthlySavings(latestUser);
         await fetchCreditBalance(latestUser);
         await fetchBalanceAdjustments(latestUser);
         await fetchManualExpenses(latestUser);
+        // Recent-window only (not full) - the initial login load already
+        // has full history for these two; a fallback tick only needs to
+        // catch up on anything from the last 90 days.
+        await fetchPayoutRequests(latestUser, false);
+        await fetchSavedMonths(latestUser, false);
       } catch (err) {
-        console.error("Background sync failed:", err);
+        console.error("Background sync (light tables) failed:", err);
       }
     };
+
+    // "Heavy" archival tables: payout_history and loan_history. These are
+    // NEVER part of the recurring fallback poll or the blanket realtime
+    // handler below - they only ever get fetched (a) once, on-demand, when
+    // the admin actually opens the page that needs them (see
+    // ensurePayoutHistoryLoaded/ensureLoanHistoryLoaded, wired into
+    // AdminDashboard), and (b) on a targeted Realtime event for that exact
+    // table, and only then if that page has already been opened this
+    // session - there's no point refreshing data nobody is looking at.
+    const ensurePayoutHistoryLoaded = async () => {
+      if (hasLoadedFullPayoutHistoryRef.current) return;
+      const latestUser = currentUserRef.current;
+      if (!latestUser) return;
+      hasLoadedFullPayoutHistoryRef.current = true;
+      try {
+        await fetchPayoutHistory(latestUser, true);
+      } catch (err) {
+        console.error('On-demand payout_history load failed:', err);
+        hasLoadedFullPayoutHistoryRef.current = false;
+      }
+    };
+
+    const ensureLoanHistoryLoaded = async () => {
+      if (hasLoadedFullLoanHistoryRef.current) return;
+      const latestUser = currentUserRef.current;
+      if (!latestUser) return;
+      hasLoadedFullLoanHistoryRef.current = true;
+      try {
+        await fetchLoanHistory(latestUser, true);
+      } catch (err) {
+        console.error('On-demand loan_history load failed:', err);
+        hasLoadedFullLoanHistoryRef.current = false;
+      }
+    };
+
+    // Expose these two to the rest of the app (AdminDashboard reads them via
+    // ensurePayoutHistoryLoadedRef/ensureLoanHistoryLoadedRef) without
+    // widening this effect's dependency array.
+    ensurePayoutHistoryLoadedRef.current = ensurePayoutHistoryLoaded;
+    ensureLoanHistoryLoadedRef.current = ensureLoanHistoryLoaded;
 
     // 1. Set up live Realtime postgres listeners - only for the tables that
     //    are actually in the Supabase `supabase_realtime` publication
     //    (Database > Replication). Listening for a table that isn't
-    //    published is harmless but pointless, so this list is kept in sync
-    //    with that configuration: transactions, marked_days, notifications,
-    //    loans, loan_requests, payout_requests, balance_adjustments,
-    //    manual_expenses, contributions, payout_history. The last two were
-    //    added because they're exactly what changes when a payout completes
-    //    (a contributions row is removed, a payout_history row is added) -
-    //    without them, a customer's balance only updated after a payout if
-    //    their Realtime connection happened to be down at that moment.
+    //    published is harmless but pointless. Each table now maps to a
+    //    TARGETED refresh of just that table's own state - not a full
+    //    13-query resync - so a single transaction being posted no longer
+    //    re-downloads loans, loan history, monthly savings, etc.
     const channel = supabase.channel('schema-db-changes');
 
-    const tableNames = ['transactions', 'marked_days', 'notifications', 'loans', 'loan_requests', 'payout_requests', 'balance_adjustments', 'manual_expenses', 'contributions', 'payout_history'] as const;
+    const tableNames = ['transactions', 'marked_days', 'notifications', 'loans', 'loan_requests', 'payout_requests', 'balance_adjustments', 'manual_expenses', 'contributions', 'payout_history', 'cycle_archives', 'loan_history'] as const;
     const events = ['INSERT', 'UPDATE', 'DELETE'] as const;
+
+    const handleRealtimeEvent = async (table: (typeof tableNames)[number], eventType: (typeof events)[number]) => {
+      const latestUser = currentUserRef.current;
+      if (!latestUser) return;
+      try {
+        switch (table) {
+          case 'transactions':
+          case 'marked_days':
+            await syncAllOperationalData(latestUser);
+            break;
+          case 'notifications':
+            await fetchNotifications(latestUser);
+            break;
+          case 'loans':
+            await fetchLoans(latestUser);
+            break;
+          case 'loan_requests':
+            await fetchLoanRequests(latestUser);
+            break;
+          case 'balance_adjustments':
+            await fetchBalanceAdjustments(latestUser);
+            break;
+          case 'manual_expenses':
+            await fetchManualExpenses(latestUser);
+            break;
+          case 'payout_requests':
+            // A DELETE could remove a row older than the 90-day window (a
+            // stale pending request finally actioned) - the windowed merge
+            // can't see outside that window, so fall back to a full fetch
+            // specifically for deletes to guarantee it's reflected. INSERT/
+            // UPDATE are always recent by definition, so the cheap windowed
+            // path is correct for those.
+            await fetchPayoutRequests(latestUser, eventType === 'DELETE');
+            break;
+          case 'contributions':
+            // Same reasoning, and this one matters even more: this table is
+            // the direct source of the Outstanding Customer Balances figure,
+            // so a payout (which DELETEs the paid contribution rows) must
+            // always be reflected correctly, even for a month-old saved
+            // cycle that took a while to get paid out.
+            await fetchSavedMonths(latestUser, eventType === 'DELETE');
+            break;
+          case 'cycle_archives':
+            // Not windowed (its date column isn't confirmed), but this
+            // only runs when a cycle actually completes somewhere - not on
+            // a timer - so an occasional full refetch here is cheap.
+            await fetchCycleArchives(latestUser);
+            break;
+          case 'payout_history':
+            // Purely archival - only worth refreshing if the admin has
+            // actually opened the page/modal that shows it this session.
+            if (hasLoadedFullPayoutHistoryRef.current) {
+              await fetchPayoutHistory(latestUser, true);
+            }
+            break;
+          case 'loan_history':
+            if (hasLoadedFullLoanHistoryRef.current) {
+              await fetchLoanHistory(latestUser, true);
+            }
+            break;
+        }
+      } catch (err) {
+        console.error(`Realtime-triggered refresh failed for ${table}:`, err);
+      }
+    };
 
     tableNames.forEach((table) => {
       events.forEach((event) => {
         channel.on('postgres_changes', { event, schema: 'public', table }, () => {
           console.debug('Realtime event received:', event, table);
-          triggerSync();
+          handleRealtimeEvent(table, event);
         });
       });
     });
@@ -7907,17 +8138,14 @@ export default function App() {
     // flips, at most one interval can ever exist.
     // Background throttling: when the dashboard is hidden (tab inactive,
     // app minimized, or screen off), drop from the normal cadence to a
-    // 5-minute one - this now applies to every role (Admin, Staff, and
-    // Customer), not just Admin. With 200+ total users, any of them
-    // leaving the app open in a backgrounded tab was polling at full
-    // speed for no one, which was a real, avoidable contributor to
+    // 5-minute one - this applies to every role. With 200+ total users, any
+    // of them leaving the app open in a backgrounded tab was polling at
+    // full speed for no one, which was a real, avoidable contributor to
     // egress. Nothing changes about behavior while actively viewing the
     // screen - this only reduces polling when nobody is looking.
-    // FALLBACK_POLL_MS raised from 20s to 30s as a temporary safety
-    // margin while egress is running close to the Free plan's monthly
-    // cap - easy to revert to 20000 once that pressure eases.
     const FALLBACK_POLL_MS = 30000;
     const pollingTimerRef = { current: null as ReturnType<typeof setInterval> | null };
+    let wasDisconnected = false;
 
     const HIDDEN_POLL_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -7925,10 +8153,10 @@ export default function App() {
       const isVisible = document.visibilityState === 'visible';
       isPageVisibleRef.current = isVisible;
       if (isVisible) {
-        // Dashboard just became active again - fetch fresh data
+        // Dashboard just became active again - fetch fresh light data
         // immediately (independent of the fallback interval's own cadence).
         lastAdminPollRef.current = Date.now();
-        triggerSync();
+        syncLightTables();
       }
     };
 
@@ -7947,7 +8175,7 @@ export default function App() {
       } else {
         lastAdminPollRef.current = Date.now();
       }
-      triggerSync();
+      syncLightTables();
     };
 
     const startFallbackPolling = () => {
@@ -7970,10 +8198,33 @@ export default function App() {
         // Realtime is healthy and delivering events - the REST fallback
         // is not needed right now.
         stopFallbackPolling();
+        if (wasDisconnected) {
+          // We were disconnected for a while. The light tables already
+          // caught themselves up via the fallback tick that was running.
+          // But two things the fallback tick only does a *narrow* (90-day)
+          // refresh of - contributions and payout_requests - could have had
+          // an OLDER row deleted while we were dark (a months-old saved
+          // cycle finally getting paid out, say), which a narrow window
+          // can't see. Since contributions directly feeds the Outstanding
+          // Customer Balances figure, do one full, authoritative refetch of
+          // both now to guarantee correctness, then resume normal
+          // event-driven updates. Same idea for the on-demand heavy tables
+          // (payout_history/loan_history), but only if that page was
+          // actually opened this session.
+          wasDisconnected = false;
+          const latestUser = currentUserRef.current;
+          if (latestUser) {
+            fetchSavedMonths(latestUser, true);
+            fetchPayoutRequests(latestUser, true);
+            if (hasLoadedFullPayoutHistoryRef.current) fetchPayoutHistory(latestUser, true);
+            if (hasLoadedFullLoanHistoryRef.current) fetchLoanHistory(latestUser, true);
+          }
+        }
       } else {
         // status is 'CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED', or the brief
         // pre-connect state - make sure the fallback is running so data
         // still stays fresh while Realtime is unavailable.
+        wasDisconnected = true;
         startFallbackPolling();
       }
     });
@@ -8216,15 +8467,31 @@ export default function App() {
     if (profile) {
       setCurrentUser(profile);
       await syncAllOperationalData(profile);
+      // Login load, scoped to what's needed immediately (Part 1 of the sync
+      // redesign): payout_requests/contributions load in FULL here since
+      // they're needed broadly and immediately (current balances, the
+      // Outstanding Payout Ledger, Records, Overview) - losing older rows
+      // from memory would be a real regression for those. cycle_archives
+      // similarly loads in full since a customer's own History tab and
+      // several admin views read it right away.
+      //
+      // payout_history only needs a RECENT window here (Overview's
+      // "current month payout" stat is all that needs it at login) - its
+      // full history is purely archival and now loads on-demand only when
+      // the Payout Archive page or a customer's detail modal is actually
+      // opened (see ensurePayoutHistoryLoadedRef).
+      //
+      // loan_history isn't fetched at login at all anymore - nothing on
+      // the initial dashboard needs it; it loads on-demand the first time
+      // the Loan History view is opened (see ensureLoanHistoryLoadedRef).
       await Promise.all([
         fetchNotifications(profile),
         fetchPayoutRequests(profile),
         fetchSavedMonths(profile),
-        fetchPayoutHistory(profile),
+        fetchPayoutHistory(profile, false),
         fetchCycleArchives(profile),
         fetchLoans(profile),
         fetchLoanRequests(profile),
-        fetchLoanHistory(profile),
         fetchMonthlySavings(profile),
         fetchCreditBalance(profile),
         fetchBalanceAdjustments(profile),
@@ -8259,6 +8526,41 @@ export default function App() {
     }
     return allRows;
   };
+
+  // EGRESS FIX (Admin/Staff only): a handful of tables - contributions
+  // (saved months), payout_history, payout_requests, loan_history - hold the
+  // full lifetime history of the business and only ever grow. Previously
+  // they were re-downloaded in FULL, unbounded, on every single background
+  // sync tick (every ~30s whenever Realtime wasn't connected, for every open
+  // Admin/Staff session) - a huge and entirely avoidable egress cost at
+  // 150+ customers.
+  //
+  // Fix: fetch the complete history exactly ONCE per login session (so no
+  // records ever become unreachable - Records/Reports can still browse every
+  // past month exactly as before), then on every recurring tick after that,
+  // only fetch a recent window (matches the existing 90-day precedent set on
+  // `transactions`) and merge it in - replacing only that same recent slice
+  // of local state (which correctly picks up inserts/updates/deletes within
+  // the window) while leaving everything older, already loaded, untouched.
+  //
+  // cycle_archives is deliberately left out of this - its exact date column
+  // isn't confirmed (see the pickField() usage below), and guessing wrong
+  // would silently break that table's sync entirely, which is worse than
+  // its current, smaller egress cost.
+  const RECENT_SYNC_WINDOW_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
+
+  function mergeWindowedRows<T extends Record<string, any>>(
+    existing: T[],
+    fresh: T[],
+    dateField: string,
+    cutoffIso: string
+  ): T[] {
+    const untouchedOlder = existing.filter(row => {
+      const raw = row[dateField];
+      return !raw || new Date(raw).toISOString() < cutoffIso;
+    });
+    return [...untouchedOlder, ...fresh];
+  }
 
   const syncAllOperationalData = async (userProfile: Profile) => {
     if (userProfile.role === 'Admin' || userProfile.role === 'Staff') {
@@ -8348,11 +8650,15 @@ export default function App() {
     triggerToast('Notifications cleared.', 'success');
   };
 
-  const fetchPayoutRequests = async (userProfile: Profile) => {
+  const fetchPayoutRequests = async (userProfile: Profile, isFullSync: boolean = true) => {
     let query = supabase.from('payout_requests').select('*').order('created_at', { ascending: false });
 
     if (userProfile.role === 'Customer') {
       query = query.eq('customer_id', userProfile.id);
+    } else if (!isFullSync) {
+      // Recurring background tick (Admin/Staff only): only the recent slice
+      // - the one-time full sync on login already has everything older.
+      query = query.gte('created_at', new Date(Date.now() - RECENT_SYNC_WINDOW_MS).toISOString());
     }
 
     const { data } = await query;
@@ -8360,18 +8666,25 @@ export default function App() {
       // Store raw data - customer names are resolved at display time from
       // live profiles state, avoiding the race condition where profiles
       // hasn't loaded yet when this fetch completes on initial page load.
-      setPayoutRequests(data as PayoutRequest[]);
+      if (userProfile.role !== 'Customer' && !isFullSync) {
+        const cutoffIso = new Date(Date.now() - RECENT_SYNC_WINDOW_MS).toISOString();
+        setPayoutRequests(prev => mergeWindowedRows(prev, data as PayoutRequest[], 'created_at', cutoffIso));
+      } else {
+        setPayoutRequests(data as PayoutRequest[]);
+      }
     }
   };
 
   // Loads the "contributions" ledger: frozen/saved 32-day months that a customer has
   // not yet been paid out for. Admin/Staff see every customer's saved months; a
   // Customer only sees their own.
-  const fetchSavedMonths = async (userProfile: Profile) => {
+  const fetchSavedMonths = async (userProfile: Profile, isFullSync: boolean = true) => {
     let query = supabase.from('contributions').select('*').order('created_at', { ascending: false });
 
     if (userProfile.role === 'Customer') {
       query = query.eq('customer_id', userProfile.id);
+    } else if (!isFullSync) {
+      query = query.gte('created_at', new Date(Date.now() - RECENT_SYNC_WINDOW_MS).toISOString());
     }
 
     const { data, error } = await query;
@@ -8381,12 +8694,25 @@ export default function App() {
     }
 
     if (data) {
-      const grouped: Record<string, SavedMonth[]> = {};
-      data.forEach((item: any) => {
-        if (!grouped[item.customer_id]) grouped[item.customer_id] = [];
-        grouped[item.customer_id].push(item);
-      });
-      setSavedMonths(grouped);
+      const regroup = (rows: any[]) => {
+        const grouped: Record<string, SavedMonth[]> = {};
+        rows.forEach((item: any) => {
+          if (!grouped[item.customer_id]) grouped[item.customer_id] = [];
+          grouped[item.customer_id].push(item);
+        });
+        return grouped;
+      };
+
+      if (userProfile.role !== 'Customer' && !isFullSync) {
+        const cutoffIso = new Date(Date.now() - RECENT_SYNC_WINDOW_MS).toISOString();
+        setSavedMonths(prev => {
+          const flatExisting: SavedMonth[] = Object.values(prev).flat() as SavedMonth[];
+          const merged = mergeWindowedRows<SavedMonth>(flatExisting, data as SavedMonth[], 'created_at', cutoffIso);
+          return regroup(merged);
+        });
+      } else {
+        setSavedMonths(regroup(data));
+      }
     }
   };
 
@@ -8428,11 +8754,13 @@ export default function App() {
 
   // Loads the "payout_history" archive: completed/approved payout requests, along with
   // which saved month(s) they settled. Written to by handleApprovePayout below.
-  const fetchPayoutHistory = async (userProfile: Profile) => {
+  const fetchPayoutHistory = async (userProfile: Profile, isFullSync: boolean = true) => {
     let query = supabase.from('payout_history').select('*').order('approved_at', { ascending: false });
 
     if (userProfile.role === 'Customer') {
       query = query.eq('customer_id', userProfile.id);
+    } else if (!isFullSync) {
+      query = query.gte('approved_at', new Date(Date.now() - RECENT_SYNC_WINDOW_MS).toISOString());
     }
 
     const { data, error } = await query;
@@ -8443,7 +8771,12 @@ export default function App() {
 
     if (data) {
       // Store raw data - names resolved at display time from live profiles state
-      setPayoutHistory(data as PayoutHistoryRecord[]);
+      if (userProfile.role !== 'Customer' && !isFullSync) {
+        const cutoffIso = new Date(Date.now() - RECENT_SYNC_WINDOW_MS).toISOString();
+        setPayoutHistory(prev => mergeWindowedRows(prev, data as PayoutHistoryRecord[], 'approved_at', cutoffIso));
+      } else {
+        setPayoutHistory(data as PayoutHistoryRecord[]);
+      }
     }
   };
 
@@ -8502,17 +8835,26 @@ export default function App() {
     if (data) setLoans(data as Loan[]);
   };
 
-  const fetchLoanHistory = async (userProfile: Profile) => {
+  const fetchLoanHistory = async (userProfile: Profile, isFullSync: boolean = true) => {
     let query = supabase.from('loan_history').select('*').order('created_at', { ascending: false });
     if (userProfile.role === 'Customer') {
       query = query.eq('customer_id', userProfile.id);
+    } else if (!isFullSync) {
+      query = query.gte('created_at', new Date(Date.now() - RECENT_SYNC_WINDOW_MS).toISOString());
     }
     const { data, error } = await query;
     if (error) {
       console.warn('loan_history fetch failed:', error.message);
       return;
     }
-    if (data) setLoanHistory(data);
+    if (data) {
+      if (userProfile.role !== 'Customer' && !isFullSync) {
+        const cutoffIso = new Date(Date.now() - RECENT_SYNC_WINDOW_MS).toISOString();
+        setLoanHistory(prev => mergeWindowedRows(prev, data, 'created_at', cutoffIso));
+      } else {
+        setLoanHistory(data);
+      }
+    }
   };
 
   const fetchMonthlySavings = async (userProfile: Profile) => {
@@ -10311,6 +10653,9 @@ export default function App() {
                     await fetchManualExpenses(currentUser);
                   }
                 }}
+                onEnsurePayoutHistoryLoaded={() => ensurePayoutHistoryLoadedRef.current()}
+                onEnsureLoanHistoryLoaded={() => ensureLoanHistoryLoadedRef.current()}
+                cycleArchives={cycleArchives}
                 onDeleteTransaction={deleteTransaction}
                 onAddTransaction={createTransaction}
                 onUpdateSupport={handleUpdateSupportDetails}
