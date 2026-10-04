@@ -5,7 +5,8 @@ import {
   CheckCircle2, XCircle, LogOut, Shield, Briefcase, Landmark, Info, Key,
   Bell, Settings, HelpCircle, MessageSquare, Building2, UserPlus, Coins, Clock, FileText, Edit2, X,
   BarChart3, ArrowLeftRight, Wallet, CalendarRange, HandCoins, PieChart, TrendingUp, ShieldCheck,
-  Sparkles, Headphones, Target, ArrowUpRight, Lock as LockIcon, Save
+  Sparkles, Headphones, Target, ArrowUpRight, Lock as LockIcon, Save,
+  Copy, Share2, Check, ExternalLink, Megaphone
 } from 'lucide-react';
 import { type Session, type AuthChangeEvent } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
@@ -150,6 +151,15 @@ export interface MarkedDay {
   transaction_id?: string;
 }
 
+export interface BroadcastMessage {
+  id: string;
+  message: string;
+  is_active: boolean;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface SupportSettings {
   id: number;
   support_phone: string;
@@ -164,6 +174,9 @@ export interface SupportSettings {
   advert_video_url?: string;
   advert_enabled?: boolean;
   theme_background_color?: string;
+  withdrawal_charge_enabled?: boolean;
+  withdrawal_charge_amount?: number;
+  withdrawal_charge_label?: string;
 }
 
 export interface WithdrawalRequest {
@@ -201,6 +214,9 @@ export interface PayoutRequest {
   created_at: string;
   month_paid?: string;
   contribution_ids?: string[];
+  charge_amount?: number;
+  charge_label?: string | null;
+  net_amount?: number;
 }
 
 // --- 32-DAY SAVED MONTH (CONTRIBUTIONS LEDGER) & PAYOUT ARCHIVE TYPES ---
@@ -230,6 +246,9 @@ export interface PayoutHistoryRecord {
   account_name?: string;
   payout_method: 'Transfer' | 'Cash';
   approved_at: string;
+  charge_amount?: number;
+  charge_label?: string | null;
+  net_amount?: number;
 }
 
 // --- GLOBAL NIGERIAN PHONE FORMATTING HELPER ---
@@ -1721,14 +1740,14 @@ function MonthlySavingsAdminTab({ monthlySavingsPlans, monthlySavingsMonths, pro
 }
 
 function AdminDashboard({ 
-  profiles, branches, transactions, markedDays, supportDetails, payoutRequests, savedMonths, payoutHistory, withdrawalRequests, onApprovePayout, onCreateBranch, onUpdateBranch, onDeleteBranch, onCreateStaff, onUpdateStaff, onDeleteStaff, onRegisterCustomer,
+  profiles, branches, transactions, markedDays, supportDetails, payoutRequests, savedMonths, payoutHistory, withdrawalRequests, broadcastMessages, onCreateBroadcast, onUpdateBroadcast, onToggleBroadcastActive, onDeleteBroadcast, onApprovePayout, onCreateBranch, onUpdateBranch, onDeleteBranch, onCreateStaff, onUpdateStaff, onDeleteStaff, onRegisterCustomer,
   onDeleteTransaction, onAddTransaction, onUpdateSupport, onDeleteCustomer, onUpdateCustomer, onToggleCustomerActive, onUpdateLoanStatus, onTriggerManualPayout, onApproveTransaction, onApproveWithdrawal, routeTarget, onRouteHandled, onRejectPayout, triggerToast, onResetPasswordToDefault, onRefreshProfiles,
   loans, loanRequests, loanHistory, onApproveLoanRequest, onRejectLoanRequest, onAssignLoan,
   monthlySavingsPlans, monthlySavingsMonths, onEnrollMonthlySavings, onRecordMonthlyDeposit,
   currentUserId, balanceAdjustments, manualExpenses, onRefreshAdjustmentsAndExpenses,
   onEnsurePayoutHistoryLoaded, onEnsureLoanHistoryLoaded, cycleArchives
 }: { 
-  profiles: Profile[], branches: Branch[], transactions: Transaction[], markedDays: Record<string, MarkedDay[]>, supportDetails: SupportSettings, payoutRequests: PayoutRequest[], savedMonths: Record<string, SavedMonth[]>, payoutHistory: PayoutHistoryRecord[], withdrawalRequests: WithdrawalRequest[], onDeleteTransaction: (id: string) => void, onAddTransaction: (cId: string, amt: number, method: any, sId: string) => void, onUpdateSupport: (phone: string, whatsapp: string, email: string, bankName: string, acctNum: string, acctName: string, advertTitle: string, advertDescription: string, advertImageUrl: string, advertEnabled: boolean, advertVideoUrl: string, themeBackgroundColor: string) => void, onApprovePayout: (reqId: string) => void, onCreateBranch: (name: string, address: string) => void, onUpdateBranch: (id: string, name: string, address: string) => void, onDeleteBranch: (id: string) => void, onCreateStaff: (name: string, phone: string, email: string, branchId: string, password: string) => void, onUpdateStaff: (id: string, name: string, phone: string, email: string, branchId: string) => void, onDeleteStaff: (id: string) => void, onRegisterCustomer: (data: any) => void,
+  profiles: Profile[], branches: Branch[], transactions: Transaction[], markedDays: Record<string, MarkedDay[]>, supportDetails: SupportSettings, payoutRequests: PayoutRequest[], savedMonths: Record<string, SavedMonth[]>, payoutHistory: PayoutHistoryRecord[], withdrawalRequests: WithdrawalRequest[], broadcastMessages: BroadcastMessage[], onCreateBroadcast: (message: string) => void, onUpdateBroadcast: (id: string, message: string) => void, onToggleBroadcastActive: (id: string, isActive: boolean) => void, onDeleteBroadcast: (id: string) => void, onDeleteTransaction: (id: string) => void, onAddTransaction: (cId: string, amt: number, method: any, sId: string) => void, onUpdateSupport: (phone: string, whatsapp: string, email: string, bankName: string, acctNum: string, acctName: string, advertTitle: string, advertDescription: string, advertImageUrl: string, advertEnabled: boolean, advertVideoUrl: string, themeBackgroundColor: string, withdrawalChargeEnabled: boolean, withdrawalChargeAmount: number, withdrawalChargeLabel: string, opayAlertEmail: string, opayAutomationEnabled: boolean) => void, onApprovePayout: (reqId: string) => void, onCreateBranch: (name: string, address: string) => void, onUpdateBranch: (id: string, name: string, address: string) => void, onDeleteBranch: (id: string) => void, onCreateStaff: (name: string, phone: string, email: string, branchId: string, password: string) => void, onUpdateStaff: (id: string, name: string, phone: string, email: string, branchId: string) => void, onDeleteStaff: (id: string) => void, onRegisterCustomer: (data: any) => void,
   onDeleteCustomer: (id: string) => void, onUpdateCustomer: (id: string, name: string, phone: string, email: string, dailyAmount: number, branchId: string, allowAnytimeChange: boolean) => void, onToggleCustomerActive: (id: string, is_active: boolean) => void, onUpdateLoanStatus: (id: string, loan_status: 'No Loan' | 'Pending Approval' | 'Active Loan' | 'Loan Cleared') => void, onTriggerManualPayout: (customerId: string, method: 'Transfer' | 'Cash', bank: string, acctNum: string, acctName: string) => void, onApproveTransaction: (id: string) => void, onApproveWithdrawal: (id: string, bankName: string, accountNumber: string, accountName: string) => void, routeTarget?: AdminTab | null, onRouteHandled?: () => void, onRejectPayout?: (reqId: string) => void, triggerToast?: (message: string, type?: 'success' | 'error') => void, onResetPasswordToDefault?: (customerId: string) => void, onRefreshProfiles: () => void,
   loans: Loan[], loanRequests: LoanRequest[], loanHistory: any[], onApproveLoanRequest: (requestId: string) => void, onRejectLoanRequest: (requestId: string, reason: string) => void, onAssignLoan: (customerId: string, approvedAmount: number, remarks: string, disbursementDate: string) => void,
   monthlySavingsPlans: MonthlySavingsPlan[], monthlySavingsMonths: MonthlySavingsMonth[], onEnrollMonthlySavings: (customerId: string, year: number, monthlyTargetAmount: number) => void, onRecordMonthlyDeposit: (customerId: string, year: number, month: number, amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => void,
@@ -2412,6 +2431,25 @@ function AdminDashboard({
   };
   const [advertEnabled, setAdvertEnabled] = useState(Boolean(supportDetails.advert_enabled));
   const [themeBackgroundColor, setThemeBackgroundColor] = useState(supportDetails.theme_background_color || '#f0fdf4');
+  const [withdrawalChargeEnabled, setWithdrawalChargeEnabled] = useState(supportDetails.withdrawal_charge_enabled ?? true);
+  const [withdrawalChargeAmount, setWithdrawalChargeAmount] = useState(supportDetails.withdrawal_charge_amount ?? 50);
+  const [withdrawalChargeLabel, setWithdrawalChargeLabel] = useState(supportDetails.withdrawal_charge_label || 'Stamp Duty / Withdrawal Charge');
+  const [opayAlertEmail, setOpayAlertEmail] = useState((supportDetails as any).opay_alert_email || '');
+  const [opayAutomationEnabled, setOpayAutomationEnabled] = useState(Boolean((supportDetails as any).opay_automation_enabled));
+  const [isCheckingOpayNow, setIsCheckingOpayNow] = useState(false);
+  const [newBroadcastText, setNewBroadcastText] = useState('');
+  const [editingBroadcastId, setEditingBroadcastId] = useState<string | null>(null);
+  const [editingBroadcastText, setEditingBroadcastText] = useState('');
+  // Read-only status display, seeded from supportDetails and refreshed
+  // locally after "Check OPay Emails Now" - AdminDashboard doesn't hold the
+  // top-level supportDetails setter, so this stays local rather than
+  // widening the component's prop interface just for a status readout.
+  const [opayStatus, setOpayStatus] = useState({
+    lastCheckAt: (supportDetails as any).opay_last_check_at as string | null,
+    lastCheckStatus: (supportDetails as any).opay_last_check_status as string | null,
+    lastProcessedRef: (supportDetails as any).opay_last_processed_ref as string | null,
+    lastProcessedAt: (supportDetails as any).opay_last_processed_at as string | null,
+  });
   const [selectedWithdrawalRequest, setSelectedWithdrawalRequest] = useState<WithdrawalRequest | null>(null);
   const [approvalBankName, setApprovalBankName] = useState('');
   const [approvalAccountNumber, setApprovalAccountNumber] = useState('');
@@ -2430,6 +2468,17 @@ function AdminDashboard({
     setAdvertVideoUrl(supportDetails.advert_video_url || '');
     setAdvertEnabled(Boolean(supportDetails.advert_enabled));
     setThemeBackgroundColor(supportDetails.theme_background_color || '#f0fdf4');
+    setWithdrawalChargeEnabled(supportDetails.withdrawal_charge_enabled ?? true);
+    setWithdrawalChargeAmount(supportDetails.withdrawal_charge_amount ?? 50);
+    setWithdrawalChargeLabel(supportDetails.withdrawal_charge_label || 'Stamp Duty / Withdrawal Charge');
+    setOpayAlertEmail((supportDetails as any).opay_alert_email || '');
+    setOpayAutomationEnabled(Boolean((supportDetails as any).opay_automation_enabled));
+    setOpayStatus({
+      lastCheckAt: (supportDetails as any).opay_last_check_at || null,
+      lastCheckStatus: (supportDetails as any).opay_last_check_status || null,
+      lastProcessedRef: (supportDetails as any).opay_last_processed_ref || null,
+      lastProcessedAt: (supportDetails as any).opay_last_processed_at || null,
+    });
   }, [supportDetails]);
 
   useEffect(() => {
@@ -2649,7 +2698,44 @@ function AdminDashboard({
 
   const handleSupportSave = (e: React.FormEvent) => {
     e.preventDefault();
-    onUpdateSupport(supportPhone, supportWhatsapp, supportEmail, adminBankName, adminAccountNumber, adminAccountName, advertTitle, advertDescription, advertImageUrl, advertEnabled, advertVideoUrl, themeBackgroundColor);
+    onUpdateSupport(supportPhone, supportWhatsapp, supportEmail, adminBankName, adminAccountNumber, adminAccountName, advertTitle, advertDescription, advertImageUrl, advertEnabled, advertVideoUrl, themeBackgroundColor, withdrawalChargeEnabled, withdrawalChargeAmount, withdrawalChargeLabel, opayAlertEmail, opayAutomationEnabled);
+  };
+
+  // Manual trigger for the opay-email-check Edge Function. Uses the admin's
+  // own session (supabase.functions.invoke sends the current access token
+  // automatically) - the function verifies Admin role itself server-side.
+  // Runs regardless of the automation toggle, for testing. Never touches
+  // the Gmail App Password; that credential lives only in the Edge
+  // Function's own secrets and this call never sees it.
+  const handleCheckOpayNow = async () => {
+    setIsCheckingOpayNow(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('opay-email-check', { body: {} });
+      if (error) {
+        triggerToast?.(`OPay check failed: ${error.message}`, 'error');
+      } else if (data?.skipped) {
+        triggerToast?.('A check is already in progress - try again shortly.', 'error');
+      } else if (data?.ok === false) {
+        triggerToast?.(`OPay check finished with an error: ${data.error}`, 'error');
+      } else {
+        triggerToast?.(`Checked ${data?.scanned ?? 0} email(s): ${data?.auto_approved ?? 0} auto-confirmed, ${data?.needs_review ?? 0} need review, ${data?.duplicates ?? 0} already processed.`, 'success');
+      }
+    } catch (err: any) {
+      triggerToast?.(`OPay check failed: ${err?.message || err}`, 'error');
+    } finally {
+      setIsCheckingOpayNow(false);
+      // Pull the fresh opay_last_check_* / opay_last_processed_* fields the
+      // function just wrote, for the status readout on this page.
+      const { data: sData } = await supabase.from('system_settings').select('*').eq('id', 1).single();
+      if (sData) {
+        setOpayStatus({
+          lastCheckAt: (sData as any).opay_last_check_at || null,
+          lastCheckStatus: (sData as any).opay_last_check_status || null,
+          lastProcessedRef: (sData as any).opay_last_processed_ref || null,
+          lastProcessedAt: (sData as any).opay_last_processed_at || null,
+        });
+      }
+    }
   };
 
   const openWithdrawalApproval = (request: WithdrawalRequest) => {
@@ -4461,6 +4547,9 @@ function AdminDashboard({
                       <div className="text-xs">
                         <p className="font-black text-slate-800">{profiles.find(p => p.id === h.customer_id)?.name || h.customer_name || h.customer_id} <span className="text-slate-400 font-semibold">• {h.month_paid || 'Saved month'}</span></p>
                         <p className="text-slate-500 font-semibold">{h.payout_method === 'Cash' ? 'Cash Payment' : `${h.bank_name} • ${h.account_number} (${h.account_name})`}</p>
+                        {Boolean(h.charge_amount) && (
+                          <p className="text-amber-700 font-semibold">{h.charge_label || 'Charge'}: -₦{Number(h.charge_amount).toLocaleString()} → Net: ₦{Number(h.net_amount ?? h.payout_amount).toLocaleString()}</p>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="font-black text-emerald-800 text-sm">₦{h.payout_amount.toLocaleString()}</span>
@@ -4515,6 +4604,7 @@ function AdminDashboard({
                       <th className="p-3">Period</th>
                       <th className="p-3">Accrued Sum</th>
                       <th className="p-3 text-emerald-800">Payout (Accrued - 1 Day Fee)</th>
+                      <th className="p-3 text-amber-800">Charge / Net</th>
                       <th className="p-3">Status</th>
                       <th className="p-3 text-right">Action</th>
                     </tr>
@@ -4534,7 +4624,7 @@ function AdminDashboard({
                       if (rows.length === 0) {
                         return (
                           <tr>
-                            <td colSpan={8} className="p-4 text-center text-slate-400 font-medium">
+                            <td colSpan={9} className="p-4 text-center text-slate-400 font-medium">
                               {q ? 'No withdrawal logs match that search.' : 'No previous payout logs.'}
                             </td>
                           </tr>
@@ -4562,6 +4652,16 @@ function AdminDashboard({
                           <td className="p-3 font-semibold text-emerald-800">{h.month_paid || 'N/A'}</td>
                           <td className="p-3">₦{h.amount.toLocaleString()}</td>
                           <td className="p-3 font-bold text-emerald-800">₦{h.payout_amount.toLocaleString()}</td>
+                          <td className="p-3 text-amber-800">
+                            {h.charge_amount ? (
+                              <>
+                                -₦{Number(h.charge_amount).toLocaleString()}
+                                <span className="block text-[9px] text-emerald-700 font-bold">Net: ₦{Number(h.net_amount ?? h.payout_amount).toLocaleString()}</span>
+                              </>
+                            ) : (
+                              <span className="text-slate-300">—</span>
+                            )}
+                          </td>
                           <td className="p-3">
                             <span className={`px-2.5 py-0.5 rounded-full font-black uppercase text-[9px] ${
                               h.status === 'Pending' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
@@ -6133,6 +6233,101 @@ function AdminDashboard({
                 </div>
               </div>
 
+              <div className="pt-2 border-t border-emerald-50">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-black text-emerald-950 uppercase tracking-wide flex items-center gap-1.5">
+                    <Landmark className="w-4 h-4 text-emerald-700" />
+                    Withdrawal Charge
+                  </h4>
+                  <label className="inline-flex items-center gap-1.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={withdrawalChargeEnabled}
+                      onChange={(e) => setWithdrawalChargeEnabled(e.target.checked)}
+                      className="w-4 h-4 accent-emerald-700"
+                    />
+                    <span className="text-[10px] font-bold text-slate-600">{withdrawalChargeEnabled ? 'Enabled' : 'Disabled'}</span>
+                  </label>
+                </div>
+                <p className="text-[11px] text-slate-500 font-medium mb-3">
+                  Applied to new withdrawal requests only - past requests keep the charge that was in effect when they were submitted.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-emerald-800 mb-1">Charge Amount (₦)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="1"
+                      disabled={!withdrawalChargeEnabled}
+                      value={withdrawalChargeAmount}
+                      onChange={(e) => setWithdrawalChargeAmount(Math.max(0, Number(e.target.value) || 0))}
+                      className="input-green text-sm font-medium disabled:opacity-50 disabled:bg-slate-50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-emerald-800 mb-1">Charge Label</label>
+                    <input
+                      type="text"
+                      disabled={!withdrawalChargeEnabled}
+                      placeholder="e.g. Stamp Duty / Withdrawal Charge"
+                      value={withdrawalChargeLabel}
+                      onChange={(e) => setWithdrawalChargeLabel(e.target.value)}
+                      className="input-green text-sm font-medium disabled:opacity-50 disabled:bg-slate-50"
+                    />
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-500 font-medium mt-2">
+                  Current: {withdrawalChargeEnabled ? <strong className="text-emerald-800">₦{Number(withdrawalChargeAmount || 0).toLocaleString()} - {withdrawalChargeLabel || 'Withdrawal Charge'}</strong> : <strong className="text-slate-400">No charge applied</strong>}
+                </p>
+              </div>
+
+              <div className="pt-2 border-t border-emerald-50">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-black text-emerald-950 uppercase tracking-wide flex items-center gap-1.5">
+                    <Landmark className="w-4 h-4 text-emerald-700" />
+                    OPay Email Automation
+                  </h4>
+                  <label className="inline-flex items-center gap-1.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={opayAutomationEnabled}
+                      onChange={(e) => setOpayAutomationEnabled(e.target.checked)}
+                      className="w-4 h-4 accent-emerald-700"
+                    />
+                    <span className="text-[10px] font-bold text-slate-600">{opayAutomationEnabled ? 'Enabled' : 'Disabled'}</span>
+                  </label>
+                </div>
+                <p className="text-[11px] text-slate-500 font-medium mb-2">
+                  Reads OPay credit-alert emails from the mailbox below and automatically confirms matching pending deposits. The mailbox password is never stored here - it's configured separately and directly in Supabase as a secret.
+                </p>
+                <label className="block text-xs font-bold text-emerald-800 mb-1">OPay Alert Email</label>
+                <input
+                  type="email"
+                  placeholder="opay-alerts@example.com"
+                  value={opayAlertEmail}
+                  onChange={(e) => setOpayAlertEmail(e.target.value)}
+                  className="input-green text-sm font-medium"
+                />
+                <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-600 font-semibold bg-emerald-50/60 border border-emerald-100 rounded-xl p-3">
+                  <p>Last check: <strong className="text-slate-800">{opayStatus.lastCheckAt ? new Date(opayStatus.lastCheckAt).toLocaleString() : 'Never run yet'}</strong></p>
+                  <p className="truncate" title={opayStatus.lastCheckStatus || ''}>Status: <strong className="text-slate-800">{opayStatus.lastCheckStatus || '—'}</strong></p>
+                  <p>Last processed ref: <strong className="text-slate-800">{opayStatus.lastProcessedRef || '—'}</strong></p>
+                  <p>Last processed at: <strong className="text-slate-800">{opayStatus.lastProcessedAt ? new Date(opayStatus.lastProcessedAt).toLocaleString() : '—'}</strong></p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCheckOpayNow}
+                  disabled={isCheckingOpayNow}
+                  className="mt-3 w-full inline-flex items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-white hover:bg-emerald-50 disabled:opacity-60 text-emerald-800 text-sm font-bold py-2 transition-colors"
+                >
+                  {isCheckingOpayNow ? 'Checking...' : 'Check OPay Emails Now'}
+                </button>
+                <p className="text-[10px] text-slate-400 font-semibold mt-1">
+                  Runs for testing even while automation is disabled above. Automatically runs on its own every 5 minutes once enabled.
+                </p>
+              </div>
+
               <button 
                 type="submit" 
                 className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl transition-all duration-200 text-sm shadow-md"
@@ -6176,6 +6371,107 @@ function AdminDashboard({
             <div className="text-[11px] text-amber-700 bg-amber-50 p-3 rounded-xl border border-amber-200 mt-4 leading-relaxed font-semibold">
               ⚠️ Note: Ensure numbers are written in full international format (e.g. starting with +234) for WhatsApp redirect actions to work.
             </div>
+          </div>
+
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
+            <h3 className="text-sm font-bold text-emerald-950 mb-1 uppercase tracking-wide flex items-center gap-1.5">
+              <Megaphone className="w-5 h-5 text-emerald-700" />
+              Broadcast Messages
+            </h3>
+            <p className="text-xs text-slate-500 mb-4 font-medium">
+              Publishing a new message here replaces what customers currently see. Older messages stay listed below as history and can be reactivated at any time.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-2 mb-5">
+              <textarea
+                value={newBroadcastText}
+                onChange={(e) => setNewBroadcastText(e.target.value)}
+                placeholder="e.g. HireMercyAJO offices will be closed on Monday for the public holiday."
+                rows={2}
+                className="input-green text-sm font-medium flex-1 resize-none"
+              />
+              <button
+                type="button"
+                onClick={() => { onCreateBroadcast(newBroadcastText); setNewBroadcastText(''); }}
+                disabled={!newBroadcastText.trim()}
+                className="shrink-0 sm:self-end inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white text-sm font-bold px-4 py-2.5 transition-colors"
+              >
+                Publish
+              </button>
+            </div>
+
+            {broadcastMessages.length === 0 ? (
+              <p className="text-xs text-slate-400 font-semibold text-center py-4">No broadcast messages yet.</p>
+            ) : (
+              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                {broadcastMessages.map(b => (
+                  <div key={b.id} className={`p-3 rounded-2xl border text-xs ${b.is_active ? 'bg-emerald-50/60 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
+                    {editingBroadcastId === b.id ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={editingBroadcastText}
+                          onChange={(e) => setEditingBroadcastText(e.target.value)}
+                          rows={2}
+                          className="input-green text-sm font-medium w-full resize-none"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => { onUpdateBroadcast(b.id, editingBroadcastText); setEditingBroadcastId(null); }}
+                            disabled={!editingBroadcastText.trim()}
+                            className="text-[11px] font-bold text-white bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 rounded-lg px-3 py-1.5"
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingBroadcastId(null)}
+                            className="text-[11px] font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg px-3 py-1.5"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-start justify-between gap-2">
+                          <p className={`font-semibold whitespace-pre-wrap break-words ${b.is_active ? 'text-emerald-900' : 'text-slate-500'}`}>{b.message}</p>
+                          <span className={`shrink-0 px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${b.is_active ? 'bg-emerald-600 text-white' : 'bg-slate-300 text-slate-700'}`}>
+                            {b.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-semibold mt-1">
+                          {new Date(b.created_at).toLocaleString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                        </p>
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            type="button"
+                            onClick={() => { setEditingBroadcastId(b.id); setEditingBroadcastText(b.message); }}
+                            className="text-[11px] font-bold text-emerald-700 hover:underline"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onToggleBroadcastActive(b.id, !b.is_active)}
+                            className="text-[11px] font-bold text-amber-700 hover:underline"
+                          >
+                            {b.is_active ? 'Deactivate' : 'Activate'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { if (window.confirm('Delete this broadcast message permanently?')) onDeleteBroadcast(b.id); }}
+                            className="text-[11px] font-bold text-red-600 hover:underline"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
@@ -6585,15 +6881,383 @@ function StaffDashboard({
 }
 
 // =========================================================================
+// BANK TRANSFER PANEL (Deposit / Add Money)
+//
+// Shows the company receiving account (from the existing admin settings -
+// supportDetails.admin_*) and lets the customer pick their bank. The app is
+// opened ONLY where a launch method has been verified (see BANK_APPS).
+// Everything else falls back to: copy the account number + manual steps.
+//
+// SAFETY: nothing in this block touches Supabase, transactions or payment
+// status. Opening a bank app is NOT payment confirmation. Contributions are
+// still recorded as Pending through the existing "Complete Transaction" form
+// and only an admin can approve them.
+// =========================================================================
+
+interface BankAppConfig {
+  id: string;
+  label: string;
+  initials: string;
+  tint: string;
+  /** Names as they appear in the `nigerianBanks` dropdown. */
+  aliases: string[];
+  /** Google Play package id (used only for the "Find app" fallback link). */
+  playStoreId: string;
+  /**
+   * ONLY set when a launch method is verified. Banks without it are never
+   * given a guessed URL scheme - they use the copy + manual fallback.
+   */
+  androidLaunch?: { scheme: string; host: string; path?: string; query?: string; packageName: string };
+}
+
+// Adding a bank is a data-only change: append an entry. Leave `androidLaunch`
+// out unless the bank's app manifest / official docs confirm an entry point.
+const BANK_APPS: BankAppConfig[] = [
+  {
+    // Verified from OPay 8.17.2.494 (team.opay.pay) AndroidManifest.xml:
+    // SchemeDispatchActivity is exported and registers otravel://schemedispatcher.
+    // The "?action=otravel://<route>" form is the one the app itself uses;
+    // otravel://home/entrance is the app's home route.
+    id: 'opay', label: 'OPay', initials: 'OP', tint: 'bg-emerald-100 text-emerald-800',
+    aliases: ['OPay'], playStoreId: 'team.opay.pay',
+    androidLaunch: { scheme: 'otravel', host: 'schemedispatcher', query: 'action=otravel://home/entrance', packageName: 'team.opay.pay' },
+  },
+  {
+    // Verified from PalmPay 7.14.0 (com.transsnet.palmpay) AndroidManifest.xml:
+    // SplashActivity (launcher) is exported and registers
+    // palmpay://com.transsnet.palmpay.splash.
+    id: 'palmpay', label: 'PalmPay', initials: 'PP', tint: 'bg-violet-100 text-violet-800',
+    aliases: ['PalmPay'], playStoreId: 'com.transsnet.palmpay',
+    androidLaunch: { scheme: 'palmpay', host: 'com.transsnet.palmpay.splash', packageName: 'com.transsnet.palmpay' },
+  },
+  {
+    // Verified from the Moniepoint consumer app (com.moniepoint.personal)
+    // AndroidManifest.xml: MainActivity is exported with autoVerify="true"
+    // and registers moniepoint://moniepoint.sng.link.
+    id: 'moniepoint', label: 'Moniepoint', initials: 'MP', tint: 'bg-indigo-100 text-indigo-800',
+    aliases: ['Moniepoint'], playStoreId: 'com.moniepoint.personal',
+    androidLaunch: { scheme: 'moniepoint', host: 'moniepoint.sng.link', packageName: 'com.moniepoint.personal' },
+  },
+  // No public deep link is documented for the banks below - each manifest was
+  // inspected (Access More, FCMB, GTWorld) and none registers a custom URL
+  // scheme or verified App Link, so no launch data is invented for them.
+  // They use the copy + manual fallback.
+  { id: 'access', label: 'Access Bank', initials: 'AB', tint: 'bg-orange-100 text-orange-800', aliases: ['Access Bank'], playStoreId: 'com.accessbank.nextgen' },
+  { id: 'firstbank', label: 'FirstBank', initials: 'FB', tint: 'bg-sky-100 text-sky-900', aliases: ['First Bank of Nigeria'], playStoreId: 'com.firstbank.firstmobile' },
+  { id: 'gtbank', label: 'GTBank', initials: 'GT', tint: 'bg-amber-100 text-amber-900', aliases: ['Guaranty Trust Bank (GTBank)'], playStoreId: 'com.gtbank.gtworldv1' },
+  { id: 'fcmb', label: 'FCMB', initials: 'FC', tint: 'bg-rose-100 text-rose-900', aliases: ['First City Monument Bank (FCMB)'], playStoreId: 'com.appzonegroup.fcmb' },
+];
+
+const isAndroidDevice = (): boolean =>
+  typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '');
+
+const findBankAppByName = (name: string): BankAppConfig | undefined =>
+  BANK_APPS.find(b => b.label === name || b.aliases.includes(name));
+
+/** True only when a verified launch method exists AND the device can use it. */
+const canLaunchBankApp = (bank: BankAppConfig): boolean =>
+  Boolean(bank.androidLaunch) && isAndroidDevice();
+
+// Chrome / Samsung Internet / Firefox on Android understand intent:// URLs.
+// `package=` pins the target to the bank's own app, so a look-alike app that
+// registers the same scheme can never receive it. No browser_fallback_url is
+// used: if the app is missing the page simply stays put and we show our own
+// fallback message instead of being thrown to another site.
+const buildAndroidIntentUrl = (l: NonNullable<BankAppConfig['androidLaunch']>): string =>
+  `intent://${l.host}${l.path || ''}${l.query ? `?${l.query}` : ''}#Intent;scheme=${l.scheme};package=${l.packageName};end`;
+
+type BankLaunchResult = 'opened' | 'fallback';
+
+/**
+ * Tries to open the bank's app. Resolves 'opened' when the page is sent to the
+ * background (the app took over) or 'fallback' if nothing happened within 2s
+ * (app not installed, unsupported browser, desktop, in-app browser...).
+ * Never throws, never touches transactions.
+ */
+const launchBankApp = (bank: BankAppConfig): Promise<BankLaunchResult> =>
+  new Promise(resolve => {
+    if (!bank.androidLaunch || !isAndroidDevice()) { resolve('fallback'); return; }
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onVisibility = () => { if (document.visibilityState === 'hidden') finish('opened'); };
+    const onPageHide = () => finish('opened');
+    function finish(result: BankLaunchResult) {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', onPageHide);
+      resolve(result);
+    }
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', onPageHide);
+    timer = setTimeout(() => finish('fallback'), 2000);
+    try {
+      window.location.href = buildAndroidIntentUrl(bank.androidLaunch);
+    } catch {
+      finish('fallback');
+    }
+  });
+
+const copyTextToClipboard = async (text: string): Promise<boolean> => {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // fall through to the legacy path
+  }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+};
+
+const formatAccountNumber = (n: string): string =>
+  /^\d{10}$/.test(n) ? `${n.slice(0, 3)} ${n.slice(3, 6)} ${n.slice(6)}` : n;
+
+function BankTransferPanel({ bankName, accountNumber, accountName }: {
+  bankName?: string, accountNumber?: string, accountName?: string
+}) {
+  const acct = (accountNumber || '').replace(/\s+/g, '');
+  // Treat "not set" and the old placeholder default as unconfigured so a
+  // customer is never invited to transfer to a dummy number.
+  const isConfigured = acct.length > 0 && acct !== '0123456789';
+
+  const [notice, setNotice] = useState<{ tone: 'success' | 'info' | 'warn'; text: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [fallbackBank, setFallbackBank] = useState<BankAppConfig | null>(null);
+  const [launchingId, setLaunchingId] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+    };
+  }, []);
+
+  const shareText =
+    `HireMercyAJO Bank Transfer Details\n\nBank: ${bankName || ''}\nAccount Name: ${accountName || ''}\nAccount Number: ${acct}`;
+
+  const flashCopied = () => {
+    setCopied(true);
+    if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+    copiedTimerRef.current = setTimeout(() => { if (mountedRef.current) setCopied(false); }, 2500);
+  };
+
+  const handleCopy = async () => {
+    const ok = await copyTextToClipboard(acct);
+    if (!mountedRef.current) return;
+    if (ok) {
+      flashCopied();
+      setNotice({ tone: 'success', text: 'Account number copied.' });
+    } else {
+      setNotice({ tone: 'warn', text: "Couldn't copy automatically. Please press and hold the account number to copy it." });
+    }
+  };
+
+  const handleShare = async () => {
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      try {
+        await navigator.share({ title: 'HireMercyAJO Bank Transfer Details', text: shareText });
+        return;
+      } catch (err: any) {
+        if (err && err.name === 'AbortError') return; // customer closed the share sheet
+      }
+    }
+    const ok = await copyTextToClipboard(shareText);
+    if (!mountedRef.current) return;
+    setNotice(ok
+      ? { tone: 'success', text: "Sharing isn't available on this device, so the full transfer details were copied instead." }
+      : { tone: 'warn', text: "Sharing isn't available on this device. Please copy the account number instead." });
+  };
+
+  const handleBankTap = async (bank: BankAppConfig) => {
+    if (launchingId) return;
+    setNotice(null);
+    setFallbackBank(null);
+    // Start the copy inside the tap (needs the user gesture); don't wait for it
+    // before launching, so the app-open request stays within the same gesture.
+    const copyPromise = copyTextToClipboard(acct);
+
+    if (!canLaunchBankApp(bank)) {
+      const didCopy = await copyPromise;
+      if (!mountedRef.current) return;
+      if (didCopy) flashCopied();
+      setFallbackBank(bank);
+      setNotice(didCopy ? { tone: 'success', text: 'Account number copied.' } : null);
+      return;
+    }
+
+    setLaunchingId(bank.id);
+    setNotice({ tone: 'info', text: `Opening ${bank.label}...` });
+    const result = await launchBankApp(bank);
+    const didCopy = await copyPromise;
+    if (!mountedRef.current) return;
+    setLaunchingId(null);
+    if (didCopy) flashCopied();
+    if (result === 'opened') {
+      setNotice({
+        tone: 'info',
+        text: `${didCopy ? 'Account number copied. ' : ''}Finish your transfer in ${bank.label}, then come back here, enter the amount and tap "Complete Transaction" so we can verify it. Opening your bank app does not confirm a payment.`,
+      });
+    } else {
+      setNotice(didCopy ? { tone: 'success', text: 'Account number copied.' } : null);
+      setFallbackBank(bank);
+    }
+  };
+
+  const noticeStyle = {
+    success: 'bg-emerald-50 border-emerald-200 text-emerald-900',
+    info: 'bg-sky-50 border-sky-200 text-sky-900',
+    warn: 'bg-amber-50 border-amber-200 text-amber-900',
+  } as const;
+
+  return (
+    <div className="space-y-4">
+      <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5">
+        <Landmark className="w-5 h-5 text-emerald-700" />
+        HireMercyAJO Bank Transfer
+      </h3>
+
+      {!isConfigured ? (
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-xs font-semibold text-amber-900 leading-relaxed">
+          The company receiving account has not been set up yet. Please contact support before making a transfer.
+        </div>
+      ) : (
+        <>
+          <div className="p-5 bg-emerald-50/60 border border-emerald-200 rounded-3xl space-y-3 shadow-inner">
+            <div>
+              <span className="text-[10px] text-slate-400 block uppercase font-bold">Account Number</span>
+              <strong className="text-slate-900 text-2xl tracking-widest block py-0.5 font-extrabold">{formatAccountNumber(acct)}</strong>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <span className="text-[10px] text-slate-400 block uppercase font-bold">Bank</span>
+                <strong className="text-slate-900 text-sm font-bold">{bankName || 'Not set'}</strong>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 block uppercase font-bold">Account Name</span>
+                <strong className="text-slate-900 text-sm font-bold">{accountName || 'Not set'}</strong>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-white text-emerald-800 hover:bg-emerald-50 text-sm font-bold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+              >
+                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                {copied ? 'Copied' : 'Copy Number'}
+              </button>
+              <button
+                type="button"
+                onClick={handleShare}
+                className="min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+              >
+                <Share2 className="w-4 h-4" />
+                Share Details
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div>
+              <p className="text-sm font-bold text-emerald-950">Transfer directly from your bank app</p>
+              <p className="text-xs text-slate-500 font-medium">Select your bank to open the app and make your transfer.</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {BANK_APPS.map(bank => {
+                const direct = canLaunchBankApp(bank);
+                const isBusy = launchingId === bank.id;
+                return (
+                  <button
+                    key={bank.id}
+                    type="button"
+                    onClick={() => handleBankTap(bank)}
+                    disabled={Boolean(launchingId)}
+                    aria-label={`Transfer from ${bank.label}${direct ? ' - opens the app' : ' - copies the account number'}`}
+                    className="min-h-[88px] flex flex-col items-center justify-center gap-1 p-2 rounded-2xl border border-emerald-100 bg-white hover:bg-emerald-50 active:scale-[0.98] disabled:opacity-60 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                  >
+                    <span className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-extrabold ${bank.tint}`}>{bank.initials}</span>
+                    <span className="text-xs font-bold text-slate-800 text-center leading-tight">{bank.label}</span>
+                    <span className={`text-[10px] font-semibold ${direct ? 'text-emerald-700' : 'text-slate-400'}`}>
+                      {isBusy ? 'Opening...' : direct ? 'Opens app' : 'Copies details'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[10px] text-slate-400 font-semibold leading-relaxed">
+              Not every bank lets us open its app for you. If yours isn't listed, open your bank app yourself and use the account details above.
+            </p>
+          </div>
+
+          <div aria-live="polite">
+            {notice && (
+              <div className={`p-3 rounded-2xl border text-xs font-semibold leading-relaxed ${noticeStyle[notice.tone]}`}>
+                {notice.text}
+              </div>
+            )}
+            {fallbackBank && (
+              <div className="mt-2 p-4 rounded-2xl border border-amber-200 bg-amber-50 text-xs text-amber-900 font-semibold leading-relaxed space-y-3">
+                <p>
+                  Your {fallbackBank.label} app could not be opened automatically. Please open your bank app and use the account details above.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCopy}
+                    className="min-h-[44px] inline-flex items-center justify-center gap-1.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                  >
+                    <Copy className="w-4 h-4" />
+                    Copy Account Number
+                  </button>
+                  {isAndroidDevice() && (
+                    <a
+                      href={`https://play.google.com/store/apps/details?id=${fallbackBank.playStoreId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="min-h-[44px] inline-flex items-center justify-center gap-1.5 px-4 rounded-xl border border-amber-300 bg-white text-amber-900 hover:bg-amber-100 text-sm font-bold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      Find {fallbackBank.label} on Google Play
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// =========================================================================
 // 4. CUSTOMER DASHBOARD COMPONENT
 // =========================================================================
 
 function CustomerDashboard({ 
   customer, transactions, markedDays, supportDetails, onAddPayoutRequest, payoutRequests, savedMonths, cycleArchives, onAddCustomerPendingTransaction, onUpdateCustomerSettings,
   activeLoan, myLoans, myLoanRequests, onRequestLoan, profiles,
-  myMonthlySavingsPlan, myMonthlySavingsMonths, creditBalance, onSelfEnrollMonthly, myBalanceAdjustments
+  myMonthlySavingsPlan, myMonthlySavingsMonths, creditBalance, onSelfEnrollMonthly, myBalanceAdjustments, broadcastMessages
 }: { 
-  customer: Profile, transactions: Transaction[], markedDays: MarkedDay[], supportDetails: SupportSettings, payoutRequests: PayoutRequest[], savedMonths: SavedMonth[], cycleArchives: any[], onAddPayoutRequest: (bank: string, acctNum: string, acctName: string, contributionIds: string[]) => void,
+  customer: Profile, transactions: Transaction[], markedDays: MarkedDay[], supportDetails: SupportSettings, payoutRequests: PayoutRequest[], savedMonths: SavedMonth[], cycleArchives: any[], onAddPayoutRequest: (bank: string, acctNum: string, acctName: string, contributionIds: string[]) => void, broadcastMessages?: BroadcastMessage[],
   onAddCustomerPendingTransaction: (amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => void, onUpdateCustomerSettings: (phone: string, dailyAmount: number, email: string) => void,
   activeLoan: Loan | null, myLoans: Loan[], myLoanRequests: LoanRequest[], onRequestLoan: (customerId: string) => void, profiles: Profile[],
   myMonthlySavingsPlan: MonthlySavingsPlan | null, myMonthlySavingsMonths: MonthlySavingsMonth[], creditBalance: CustomerCreditBalance | null,
@@ -6700,6 +7364,15 @@ function CustomerDashboard({
     return Math.max(0, selectedTotalAmount - selectedTotalFee);
   }, [selectedMonths, selectedTotalAmount, selectedTotalFee]);
 
+  // Configurable withdrawal charge (Admin Settings). Shown to the customer
+  // before they submit, and snapshotted onto the request at submission time
+  // (see handleCreatePayoutRequest) - never recalculated from a later setting.
+  const withdrawalChargeLabel = supportDetails.withdrawal_charge_label || 'Stamp Duty / Withdrawal Charge';
+  const withdrawalChargeAmount = supportDetails.withdrawal_charge_enabled ? Math.max(0, supportDetails.withdrawal_charge_amount || 0) : 0;
+  const expectedNetAmount = useMemo(() => {
+    return Math.max(0, expectedPayoutAmount - withdrawalChargeAmount);
+  }, [expectedPayoutAmount, withdrawalChargeAmount]);
+
   const toggleMonthSelection = (id: string) => {
     setSelectedMonthIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
@@ -6738,23 +7411,18 @@ function CustomerDashboard({
     // Auto-save the transaction as Pending
     onAddCustomerPendingTransaction(amt, 'Bank Transfer');
 
-    // Attempt direct deep link redirection based on bank name
-    const bankUrlMap: Record<string, string> = {
-      'Access Bank': 'accessbank://',
-      'Guaranty Trust Bank (GTBank)': 'gtb://',
-      'Zenith Bank': 'zenith://',
-      'United Bank for Africa (UBA)': 'uba://',
-      'First Bank of Nigeria': 'firstbank://',
-      'Kuda Bank': 'kudabank://',
-      'OPay': 'opay://',
-      'PalmPay': 'palmpay://'
-    };
-
-    const targetUrl = bankUrlMap[selectedSenderBank] || 'bankapp://';
-    
-    // Display prompt and invoke URL link
-    alert(`Redirecting to your ${selectedSenderBank} mobile app. If your bank app does not launch automatically, please open it manually to perform the transfer.`);
-    window.location.href = targetUrl;
+    // Try to open the customer's bank app, but ONLY through a verified launch
+    // method (see BANK_APPS). Opening an app is not payment confirmation: the
+    // transaction saved above stays Pending until an admin approves it.
+    const senderBankApp = findBankAppByName(selectedSenderBank);
+    const bankFallbackMessage = `We couldn't open ${selectedSenderBank} automatically. Please open your bank app yourself and transfer to the account shown on this page.`;
+    if (senderBankApp && canLaunchBankApp(senderBankApp)) {
+      launchBankApp(senderBankApp).then(result => {
+        if (result === 'fallback') alert(bankFallbackMessage);
+      });
+    } else {
+      alert(bankFallbackMessage);
+    }
 
     setDepositAmountInput('');
     setSelectedSenderBank('');
@@ -6821,6 +7489,29 @@ function CustomerDashboard({
           ))}
         </div>
       </div>
+
+      {(() => {
+        // "The active broadcast" = the newest row that's still active. RLS
+        // already means a Customer's broadcastMessages only ever contains
+        // active rows, but sorting+taking the first here keeps this correct
+        // even if that ever changes, and keeps the "only one" rule visible
+        // in the UI code itself rather than relying purely on the backend.
+        const active = (broadcastMessages || [])
+          .filter(b => b.is_active)
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+        if (!active) return null;
+        return (
+          <div className="flex items-start gap-2.5 p-3.5 bg-amber-50 border border-amber-200 rounded-2xl shadow-sm">
+            <Megaphone className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-sm text-amber-900 font-semibold whitespace-pre-wrap break-words">{active.message}</p>
+              <p className="text-[10px] text-amber-600 font-bold mt-1 uppercase tracking-wide">
+                {new Date(active.created_at).toLocaleString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+              </p>
+            </div>
+          </div>
+        );
+      })()}
 
       {customerTab !== 'tracker' && (
         <div className="sm:hidden flex gap-2 overflow-x-auto -mx-1 px-1 pb-1">
@@ -7367,7 +8058,7 @@ function CustomerDashboard({
               <p>1. Copy the company bank account parameters shown in the adjacent widget.</p>
               <p>2. Select the specific bank you are transferring *from* below.</p>
               <p>3. Enter the exact transferred sum, then click "Complete Transaction".</p>
-              <p>4. You will automatically be redirected to open your mobile banking app to finalize the transfer.</p>
+              <p>4. We will try to open your banking app for you. If it does not open, open it yourself to finalize the transfer.</p>
             </div>
 
             <form onSubmit={handleAddFundsSubmit} className="space-y-4 pt-2">
@@ -7437,26 +8128,11 @@ function CustomerDashboard({
                   </div>
                 </div>
               )}
-              <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5 font-bold">
-                <Landmark className="w-5 h-5 text-emerald-700" />
-                Company Banking Coordinates
-              </h3>
-              <p className="text-xs text-slate-500 font-medium font-bold">Transfer exact targets strictly to this verified account only:</p>
-              
-              <div className="p-5 bg-amber-50/50 border border-amber-200 rounded-3xl space-y-3 text-xs leading-loose text-slate-800 shadow-inner font-bold">
-                <div>
-                  <span className="text-[10px] text-slate-400 block uppercase font-bold">Receiver Bank:</span>
-                  <strong className="text-slate-900 text-sm font-bold">{supportDetails.admin_bank_name || 'Access Bank'}</strong>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 block uppercase font-bold">Account Number:</span>
-                  <strong className="text-slate-900 text-lg tracking-widest block py-0.5 font-bold">{supportDetails.admin_account_number || '0123456789'}</strong>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 block uppercase font-bold">Account Name:</span>
-                  <strong className="text-slate-900 text-sm font-bold">{supportDetails.admin_account_name || 'HireMercy Thrift Enterprises'}</strong>
-                </div>
-              </div>
+              <BankTransferPanel
+                bankName={supportDetails.admin_bank_name}
+                accountNumber={supportDetails.admin_account_number}
+                accountName={supportDetails.admin_account_name}
+              />
             </div>
             
             <div className="text-[10px] text-slate-400 font-semibold bg-slate-50 p-3 rounded-xl border border-slate-100 mt-4 leading-relaxed font-bold font-bold">
@@ -7764,9 +8440,17 @@ function CustomerDashboard({
               <p>• Selected Months: <strong>{selectedMonths.length}</strong></p>
               <p>• Total Accumulation: <strong>₦{selectedTotalAmount.toLocaleString()}</strong></p>
               <p>• Company Profit Deduction: <strong>- ₦{selectedTotalFee.toLocaleString()}</strong> ({selectedMonths.length} × 1 contribution day, at each month's own saved rate)</p>
-              <p className="text-emerald-800 border-t border-amber-200 pt-1 text-xs">
+              <p className={withdrawalChargeAmount > 0 ? '' : 'text-emerald-800 border-t border-amber-200 pt-1 text-xs'}>
                 • Final Settlement: <strong>₦{expectedPayoutAmount.toLocaleString()}</strong>
               </p>
+              {withdrawalChargeAmount > 0 && (
+                <>
+                  <p>• {withdrawalChargeLabel}: <strong>- ₦{withdrawalChargeAmount.toLocaleString()}</strong></p>
+                  <p className="text-emerald-800 border-t border-amber-200 pt-1 text-xs">
+                    • Amount You'll Receive: <strong>₦{expectedNetAmount.toLocaleString()}</strong>
+                  </p>
+                </>
+              )}
             </div>
 
             <div className="space-y-3 text-slate-800 font-bold">
@@ -7864,6 +8548,7 @@ export default function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [markedDays, setMarkedDays] = useState<Record<string, MarkedDay[]>>({});
   const [payoutRequests, setPayoutRequests] = useState<PayoutRequest[]>([]);
+  const [broadcastMessages, setBroadcastMessages] = useState<BroadcastMessage[]>([]);
   const [savedMonths, setSavedMonths] = useState<Record<string, SavedMonth[]>>({});
   const [payoutHistory, setPayoutHistory] = useState<PayoutHistoryRecord[]>([]);
   const [cycleArchives, setCycleArchives] = useState<Record<string, any[]>>({});
@@ -7883,7 +8568,10 @@ export default function App() {
     advert_title: 'Cartoon characters safely collecting small daily contributions from customers and returning them back to you in bulk!',
     advert_description: 'Join the smart daily savings circle with HireMercyAJO.',
     advert_image_url: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80',
-    advert_enabled: true
+    advert_enabled: true,
+    withdrawal_charge_enabled: true,
+    withdrawal_charge_amount: 50,
+    withdrawal_charge_label: 'Stamp Duty / Withdrawal Charge'
   });
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -8450,6 +9138,12 @@ export default function App() {
 
     const { data: sData } = await supabase.from('system_settings').select('*').eq('id', 1).single();
     if (sData) setSupportDetails(sData);
+
+    // RLS scopes this automatically: a Customer only ever gets back active
+    // broadcasts, Admin gets everything (for management). Same query, same
+    // state variable, correct result for either role.
+    const { data: brData } = await supabase.from('broadcast_messages').select('*').order('created_at', { ascending: false });
+    if (brData) setBroadcastMessages(brData);
   };
 
   const fetchCurrentUserProfile = async (userId: string) => {
@@ -9132,7 +9826,12 @@ export default function App() {
     advertImageUrl: string,
     advertEnabled: boolean,
     advertVideoUrl: string,
-    themeBackgroundColor: string
+    themeBackgroundColor: string,
+    withdrawalChargeEnabled: boolean,
+    withdrawalChargeAmount: number,
+    withdrawalChargeLabel: string,
+    opayAlertEmail: string,
+    opayAutomationEnabled: boolean
   ) => {
     setIsLoading(true);
     const { error } = await supabase
@@ -9149,7 +9848,16 @@ export default function App() {
         advert_image_url: advertImageUrl,
         advert_enabled: advertEnabled,
         advert_video_url: advertVideoUrl,
-        theme_background_color: themeBackgroundColor
+        theme_background_color: themeBackgroundColor,
+        withdrawal_charge_enabled: withdrawalChargeEnabled,
+        withdrawal_charge_amount: Math.max(0, withdrawalChargeAmount || 0),
+        withdrawal_charge_label: withdrawalChargeLabel || 'Stamp Duty / Withdrawal Charge',
+        // Only the mailbox address and the on/off switch live here - the
+        // Gmail App Password itself is never read, written, or even
+        // touched by this frontend; it only ever exists as an Edge
+        // Function secret (OPAY_GMAIL_APP_PASSWORD).
+        opay_alert_email: opayAlertEmail.trim() || null,
+        opay_automation_enabled: opayAutomationEnabled
       })
       .eq('id', 1);
 
@@ -9159,6 +9867,72 @@ export default function App() {
     } else {
       triggerToast('Support & Banking details updated successfully!', 'success');
       fetchGlobalConfiguration();
+    }
+  };
+
+  // Broadcast Messages: simple admin-authored notices shown on the customer
+  // dashboard. RLS (not this code) is what actually keeps writes Admin-only
+  // and reads scoped to active-only for everyone else - these handlers are
+  // thin wrappers, the real enforcement lives in the database.
+  const handleCreateBroadcast = async (message: string) => {
+    const text = message.trim();
+    if (!text) return;
+    setIsLoading(true);
+    const { error } = await supabase.from('broadcast_messages').insert([{
+      message: text,
+      is_active: true,
+      created_by: currentUser?.id || null
+    }]);
+    setIsLoading(false);
+    if (error) {
+      triggerToast(`Failed to publish broadcast: ${error.message}`, 'error');
+    } else {
+      triggerToast('Broadcast published.', 'success');
+      fetchGlobalConfiguration();
+    }
+  };
+
+  const handleUpdateBroadcast = async (id: string, message: string) => {
+    const text = message.trim();
+    if (!text) return;
+    setIsLoading(true);
+    const { error } = await supabase
+      .from('broadcast_messages')
+      .update({ message: text, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    setIsLoading(false);
+    if (error) {
+      triggerToast(`Failed to update broadcast: ${error.message}`, 'error');
+    } else {
+      triggerToast('Broadcast updated.', 'success');
+      fetchGlobalConfiguration();
+    }
+  };
+
+  const handleToggleBroadcastActive = async (id: string, isActive: boolean) => {
+    setIsLoading(true);
+    const { error } = await supabase
+      .from('broadcast_messages')
+      .update({ is_active: isActive, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    setIsLoading(false);
+    if (error) {
+      triggerToast(`Failed to update broadcast: ${error.message}`, 'error');
+    } else {
+      triggerToast(isActive ? 'Broadcast activated.' : 'Broadcast deactivated.', 'success');
+      fetchGlobalConfiguration();
+    }
+  };
+
+  const handleDeleteBroadcast = async (id: string) => {
+    setIsLoading(true);
+    const { error } = await supabase.from('broadcast_messages').delete().eq('id', id);
+    setIsLoading(false);
+    if (error) {
+      triggerToast(`Failed to delete broadcast: ${error.message}`, 'error');
+    } else {
+      triggerToast('Broadcast deleted.', 'success');
+      setBroadcastMessages(prev => prev.filter(b => b.id !== id));
     }
   };
 
@@ -9367,6 +10141,14 @@ export default function App() {
     const payoutAmount = Math.max(0, totalAmount - sumCurrencyValues(eligibleMonths.map(monthHistoricalDailyRate)));
     const monthPaidText = eligibleMonths.map(m => m.month_label).join(', ');
 
+    // Withdrawal charge: snapshot the setting AS IT STANDS RIGHT NOW onto
+    // this request. If the admin changes the amount/label tomorrow, this
+    // request (and its eventual payout_history archive row) keeps today's
+    // value - never recalculated from the live setting.
+    const chargeAmount = supportDetails.withdrawal_charge_enabled ? Math.max(0, supportDetails.withdrawal_charge_amount || 0) : 0;
+    const chargeLabel = supportDetails.withdrawal_charge_label || 'Stamp Duty / Withdrawal Charge';
+    const netAmount = Math.max(0, payoutAmount - chargeAmount);
+
     const payoutPayload: any = {
       customer_id: currentUser.id,
       customer_name: currentUser.name,
@@ -9378,7 +10160,10 @@ export default function App() {
       payout_amount: payoutAmount,
       status: 'Pending',
       month_paid: monthPaidText,
-      contribution_ids: contributionIds
+      contribution_ids: contributionIds,
+      charge_amount: chargeAmount,
+      charge_label: chargeAmount > 0 ? chargeLabel : null,
+      net_amount: netAmount
     };
 
     let { data: newRequest, error } = await supabase
@@ -9428,7 +10213,7 @@ export default function App() {
       await supabase.from('notifications').insert([{
         user_id: null,
         title: 'New withdrawal request',
-        message: `${currentUser.name} requested a payout of ₦${payoutAmount.toLocaleString()} (${eligibleMonths.length} saved month${eligibleMonths.length > 1 ? 's' : ''}) to ${bank}.`,
+        message: `${currentUser.name} requested a payout of ₦${payoutAmount.toLocaleString()} (${eligibleMonths.length} saved month${eligibleMonths.length > 1 ? 's' : ''}) to ${bank}.${chargeAmount > 0 ? ` ${chargeLabel}: -₦${chargeAmount.toLocaleString()}, net ₦${netAmount.toLocaleString()}.` : ''}`,
         is_read: false
       }]);
     } catch (notificationError) {
@@ -9482,6 +10267,12 @@ export default function App() {
         bank_name: req.bank_name,
         account_number: req.account_number,
         account_name: req.account_name,
+        // Charge applies once to the whole request (same as bank_name/account_number
+        // above), snapshotted exactly as it was on the request - never recalculated
+        // from the current system_settings value.
+        charge_amount: req.charge_amount ?? 0,
+        charge_label: req.charge_label ?? null,
+        net_amount: req.net_amount ?? req.payout_amount,
         approved_at: new Date().toISOString()
       }));
 
@@ -9508,7 +10299,9 @@ export default function App() {
       await supabase.from('notifications').insert([{
         user_id: req.customer_id,
         title: 'Withdrawal approved',
-        message: `Your payout request for ₦${req.payout_amount.toLocaleString()} has been approved.`,
+        message: req.charge_amount
+          ? `Your payout request for ₦${req.payout_amount.toLocaleString()} has been approved. ${req.charge_label || 'Charge'}: -₦${Number(req.charge_amount).toLocaleString()}. Net amount: ₦${Number(req.net_amount ?? req.payout_amount).toLocaleString()}.`
+          : `Your payout request for ₦${req.payout_amount.toLocaleString()} has been approved.`,
         is_read: false
       }]);
     } catch (notificationError) {
@@ -10641,6 +11434,11 @@ export default function App() {
                 savedMonths={savedMonths}
                 payoutHistory={payoutHistory}
                 withdrawalRequests={withdrawalRequests}
+                broadcastMessages={broadcastMessages}
+                onCreateBroadcast={handleCreateBroadcast}
+                onUpdateBroadcast={handleUpdateBroadcast}
+                onToggleBroadcastActive={handleToggleBroadcastActive}
+                onDeleteBroadcast={handleDeleteBroadcast}
                 triggerToast={triggerToast}
                 onResetPasswordToDefault={handleResetPasswordToDefault}
                 onRefreshProfiles={fetchGlobalConfiguration}
@@ -10710,6 +11508,7 @@ export default function App() {
                 payoutRequests={payoutRequests}
                 savedMonths={savedMonths[currentUser.id] || []}
                 cycleArchives={cycleArchives[currentUser.id] || []}
+                broadcastMessages={broadcastMessages}
                 onAddPayoutRequest={handleCreatePayoutRequest}
                 onAddCustomerPendingTransaction={handleAddCustomerPendingTransaction}
                 onUpdateCustomerSettings={handleUpdateCustomerSettings}
