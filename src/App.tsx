@@ -6906,8 +6906,12 @@ interface BankAppConfig {
   /**
    * ONLY set when a launch method is verified. Banks without it are never
    * given a guessed URL scheme - they use the copy + manual fallback.
+   * queryParams values are encoded individually when the URL is built, so a
+   * value that is itself a URI (e.g. "otravel://home/entrance") never gets
+   * concatenated in raw - an unencoded "://" inside a query value is
+   * invalid URI syntax and silently breaks Android's intent resolution.
    */
-  androidLaunch?: { scheme: string; host: string; path?: string; query?: string; packageName: string };
+  androidLaunch?: { scheme: string; host: string; path?: string; queryParams?: Record<string, string>; packageName: string };
 }
 
 // Adding a bank is a data-only change: append an entry. Leave `androidLaunch`
@@ -6916,11 +6920,17 @@ const BANK_APPS: BankAppConfig[] = [
   {
     // Verified from OPay 8.17.2.494 (team.opay.pay) AndroidManifest.xml:
     // SchemeDispatchActivity is exported and registers otravel://schemedispatcher.
-    // The "?action=otravel://<route>" form is the one the app itself uses;
-    // otravel://home/entrance is the app's home route.
+    // The "?action=otravel://<route>" form is the one the app itself uses.
+    // otravel://transfer_to_bank/entrance was found as a literal string in
+    // the app's own dex, alongside otravel://transfer/entrance?transfer_tab=
+    // bank&transfer_from= - both point at the bank-transfer screen directly
+    // rather than just the home screen. No evidence was found of a query
+    // parameter this scheme honors for pre-filling an amount or recipient
+    // account, so none is sent - inventing one would violate "don't assume
+    // deep-link support without evidence."
     id: 'opay', label: 'OPay', initials: 'OP', tint: 'bg-emerald-100 text-emerald-800',
     aliases: ['OPay'], playStoreId: 'team.opay.pay',
-    androidLaunch: { scheme: 'otravel', host: 'schemedispatcher', query: 'action=otravel://home/entrance', packageName: 'team.opay.pay' },
+    androidLaunch: { scheme: 'otravel', host: 'schemedispatcher', queryParams: { action: 'otravel://transfer_to_bank/entrance' }, packageName: 'team.opay.pay' },
   },
   {
     // Verified from PalmPay 7.14.0 (com.transsnet.palmpay) AndroidManifest.xml:
@@ -6963,8 +6973,21 @@ const canLaunchBankApp = (bank: BankAppConfig): boolean =>
 // registers the same scheme can never receive it. No browser_fallback_url is
 // used: if the app is missing the page simply stays put and we show our own
 // fallback message instead of being thrown to another site.
-const buildAndroidIntentUrl = (l: NonNullable<BankAppConfig['androidLaunch']>): string =>
-  `intent://${l.host}${l.path || ''}${l.query ? `?${l.query}` : ''}#Intent;scheme=${l.scheme};package=${l.packageName};end`;
+//
+// Each query value is encoded with encodeURIComponent individually (never
+// string-concatenated raw) - a value that is itself a URI, like OPay's
+// "otravel://transfer_to_bank/entrance", contains an unencoded "://" if
+// concatenated directly, which is invalid inside a URI's query component
+// and makes Android's Intent.parseUri throw, so the "intent://" navigation
+// silently does nothing. This was the actual bug behind the button doing
+// nothing for OPay; PalmPay and Moniepoint have no query value and were
+// never affected.
+const buildAndroidIntentUrl = (l: NonNullable<BankAppConfig['androidLaunch']>): string => {
+  const qs = l.queryParams
+    ? '?' + Object.entries(l.queryParams).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')
+    : '';
+  return `intent://${l.host}${l.path || ''}${qs}#Intent;scheme=${l.scheme};package=${l.packageName};end`;
+};
 
 type BankLaunchResult = 'opened' | 'fallback';
 
@@ -10061,6 +10084,20 @@ export default function App() {
     }
   };
 
+  // Deleting a transaction is a single DB-level operation now: the
+  // transaction row is the one source of truth, and everything that was
+  // derived from it (marked_days, and - for loan customers - the matching
+  // loan_repayments row plus the loan balance it affected) cascades and
+  // reverses automatically at the database level, by transaction_id, not
+  // by a day-number range. This also means it now correctly works for
+  // customers on an Active Loan, where it previously failed silently: the
+  // old code here deleted marked_days by day-number range first (which
+  // always succeeded) and only THEN tried to delete the transaction, which
+  // always failed for a loan customer because loan_repayments had no
+  // cascade - leaving marked_days gone but the transaction and its loan
+  // balance impact still sitting there, every time. Fixed at the DB level
+  // (loan_repayments now cascades + a reversal trigger undoes the loan
+  // balance), so this just needs to delete the one row.
   const deleteTransaction = async (txId: string) => {
     setIsLoading(true);
     const tx = transactions.find(t => t.id === txId);
@@ -10068,21 +10105,6 @@ export default function App() {
       triggerToast('Transaction record not found.', 'error');
       setIsLoading(false);
       return;
-    }
-
-    if (tx.status === 'Successful' && tx.start_day && tx.end_day) {
-      const { error: mdDelError } = await supabase
-        .from('marked_days')
-        .delete()
-        .eq('customer_id', tx.customer_id)
-        .gte('day_number', tx.start_day)
-        .lte('day_number', tx.end_day);
-      
-      if (mdDelError) {
-        triggerToast(`Failed to clear marked days: ${mdDelError.message}`, 'error');
-        setIsLoading(false);
-        return;
-      }
     }
 
     const { error: txDelError } = await supabase
@@ -10108,6 +10130,11 @@ export default function App() {
       if (currentUser) {
         syncAllOperationalData(currentUser);
         fetchNotifications(currentUser);
+        // syncAllOperationalData doesn't touch loan balances - if the
+        // deleted transaction belonged to a loan customer, the DB-level
+        // reversal trigger already corrected the loan row; this just pulls
+        // that corrected balance into view without a full page reload.
+        fetchLoans(currentUser);
       }
     }
   };
