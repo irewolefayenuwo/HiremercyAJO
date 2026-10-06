@@ -32,6 +32,7 @@ export interface Profile {
   paystack_customer_code?: string;
   virtual_account_number?: string;
   virtual_account_bank?: string;
+  referral_code?: string;
 }
 
 export interface Loan {
@@ -1176,7 +1177,27 @@ function LoginScreen({ onLogin, onSwitch }: { onLogin: (phone: string, pass: str
   );
 }
 
-function RegisterScreen({ onBack, onRegister, branches }: { onBack: () => void, onRegister: (data: any) => void, branches: Branch[] }) {
+function RegisterScreen({ onBack, onRegister: onRegisterBase, branches, referralCode }: { onBack: () => void, onRegister: (data: any) => void, branches: Branch[], referralCode?: string | null }) {
+  // --- Referral: validate ?ref= code and carry it through registration ---
+  const [refState, setRefState] = useState<{ status: 'none' | 'checking' | 'valid' | 'invalid'; name?: string }>(
+    referralCode ? { status: 'checking' } : { status: 'none' }
+  );
+  useEffect(() => {
+    let alive = true;
+    if (!referralCode) { setRefState({ status: 'none' }); return; }
+    setRefState({ status: 'checking' });
+    supabase.rpc('validate_referral_code', { p_code: referralCode }).then(({ data, error }: any) => {
+      if (!alive) return;
+      if (!error && data && data.valid) setRefState({ status: 'valid', name: data.referrer_name || '' });
+      else setRefState({ status: 'invalid' });
+    });
+    return () => { alive = false; };
+  }, [referralCode]);
+  // Only a validated code is sent; the database re-validates it and still
+  // lets registration succeed without a referral if anything is off.
+  const onRegister = (d: any) => onRegisterBase(
+    refState.status === 'valid' && referralCode ? { ...d, referral_code: referralCode } : d
+  );
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -1224,6 +1245,16 @@ function RegisterScreen({ onBack, onRegister, branches }: { onBack: () => void, 
       </div>
 
       <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-4 text-slate-800">
+        {refState.status === 'valid' && (
+          <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3 text-xs font-bold text-emerald-800">
+            You were referred by {refState.name ? refState.name : 'a HireMercyAJO customer'} (code {referralCode}).
+          </div>
+        )}
+        {refState.status === 'invalid' && (
+          <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3 text-xs font-medium text-amber-800">
+            This referral code is not valid, so it will be ignored. You can still register normally.
+          </div>
+        )}
         <div>
           <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Full Name *</label>
           <input type="text" required placeholder="Chinedu Osei" value={name} onChange={(e) => setName(e.target.value)} className="input-green text-sm" />
@@ -2713,12 +2744,17 @@ function AdminDashboard({
       const { data, error } = await supabase.functions.invoke('opay-email-check', { body: {} });
       if (error) {
         triggerToast?.(`OPay check failed: ${error.message}`, 'error');
-      } else if (data?.skipped) {
+      } else if (data?.skipped && data?.reason === 'no_pending') {
+        // Nothing is waiting for payment confirmation, so the mailbox was deliberately NOT opened.
+        triggerToast?.('No pending bank-transfer deposits are waiting, so the mailbox was not scanned.', 'success');
+      } else if (data?.skipped && data?.reason === 'already_in_progress') {
         triggerToast?.('A check is already in progress - try again shortly.', 'error');
+      } else if (data?.skipped) {
+        triggerToast?.('Check skipped - OPay automation is currently disabled.', 'error');
       } else if (data?.ok === false) {
         triggerToast?.(`OPay check finished with an error: ${data.error}`, 'error');
       } else {
-        triggerToast?.(`Checked ${data?.scanned ?? 0} email(s): ${data?.auto_approved ?? 0} auto-confirmed, ${data?.needs_review ?? 0} need review, ${data?.duplicates ?? 0} already processed.`, 'success');
+        triggerToast?.(`${data?.mailbox_opened ? `Read ${data?.scanned ?? 0} new email(s)` : 'Used stored receipts (mailbox not opened)'}: ${data?.auto_approved ?? 0} auto-confirmed, ${data?.needs_review ?? 0} need review, ${data?.duplicates ?? 0} already processed.`, 'success');
       }
     } catch (err: any) {
       triggerToast?.(`OPay check failed: ${err?.message || err}`, 'error');
@@ -6299,7 +6335,7 @@ function AdminDashboard({
                   </label>
                 </div>
                 <p className="text-[11px] text-slate-500 font-medium mb-2">
-                  Reads OPay credit-alert emails from the mailbox below and automatically confirms matching pending deposits. The mailbox password is never stored here - it's configured separately and directly in Supabase as a secret.
+                  When a customer submits a bank-transfer deposit, the OPay credit-alert email is checked for it and the deposit is confirmed automatically if the amount matches exactly and at least two names match the sender (any order). Nothing is checked while no deposits are pending. Anything uncertain stays Pending for your review. The mailbox password is never stored here - it's configured separately and directly in Supabase as a secret.
                 </p>
                 <label className="block text-xs font-bold text-emerald-800 mb-1">OPay Alert Email</label>
                 <input
@@ -6324,7 +6360,7 @@ function AdminDashboard({
                   {isCheckingOpayNow ? 'Checking...' : 'Check OPay Emails Now'}
                 </button>
                 <p className="text-[10px] text-slate-400 font-semibold mt-1">
-                  Runs for testing even while automation is disabled above. Automatically runs on its own every 5 minutes once enabled.
+                  Runs for testing even while automation is disabled above. When enabled, checks happen only after a customer submits a deposit (with a few spaced-out retries for delayed emails) - there is no timed mailbox polling.
                 </p>
               </div>
 
@@ -6663,6 +6699,9 @@ function AdminDashboard({
                 </div>
               )}
             </div>
+          </div>
+          <div className="md:col-span-2">
+            <AdminReferralPanel profiles={profiles} triggerToast={triggerToast} />
           </div>
         </div>
       )}
@@ -7275,6 +7314,490 @@ function BankTransferPanel({ bankName, accountNumber, accountName }: {
 // 4. CUSTOMER DASHBOARD COMPONENT
 // =========================================================================
 
+// =========================================================================
+// REFERRAL SYSTEM (additive) - customer section + admin panel
+// All writes happen server-side (DB triggers / admin RPCs). The UI only
+// reads and calls RPCs; nothing here can alter balances or referral data.
+// =========================================================================
+const REFERRAL_BASE_URL = 'https://hire-mercyajo.netlify.app';
+const buildReferralLink = (code: string) => `${REFERRAL_BASE_URL}/register?ref=${encodeURIComponent(code)}`;
+const REFERRAL_CODE_PATTERN = /^HM-[A-Z0-9]{6}$/;
+
+// Reads ?ref= from the current URL (null when absent or malformed).
+const readReferralCodeFromUrl = (): string | null => {
+  try {
+    const raw = new URLSearchParams(window.location.search).get('ref');
+    const code = (raw || '').trim().toUpperCase();
+    return REFERRAL_CODE_PATTERN.test(code) ? code : null;
+  } catch {
+    return null;
+  }
+};
+
+const referralCopyToClipboard = async (text: string): Promise<boolean> => {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch { /* fall through to legacy path */ }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+};
+
+interface MyReferralDashboard {
+  referral_code: string;
+  total_referred: number;
+  successful_referrals: number;
+  total_earnings: number;
+  pending_rewards: number;
+  welcome_bonus_amount: number;
+  welcome_bonus_status: string | null;
+  welcome_bonus_withdrawable: boolean;
+  points: number;
+  history: {
+    referred_name: string;
+    joined_at: string;
+    qualified: boolean;
+    first_contribution_amount: number | null;
+    reward_amount: number | null;
+    reward_status: 'pending' | 'earned' | 'paid' | 'reversed' | null;
+  }[];
+}
+
+function ReferralCustomerSection({ customer }: { customer: Profile }) {
+  const [data, setData] = useState<MyReferralDashboard | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [hint, setHint] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      setLoading(true);
+      const { data: res, error } = await supabase.rpc('get_my_referral_dashboard');
+      if (!alive) return;
+      if (error || !res) {
+        setFailed(true);
+      } else {
+        setFailed(false);
+        setData(res as MyReferralDashboard);
+      }
+      setLoading(false);
+    })();
+    return () => { alive = false; };
+  }, [customer.id]);
+
+  const flash = (msg: string) => {
+    setHint(msg);
+    setTimeout(() => setHint(null), 2500);
+  };
+
+  const code = data?.referral_code || customer.referral_code || '';
+  const link = code ? buildReferralLink(code) : '';
+
+  const handleCopy = async () => {
+    if (!link) return;
+    flash((await referralCopyToClipboard(link)) ? 'Referral link copied!' : 'Could not copy - please copy the link manually.');
+  };
+
+  const handleShare = async () => {
+    if (!link) return;
+    const shareData = {
+      title: 'Join HireMercyAJO',
+      text: `Save daily with HireMercyAJO. Use my referral code ${code} to join:`,
+      url: link
+    };
+    if (typeof navigator !== 'undefined' && typeof (navigator as any).share === 'function') {
+      try {
+        await (navigator as any).share(shareData);
+        return;
+      } catch (err: any) {
+        if (err && err.name === 'AbortError') return; // user closed the share sheet
+      }
+    }
+    flash((await referralCopyToClipboard(link)) ? 'Sharing is not available here - link copied instead.' : 'Please copy the link manually.');
+  };
+
+  const naira = (n: number | null | undefined) => `₦${Number(n || 0).toLocaleString()}`;
+
+  const statusStyle = (s: string | null) =>
+    s === 'paid' || s === 'earned' ? 'bg-emerald-100 text-emerald-800'
+      : s === 'pending' ? 'bg-amber-100 text-amber-800'
+      : s === 'reversed' ? 'bg-red-100 text-red-700'
+      : 'bg-slate-100 text-slate-500';
+
+  return (
+    <div className="space-y-4 animate-fade-in max-w-4xl mx-auto text-slate-800">
+      <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs space-y-4">
+        <div>
+          <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5">
+            <Users className="w-5 h-5 text-emerald-700" /> Refer &amp; Earn
+          </h3>
+          <p className="text-xs text-slate-500 mt-0.5 font-medium">
+            Share your link. When someone you refer makes their first approved contribution, you earn a referral reward.
+          </p>
+        </div>
+
+        {loading && <p className="text-xs text-slate-400 font-medium">Loading your referral details...</p>}
+        {!loading && failed && !code && (
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl p-3 font-medium">
+            Referral details are not available yet. Please try again later.
+          </p>
+        )}
+
+        {code && (
+          <div className="space-y-3">
+            <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3">
+              <p className="text-[10px] font-black uppercase text-emerald-700 tracking-wide">My Referral Code</p>
+              <p className="text-xl font-black text-emerald-900 tracking-widest select-all">{code}</p>
+            </div>
+            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3">
+              <p className="text-[10px] font-black uppercase text-slate-500 tracking-wide">My Referral Link</p>
+              <p className="text-[11px] font-bold text-slate-700 break-all select-all">{link}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={handleCopy}
+                className="flex items-center justify-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl transition text-xs uppercase tracking-wide">
+                <Copy className="w-4 h-4" /> Copy Link
+              </button>
+              <button type="button" onClick={handleShare}
+                className="flex items-center justify-center gap-1.5 bg-white border border-emerald-200 hover:bg-emerald-50 text-emerald-800 font-bold py-2.5 rounded-xl transition text-xs uppercase tracking-wide">
+                <Share2 className="w-4 h-4" /> Share
+              </button>
+            </div>
+            {hint && <p className="text-[11px] font-bold text-emerald-700 text-center">{hint}</p>}
+          </div>
+        )}
+      </div>
+
+      {data && (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-xs">
+              <p className="text-[10px] font-black uppercase text-slate-500">People Referred</p>
+              <p className="text-xl font-black text-emerald-900">{data.total_referred}</p>
+            </div>
+            <div className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-xs">
+              <p className="text-[10px] font-black uppercase text-slate-500">Successful Referrals</p>
+              <p className="text-xl font-black text-emerald-900">{data.successful_referrals}</p>
+            </div>
+            <div className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-xs">
+              <p className="text-[10px] font-black uppercase text-slate-500">Referral Earnings</p>
+              <p className="text-xl font-black text-emerald-900">{naira(data.total_earnings)}</p>
+              {Number(data.pending_rewards) > 0 && (
+                <p className="text-[10px] font-bold text-amber-700">Pending: {naira(data.pending_rewards)}</p>
+              )}
+            </div>
+            <div className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-xs">
+              <p className="text-[10px] font-black uppercase text-slate-500">Reward Points</p>
+              <p className="text-xl font-black text-emerald-900">{Number(data.points).toLocaleString()}</p>
+            </div>
+          </div>
+
+          {Number(data.welcome_bonus_amount) > 0 && (
+          <div className="bg-gradient-to-br from-emerald-700 to-emerald-900 text-white p-4 rounded-2xl shadow-sm flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-black uppercase text-emerald-200 tracking-wide">Welcome Bonus</p>
+              <p className="text-2xl font-black">{naira(data.welcome_bonus_amount)}</p>
+            </div>
+            <span className="flex items-center gap-1 bg-white/15 border border-white/20 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide">
+              <LockIcon className="w-3 h-3" /> Non-withdrawable
+            </span>
+          </div>
+          )}
+          <p className="text-[10px] text-slate-400 font-medium px-1">
+            Referral earnings, any Welcome Bonus and reward points are kept separate from your Ajo savings balance.
+          </p>
+
+          <div className="bg-white p-5 rounded-3xl border border-emerald-100 shadow-xs">
+            <h4 className="text-xs font-black text-emerald-950 uppercase tracking-wide mb-3">Referral History</h4>
+            {data.history.length === 0 ? (
+              <p className="text-xs text-slate-400 font-medium">No referrals yet. Share your link to get started.</p>
+            ) : (
+              <div className="space-y-2">
+                {data.history.map((h, i) => (
+                  <div key={i} className="border border-slate-100 rounded-xl p-3 flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-xs font-black text-slate-800 truncate">{h.referred_name || 'Customer'}</p>
+                      <p className="text-[10px] text-slate-500 font-medium">Joined {new Date(h.joined_at).toLocaleDateString()}</p>
+                      <p className="text-[10px] text-slate-500 font-medium">
+                        First contribution: {h.qualified ? naira(h.first_contribution_amount) : 'Not yet'}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-xs font-black text-emerald-800">{h.qualified ? naira(h.reward_amount) : '—'}</p>
+                      <span className={`inline-block mt-0.5 px-2 py-0.5 rounded-full font-black uppercase text-[9px] ${statusStyle(h.reward_status)}`}>
+                        {h.reward_status || 'Awaiting'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------
+// Admin referral panel (rendered inside the existing Admin Settings tab)
+// ---------------------------------------------------------------------
+function AdminReferralPanel({ profiles, triggerToast: toast }: { profiles: Profile[], triggerToast?: (text: string, type?: 'success' | 'error') => void }) {
+  const triggerToast = (text: string, type: 'success' | 'error' = 'success') => { if (toast) toast(text, type); };
+  const [settings, setSettings] = useState<any>(null);
+  const [enabled, setEnabled] = useState(true);
+  const [percentage, setPercentage] = useState('15');
+  const [cap, setCap] = useState('1000');
+  const [saving, setSaving] = useState(false);
+  const [referrals, setReferrals] = useState<any[]>([]);
+  const [rewards, setRewards] = useState<any[]>([]);
+  const [bonuses, setBonuses] = useState<any[]>([]);
+  const [points, setPoints] = useState<any[]>([]);
+  const [loadError, setLoadError] = useState(false);
+  const [view, setView] = useState<'referrals' | 'bonuses' | 'points'>('referrals');
+  const [search, setSearch] = useState('');
+
+  const nameOf = (id: string) => profiles.find(p => p.id === id)?.name || 'Unknown';
+
+  const load = async () => {
+    const [s, rf, rw, wb, pt] = await Promise.all([
+      supabase.from('referral_settings').select('*').eq('id', 1).single(),
+      supabase.from('referrals').select('*').order('created_at', { ascending: false }),
+      supabase.from('referral_rewards').select('*').order('created_at', { ascending: false }),
+      supabase.from('welcome_bonuses').select('*').order('created_at', { ascending: false }),
+      supabase.from('referral_points_ledger').select('*').order('created_at', { ascending: false })
+    ]);
+    if (s.error) { setLoadError(true); return; }
+    setLoadError(false);
+    if (s.data) {
+      setSettings(s.data);
+      setEnabled(!!s.data.rewards_enabled);
+      setPercentage(String(Number(s.data.reward_percentage)));
+      setCap(String(Number(s.data.max_reward_cap)));
+    }
+    setReferrals(rf.data || []);
+    setRewards(rw.data || []);
+    setBonuses(wb.data || []);
+    setPoints(pt.data || []);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const pct = Number(percentage);
+    const capNum = Number(cap);
+    if (percentage.trim() === '' || !isFinite(pct) || pct < 0 || pct > 100) {
+      triggerToast('Referral percentage must be a number between 0 and 100.', 'error'); return;
+    }
+    if (cap.trim() === '' || !isFinite(capNum) || capNum < 0) {
+      triggerToast('Maximum reward must be 0 or more.', 'error'); return;
+    }
+    setSaving(true);
+    const { error } = await supabase.rpc('admin_update_referral_settings', {
+      p_enabled: enabled, p_percentage: pct, p_cap: capNum, p_welcome_amount: null
+    });
+    setSaving(false);
+    if (error) { triggerToast(`Could not save referral settings: ${error.message}`, 'error'); return; }
+    triggerToast('Referral settings saved. They apply to new rewards only.', 'success');
+    load();
+  };
+
+  const handleReverse = async (rewardId: string) => {
+    const reason = window.prompt('Reason for reversing this referral reward (required):');
+    if (!reason || !reason.trim()) return;
+    const { error } = await supabase.rpc('admin_reverse_referral_reward', { p_reward_id: rewardId, p_reason: reason.trim() });
+    if (error) triggerToast(`Reverse failed: ${error.message}`, 'error');
+    else { triggerToast('Referral reward reversed.', 'success'); load(); }
+  };
+
+  const handleCorrect = async (r: any) => {
+    const raw = window.prompt(`New reward amount in ₦ (current ₦${Number(r.reward_amount).toLocaleString()}):`);
+    if (raw === null) return;
+    const amt = Number(raw);
+    if (raw.trim() === '' || !isFinite(amt) || amt < 0) { triggerToast('Enter a valid amount (0 or more).', 'error'); return; }
+    const reason = window.prompt('Reason for this correction (required):');
+    if (!reason || !reason.trim()) return;
+    const { error } = await supabase.rpc('admin_correct_referral_reward', { p_reward_id: r.id, p_new_amount: amt, p_reason: reason.trim() });
+    if (error) triggerToast(`Correction failed: ${error.message}`, 'error');
+    else { triggerToast('Referral reward corrected.', 'success'); load(); }
+  };
+
+  const q = search.trim().toLowerCase();
+  const rows = useMemo(() => referrals.map(rf => ({
+    rf,
+    reward: rewards.find(r => r.referred_customer_id === rf.referred_customer_id) || null,
+    referrer: nameOf(rf.referrer_customer_id),
+    referred: nameOf(rf.referred_customer_id)
+  })).filter(x => !q || x.referrer.toLowerCase().includes(q) || x.referred.toLowerCase().includes(q) || (x.rf.referral_code || '').toLowerCase().includes(q)),
+  [referrals, rewards, profiles, q]);
+
+  const pointsByCustomer = useMemo(() => {
+    const m: Record<string, number> = {};
+    points.forEach(p => { m[p.customer_id] = (m[p.customer_id] || 0) + Number(p.points); });
+    return Object.entries(m).filter(([id]) => !q || nameOf(id).toLowerCase().includes(q));
+  }, [points, profiles, q]);
+
+  return (
+    <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs space-y-4 text-slate-800">
+      <div>
+        <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5">
+          <Users className="w-5 h-5 text-emerald-700" /> Referral Program
+        </h3>
+        <p className="text-xs text-slate-500 mt-0.5 font-medium">
+          Reward = MIN(first approved contribution × percentage, maximum reward). Changes apply to new rewards only; old rewards keep the settings they were created with.
+        </p>
+      </div>
+
+      {loadError ? (
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl p-3 font-medium">
+          Referral tables were not found. Run the referral migration in Supabase first.
+        </p>
+      ) : (
+        <>
+          <form onSubmit={handleSave} className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+            <label className="flex items-center gap-2 text-xs font-bold text-emerald-800 sm:pb-2.5">
+              <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="w-4 h-4 accent-emerald-700" />
+              Referral rewards enabled
+            </label>
+            <div>
+              <label className="block text-xs font-bold text-emerald-800 mb-1">Referral percentage (%)</label>
+              <input type="number" min="0" max="100" step="0.01" value={percentage} onChange={(e) => setPercentage(e.target.value)} className="input-green text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-emerald-800 mb-1">Maximum reward (₦)</label>
+              <input type="number" min="0" step="1" value={cap} onChange={(e) => setCap(e.target.value)} className="input-green text-sm" />
+            </div>
+            <button type="submit" disabled={saving}
+              className="bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl transition text-xs uppercase tracking-wide">
+              {saving ? 'Saving...' : 'Save Referral Settings'}
+            </button>
+          </form>
+          {settings && (
+            <p className="text-[10px] text-slate-400 font-medium">
+              Welcome Bonus: ₦{Number(settings.welcome_bonus_amount).toLocaleString()} · Withdrawable: No
+            </p>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2">
+            {([['referrals', 'Referrals & Rewards'], ['bonuses', 'Welcome Bonuses'], ['points', 'Points']] as const).map(([k, label]) => (
+              <button key={k} type="button" onClick={() => setView(k)}
+                className={`px-3 py-1.5 rounded-xl text-[11px] font-bold uppercase tracking-wide ${view === k ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'}`}>
+                {label}
+              </button>
+            ))}
+            <input type="text" placeholder="Search referrer or referred customer..." value={search} onChange={(e) => setSearch(e.target.value)}
+              className="input-green text-xs flex-1 min-w-[180px]" />
+          </div>
+
+          {view === 'referrals' && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-[11px]">
+                <thead>
+                  <tr className="text-slate-500 uppercase text-[10px] border-b border-slate-100">
+                    <th className="p-2">Referrer</th><th className="p-2">Referred</th><th className="p-2">Joined</th>
+                    <th className="p-2">Qualifying Tx</th><th className="p-2">Contribution</th><th className="p-2">Rate / Cap used</th>
+                    <th className="p-2">Reward</th><th className="p-2">Status</th><th className="p-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.length === 0 && (<tr><td colSpan={9} className="p-3 text-slate-400">No referrals found.</td></tr>)}
+                  {rows.map(({ rf, reward, referrer, referred }) => (
+                    <tr key={rf.id} className="border-b border-slate-50">
+                      <td className="p-2 font-bold">{referrer}</td>
+                      <td className="p-2 font-bold">{referred}</td>
+                      <td className="p-2">{new Date(rf.created_at).toLocaleDateString()}</td>
+                      <td className="p-2 font-mono">{reward?.qualifying_transaction_id ? String(reward.qualifying_transaction_id).slice(0, 8) : '—'}</td>
+                      <td className="p-2">{reward ? `₦${Number(reward.contribution_amount).toLocaleString()}` : '—'}</td>
+                      <td className="p-2">{reward ? `${Number(reward.referral_percentage_used)}% / ₦${Number(reward.maximum_reward_cap_used).toLocaleString()}` : '—'}</td>
+                      <td className="p-2 font-black text-emerald-800">
+                        {reward ? `₦${Number(reward.reward_amount).toLocaleString()}` : '—'}
+                        {reward?.original_reward_amount != null && (
+                          <span className="block text-[9px] font-medium text-slate-400">was ₦{Number(reward.original_reward_amount).toLocaleString()}</span>
+                        )}
+                      </td>
+                      <td className="p-2">
+                        <span className={`px-2 py-0.5 rounded-full font-black uppercase text-[9px] ${
+                          !reward ? 'bg-slate-100 text-slate-500' : reward.status === 'reversed' ? 'bg-red-100 text-red-700'
+                          : reward.status === 'pending' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                          {reward ? reward.status : 'No reward yet'}
+                        </span>
+                      </td>
+                      <td className="p-2 whitespace-nowrap">
+                        {reward && reward.status !== 'reversed' && (
+                          <>
+                            <button type="button" onClick={() => handleCorrect(reward)} className="text-emerald-700 font-bold hover:underline mr-2">Correct</button>
+                            <button type="button" onClick={() => handleReverse(reward.id)} className="text-red-600 font-bold hover:underline">Reverse</button>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {view === 'bonuses' && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-[11px]">
+                <thead><tr className="text-slate-500 uppercase text-[10px] border-b border-slate-100">
+                  <th className="p-2">Customer</th><th className="p-2">Amount</th><th className="p-2">Withdrawable</th><th className="p-2">Status</th><th className="p-2">Created</th>
+                </tr></thead>
+                <tbody>
+                  {bonuses.filter(b => !q || nameOf(b.customer_id).toLowerCase().includes(q)).map(b => (
+                    <tr key={b.id} className="border-b border-slate-50">
+                      <td className="p-2 font-bold">{nameOf(b.customer_id)}</td>
+                      <td className="p-2">₦{Number(b.amount).toLocaleString()}</td>
+                      <td className="p-2">No</td>
+                      <td className="p-2 uppercase font-black text-[9px]">{b.status}</td>
+                      <td className="p-2">{new Date(b.created_at).toLocaleDateString()}</td>
+                    </tr>
+                  ))}
+                  {bonuses.length === 0 && (<tr><td colSpan={5} className="p-3 text-slate-400">No welcome bonus records.</td></tr>)}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {view === 'points' && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-[11px]">
+                <thead><tr className="text-slate-500 uppercase text-[10px] border-b border-slate-100">
+                  <th className="p-2">Customer</th><th className="p-2">Points balance</th>
+                </tr></thead>
+                <tbody>
+                  {pointsByCustomer.map(([id, total]) => (
+                    <tr key={id} className="border-b border-slate-50">
+                      <td className="p-2 font-bold">{nameOf(id)}</td>
+                      <td className="p-2 font-black text-emerald-800">{total.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                  {pointsByCustomer.length === 0 && (<tr><td colSpan={2} className="p-3 text-slate-400">No points recorded yet.</td></tr>)}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function CustomerDashboard({ 
   customer, transactions, markedDays, supportDetails, onAddPayoutRequest, payoutRequests, savedMonths, cycleArchives, onAddCustomerPendingTransaction, onUpdateCustomerSettings,
   activeLoan, myLoans, myLoanRequests, onRequestLoan, profiles,
@@ -7286,7 +7809,7 @@ function CustomerDashboard({
   myMonthlySavingsPlan: MonthlySavingsPlan | null, myMonthlySavingsMonths: MonthlySavingsMonth[], creditBalance: CustomerCreditBalance | null,
   onSelfEnrollMonthly: (amount: number) => void, myBalanceAdjustments: BalanceAdjustment[]
 }) {
-  const [customerTab, setCustomerTab] = useState<'tracker' | 'transactions' | 'deposit' | 'settings' | 'history' | 'monthly-savings'>('tracker');
+  const [customerTab, setCustomerTab] = useState<'tracker' | 'transactions' | 'deposit' | 'settings' | 'history' | 'monthly-savings' | 'referral'>('tracker');
   const [selectedTrackerMonthKey, setSelectedTrackerMonthKey] = useState<string | null>(null);
   const [showSupportOptions, setShowSupportOptions] = useState(false);
   const [showLoanDetails, setShowLoanDetails] = useState(false);
@@ -7492,7 +8015,7 @@ function CustomerDashboard({
           <p className="text-[11px] text-slate-500">Your personal 32-day savings tracker</p>
         </div>
         <div className="hidden sm:flex gap-2 overflow-x-auto -mx-1 px-1 pb-1">
-          {(['tracker', 'history', 'transactions', 'deposit', 'settings', ...(myMonthlySavingsPlan ? ['monthly-savings'] : [])] as const).map((tab: any) => (
+          {(['tracker', 'history', 'transactions', 'deposit', 'referral', 'settings', ...(myMonthlySavingsPlan ? ['monthly-savings'] : [])] as const).map((tab: any) => (
             <button
               key={tab}
               onClick={() => setCustomerTab(tab)}
@@ -7506,6 +8029,7 @@ function CustomerDashboard({
               {tab === 'history' && '32-Day History'}
               {tab === 'transactions' && 'Statement'}
               {tab === 'deposit' && 'Deposit Funds'}
+              {tab === 'referral' && 'Refer & Earn'}
               {tab === 'settings' && 'Settings'}
               {tab === 'monthly-savings' && 'Monthly Savings'}
             </button>
@@ -7538,7 +8062,7 @@ function CustomerDashboard({
 
       {customerTab !== 'tracker' && (
         <div className="sm:hidden flex gap-2 overflow-x-auto -mx-1 px-1 pb-1">
-          {(['tracker', 'history', 'transactions', 'deposit', 'settings', ...(myMonthlySavingsPlan ? ['monthly-savings'] : [])] as const).map((tab: any) => (
+          {(['tracker', 'history', 'transactions', 'deposit', 'referral', 'settings', ...(myMonthlySavingsPlan ? ['monthly-savings'] : [])] as const).map((tab: any) => (
             <button
               key={tab}
               onClick={() => setCustomerTab(tab)}
@@ -7552,6 +8076,7 @@ function CustomerDashboard({
               {tab === 'history' && '32-Day History'}
               {tab === 'transactions' && 'Statement'}
               {tab === 'deposit' && 'Deposit Funds'}
+              {tab === 'referral' && 'Refer & Earn'}
               {tab === 'settings' && 'Settings'}
               {tab === 'monthly-savings' && 'Monthly Savings'}
             </button>
@@ -7707,6 +8232,7 @@ function CustomerDashboard({
                 { tab: 'history', label: '32-Day History', icon: Calendar },
                 { tab: 'transactions', label: 'Statement', icon: FileText },
                 { tab: 'deposit', label: 'Deposit Funds', icon: Wallet },
+                { tab: 'referral', label: 'Refer & Earn', icon: Users },
                 { tab: 'settings', label: 'Plan Settings', icon: Settings },
               ] as const).map(({ tab, label, icon: Icon }) => (
                 <button
@@ -8277,6 +8803,9 @@ function CustomerDashboard({
         </div>
       )}
 
+      {/* Referral Tab */}
+      {customerTab === 'referral' && <ReferralCustomerSection customer={customer} />}
+
       {/* Monthly Savings Dashboard Tab */}
       {customerTab === 'monthly-savings' && myMonthlySavingsPlan && (
         <div className="space-y-6 animate-fade-in">
@@ -8602,7 +9131,14 @@ export default function App() {
   const [currentDayKey, setCurrentDayKey] = useState(getWATDateKey());
 
   // UI States
-  const [authScreen, setAuthScreen] = useState<'login' | 'register' | 'admin_setup'>('login');
+  // Referral link support: /register?ref=HM-XXXXXX opens the registration screen.
+  const [pendingReferralCode] = useState<string | null>(() => readReferralCodeFromUrl());
+  const [authScreen, setAuthScreen] = useState<'login' | 'register' | 'admin_setup'>(() => {
+    try {
+      if (readReferralCodeFromUrl() || /\/register\/?$/.test(window.location.pathname)) return 'register';
+    } catch { /* ignore */ }
+    return 'login';
+  });
   const [notification, setNotification] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
   const [hasCheckedAdmin, setHasCheckedAdmin] = useState(false);
@@ -9731,20 +10267,24 @@ export default function App() {
     const formattedPhone = formatNigerianPhone(phone);
     const fallbackEmail = `${formattedPhone.replace(/\D/g, '')}@hiremercy.com`;
 
-    const { error } = await supabase.auth.signUp({
-      phone: formattedPhone,
-      password: password,
-      options: {
-        data: {
-          name,
-          email: email || fallbackEmail,
-          phone: formattedPhone,
-          role: 'Staff',
-          branch_id: branchId,
-          daily_amount: 0
-        }
+    // SECURITY: the role is assigned by the admin-create-staff Edge Function
+    // (verifies the caller is an Admin, writes the role server-side). The
+    // browser never sends a role any more.
+    let error: { message: string } | null = null;
+    try {
+      const { data: fnData, error: fnError } = await supabase.functions.invoke('admin-create-staff', {
+        body: { name, phone: formattedPhone, email: email || fallbackEmail, branchId, password }
+      });
+      if (fnError) {
+        let msg = fnError.message;
+        try { const body = await (fnError as any).context?.json?.(); if (body?.error) msg = body.error; } catch { /* keep generic */ }
+        error = { message: msg };
+      } else if (fnData && (fnData as any).error) {
+        error = { message: (fnData as any).error };
       }
-    });
+    } catch (err: any) {
+      error = { message: err?.message || 'admin-create-staff Edge Function is not deployed yet' };
+    }
 
     setIsLoading(false);
     if (error) {
@@ -9810,7 +10350,9 @@ export default function App() {
           is_active: true,
           email: data.email || fallbackEmail,
           savings_type: data.savings_type || 'daily',
-          monthly_savings_terms_accepted: data.monthly_savings_terms_accepted || false
+          monthly_savings_terms_accepted: data.monthly_savings_terms_accepted || false,
+          // Referral: consumed by a database trigger (re-validated server-side)
+          ...(data.referral_code ? { referral_code: String(data.referral_code).toUpperCase() } : {})
         }
       }
     });
@@ -11446,6 +11988,7 @@ export default function App() {
               onBack={() => setAuthScreen('login')} 
               onRegister={handleRegister} 
               branches={branches}
+              referralCode={pendingReferralCode}
             />
           )
         ) : (
