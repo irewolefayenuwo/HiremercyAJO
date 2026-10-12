@@ -6,7 +6,8 @@ import {
 import type { Profile, Transaction, Notification, SupportSettings } from '../App';
 import { Mascot, type MascotPose } from './Mascot';
 import { Card, EmptyState, Pill, ProgressBar, SectionTitle, firstName, greeting, naira, whatsappUrl } from './ui';
-import { FEATURES, type SectionKey } from './config';
+import type { SectionKey } from './config';
+import { useLiveFlags } from './liveFlags';
 import { buildWelcomeSteps } from './rewardsLogic';
 import type { DashboardLite } from './useReferralDashboard';
 
@@ -103,6 +104,7 @@ function PromoCarousel({ slides }: { slides: Slide[] }) {
 export function HomeScreen(p: HomeProps) {
   const { customer, totalSaved, dayCount, paidToday, myTransactions, notifications, supportDetails, dash, onSection, onTab } = p;
   const name = firstName(customer.name);
+  const live = useLiveFlags();
   const hasSuccessful = myTransactions.some(t => t.status !== 'Pending');
   const steps = buildWelcomeSteps({ customer, hasSuccessfulContribution: hasSuccessful, dash });
   const doneSteps = steps.filter(s => s.status === 'done').length;
@@ -140,8 +142,8 @@ export function HomeScreen(p: HomeProps) {
     },
     {
       id: 'oja', bg: 'from-amber-600 to-amber-500', kicker: 'Gbagede OJA',
-      title: FEATURES.marketplace ? 'Shop and sell on Gbagede OJA' : 'Gbagede OJA is on the way',
-      text: FEATURES.marketplace ? 'Browse products from sellers on HireMercyAJO.' : 'Our marketplace is being prepared. See what is coming.',
+      title: live.oja ? 'Shop and sell on Gbagede OJA' : 'Gbagede OJA is on the way',
+      text: live.oja ? 'Browse products, promos and offers on HireMercyAJO.' : 'Our marketplace is being prepared. See what is coming.',
       cta: 'Take a look', pose: 'megaphone', onClick: () => onSection('oja')
     },
     {
@@ -152,10 +154,10 @@ export function HomeScreen(p: HomeProps) {
   );
 
   const actions: { label: string; icon: any; color: string; soon?: boolean; run: () => void }[] = [
-    { label: 'Fund Wallet', icon: Wallet, color: 'from-emerald-500 to-emerald-700', soon: !FEATURES.wallet, run: () => onSection('wallet') },
+    { label: 'Fund Wallet', icon: Wallet, color: 'from-emerald-500 to-emerald-700', soon: live.loaded && !live.wallet, run: () => onSection('wallet') },
     { label: 'Pay Contribution', icon: PiggyBank, color: 'from-amber-400 to-amber-600', run: () => onTab('deposit') },
-    { label: 'Buy Airtime', icon: Smartphone, color: 'from-sky-500 to-blue-700', soon: !FEATURES.bills, run: () => onSection('bills') },
-    { label: 'Gbagede OJA', icon: Store, color: 'from-orange-400 to-orange-600', soon: !FEATURES.marketplace, run: () => onSection('oja') },
+    { label: 'Buy Airtime', icon: Smartphone, color: 'from-sky-500 to-blue-700', soon: live.loaded && !live.bills, run: () => onSection('bills') },
+    { label: 'Gbagede OJA', icon: Store, color: 'from-orange-400 to-orange-600', soon: live.loaded && !live.oja, run: () => onSection('oja') },
     { label: 'Rewards', icon: Gift, color: 'from-pink-400 to-rose-600', run: () => onSection('rewards') },
     { label: 'Refer & Earn', icon: Users, color: 'from-green-500 to-emerald-700', run: () => onSection('referrals') },
     { label: 'Advertise', icon: Megaphone, color: 'from-violet-500 to-purple-700', run: () => onSection('advertise') },
@@ -191,15 +193,15 @@ export function HomeScreen(p: HomeProps) {
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-800 to-emerald-950 text-white p-5 shadow-md hm-shine">
           <div className="flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1.5"><Wallet className="w-4 h-4" /> Wallet Balance</p>
-            {!FEATURES.wallet && <Pill tone="gold">Coming soon</Pill>}
+            {live.loaded && !live.wallet && <Pill tone="gold">Coming soon</Pill>}
           </div>
-          <p className="text-3xl font-black mt-2">{FEATURES.wallet ? '₦0' : 'Not active yet'}</p>
+          <p className="text-3xl font-black mt-2">{!live.loaded ? '...' : live.wallet ? naira(live.balance) : 'Not active yet'}</p>
           <p className="text-[11px] text-emerald-100 font-medium mt-1">
-            {FEATURES.wallet ? 'Separate from your Ajo savings.' : 'Your wallet and its dedicated account number will appear here once it is switched on.'}
+            {live.wallet ? 'Separate from your Ajo savings. Use it for airtime, data and bills.' : 'Your wallet and its dedicated account number will appear here once it is switched on.'}
           </p>
           <button type="button" onClick={() => onSection('wallet')}
             className="mt-4 inline-flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-emerald-950 font-bold text-xs px-4 py-2.5 rounded-xl transition active:scale-[0.98]">
-            {FEATURES.wallet ? 'Fund Wallet' : 'About the wallet'} <ChevronRight className="w-3.5 h-3.5" />
+            {live.wallet ? 'Fund Wallet' : 'About the wallet'} <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
 

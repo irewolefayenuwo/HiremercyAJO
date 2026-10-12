@@ -4,7 +4,8 @@ import {
 } from 'lucide-react';
 import type { Profile, Transaction, SupportSettings } from '../App';
 import { Card, Pill, SectionTitle, naira, whatsappUrl } from './ui';
-import { FEATURES, type SectionKey } from './config';
+import type { SectionKey } from './config';
+import { useLiveFlags } from './liveFlags';
 import type { DashboardLite } from './useReferralDashboard';
 
 function Row({ icon: Icon, label, value, onClick, tone = 'green' }: {
@@ -40,6 +41,7 @@ export function ProfileScreen({
   onSection: (s: SectionKey) => void;
   onLogout?: () => void;
 }) {
+  const live = useLiveFlags();
   const initials = (customer.name || '?').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
   const bonus = Number(dash?.welcome_bonus_amount || 0);
   const successful = myTransactions.filter(t => t.status !== 'Pending').length;
@@ -83,7 +85,7 @@ export function ProfileScreen({
 
       <Card>
         <SectionTitle>Wallet</SectionTitle>
-        <Row icon={Wallet} label="Wallet" value={FEATURES.wallet ? 'Active' : 'Not active yet - kept separate from Ajo savings'} onClick={() => onSection('wallet')} />
+        <Row icon={Wallet} label="Wallet" value={live.wallet ? `Active - ${naira(live.balance)} (separate from Ajo savings)` : 'Not active yet - kept separate from Ajo savings'} onClick={() => onSection('wallet')} />
       </Card>
 
       <Card>

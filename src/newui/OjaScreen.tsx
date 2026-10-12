@@ -1,84 +1,144 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Search, Store, Package, ShoppingBag, Plus, Image as ImageIcon, X, Star, ChevronRight, MapPin, BadgeCheck } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Search, Store, Package, ShoppingBag, Plus, Image as ImageIcon, X, ChevronRight, MapPin, Tag, Megaphone } from 'lucide-react';
 import type { Profile, SupportSettings } from '../App';
 import { Mascot } from './Mascot';
 import { Card, EmptyState, NotLive, Pill, PrimaryButton, ScreenHeader, SecondaryButton, SectionTitle, naira, whatsappUrl } from './ui';
-import { FEATURES, OJA_CATEGORIES, type SectionKey } from './config';
+import { OJA_CATEGORIES, type SectionKey } from './config';
+import { loadMyOjaRequests, loadOjaListings, placeOjaRequest, type OjaListing, type OjaRequest } from './ojaApi';
 
-/** Shape the marketplace tables will return once they exist. */
-export interface OjaProduct {
-  id: string;
-  name: string;
-  price: number;
-  category: string;
-  image_url?: string;
-  seller_name: string;
-  seller_verified?: boolean;
-  location?: string;
-  description?: string;
-  rating?: number | null;
-  in_stock?: boolean;
-}
-export type OjaOrderStatus = 'Pending' | 'In Progress' | 'Completed' | 'Cancelled';
-export interface OjaOrder {
-  id: string;
-  product_name: string;
-  amount: number;
-  status: OjaOrderStatus;
-  seller_name: string;
-  created_at: string;
-}
-
-/**
- * Data source. There are no marketplace tables yet, so this returns empty lists - the UI never
- * shows sample products or orders. Replace with Supabase queries when the tables exist.
- */
-function useOjaData() {
-  return { products: [] as OjaProduct[], orders: [] as OjaOrder[] };
-}
-
-const STATUS_TONE: Record<OjaOrderStatus, 'gold' | 'blue' | 'green' | 'red'> = {
-  Pending: 'gold', 'In Progress': 'blue', Completed: 'green', Cancelled: 'red'
+export type OjaProduct = OjaListing;
+const STATUS_TONE: Record<OjaRequest['status'], 'gold' | 'blue' | 'green' | 'red'> = {
+  pending: 'gold', contacted: 'blue', completed: 'green', cancelled: 'red'
 };
+const STATUS_TEXT: Record<OjaRequest['status'], string> = {
+  pending: 'Pending', contacted: 'Seller contacted', completed: 'Completed', cancelled: 'Cancelled'
+};
+const promoPct = (p: OjaListing) =>
+  p.price && p.promo_price && p.promo_price < p.price ? Math.round((1 - p.promo_price / p.price) * 100) : 0;
+
+function PriceLine({ p, big }: { p: OjaListing; big?: boolean }) {
+  const promo = p.promo_price != null && p.price != null && p.promo_price < p.price;
+  return (
+    <div className="flex items-baseline gap-1.5 flex-wrap">
+      <span className={`${big ? 'text-2xl' : 'text-sm'} font-black text-emerald-800`}>{naira(p.effective_price ?? p.price)}</span>
+      {promo && <span className={`${big ? 'text-sm' : 'text-[11px]'} font-semibold text-slate-400 line-through`}>{naira(p.price)}</span>}
+    </div>
+  );
+}
 
 export function ProductCard({ product, onOpen }: { product: OjaProduct; onOpen: (p: OjaProduct) => void }) {
+  const pct = promoPct(product);
   return (
-    <button type="button" onClick={() => onOpen(product)} className="text-left bg-white rounded-2xl border border-orange-100 shadow-sm overflow-hidden active:scale-[0.98] transition">
+    <button type="button" onClick={() => onOpen(product)} className="text-left bg-white rounded-2xl border border-orange-100 shadow-sm overflow-hidden active:scale-[0.98] transition relative">
+      {pct > 0 && <span className="absolute top-2 left-2 z-10 bg-red-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full">-{pct}%</span>}
+      {!product.in_stock && <span className="absolute top-2 right-2 z-10 bg-slate-800 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">Sold out</span>}
       <div className="aspect-square bg-orange-50 flex items-center justify-center">
-        {product.image_url
-          ? <img src={product.image_url} alt={product.name} loading="lazy" className="w-full h-full object-cover" />
+        {product.image_urls[0]
+          ? <img src={product.image_urls[0]} alt={product.title} loading="lazy" className="w-full h-full object-cover" />
           : <Package className="w-10 h-10 text-orange-300" />}
       </div>
       <div className="p-3">
-        <p className="text-xs font-bold text-slate-800 truncate">{product.name}</p>
-        <p className="text-sm font-black text-emerald-800 mt-0.5">{naira(product.price)}</p>
-        <p className="text-[11px] text-slate-500 font-medium truncate flex items-center gap-1 mt-0.5">
-          {product.seller_verified && <BadgeCheck className="w-3 h-3 text-emerald-600 shrink-0" />}{product.seller_name}
-        </p>
+        <p className="text-xs font-bold text-slate-800 truncate">{product.title}</p>
+        <PriceLine p={product} />
+        {product.promo_label && <p className="text-[10px] font-bold text-red-600 truncate mt-0.5">{product.promo_label}</p>}
+        <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5">{product.seller_name || 'HireMercyAJO'}</p>
       </div>
     </button>
   );
 }
 
-export function ProductDetails({ product, onBack }: { product: OjaProduct; onBack: () => void }) {
+export function ProductDetails({ product, customer, supportDetails, onBack, onPlaced }: {
+  product: OjaProduct; customer: Profile; supportDetails: SupportSettings; onBack: () => void; onPlaced: () => void;
+}) {
+  const [img, setImg] = useState(0);
+  const [qty, setQty] = useState(1);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [done, setDone] = useState<{ reference: string; total: number; wa: string | null } | null>(null);
+  const unit = product.effective_price ?? product.price ?? 0;
+  const isAd = product.kind === 'advert';
+
+  const waNumber = product.seller_whatsapp || supportDetails.support_whatsapp;
+  const waText = (ref?: string) => [
+    `Hello, I am interested in "${product.title}" on Gbagede OJA.`,
+    product.price != null ? `Price: ${naira(unit)}${qty > 1 ? ` x ${qty} = ${naira(unit * qty)}` : ''}` : '',
+    ref ? `Request ref: ${ref}` : '',
+    `Name: ${customer.name} (${customer.phone})`
+  ].filter(Boolean).join('\n');
+
+  const send = async () => {
+    setBusy(true); setErr('');
+    const r = await placeOjaRequest(product.id, qty, note);
+    setBusy(false);
+    if (!r.ok) { setErr(r.message); return; }
+    setDone({ reference: r.data.reference, total: Number(r.data.total), wa: waNumber ? whatsappUrl(waNumber, waText(r.data.reference)) : null });
+    onPlaced();
+  };
+
   return (
     <div className="space-y-4 fade-in max-w-2xl mx-auto">
-      <ScreenHeader title="Product details" onBack={onBack} tone="gold" />
+      <ScreenHeader title={isAd ? 'Offer details' : 'Product details'} onBack={onBack} tone="gold" />
       <Card className="space-y-3">
         <div className="aspect-[4/3] rounded-2xl bg-orange-50 overflow-hidden flex items-center justify-center">
-          {product.image_url ? <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" /> : <Package className="w-14 h-14 text-orange-300" />}
+          {product.image_urls[img] ? <img src={product.image_urls[img]} alt={product.title} className="w-full h-full object-cover" /> : <Package className="w-14 h-14 text-orange-300" />}
         </div>
-        <h3 className="text-lg font-extrabold text-slate-900">{product.name}</h3>
-        <p className="text-2xl font-black text-emerald-800">{naira(product.price)}</p>
-        {product.rating != null && <p className="text-xs font-bold text-amber-600 flex items-center gap-1"><Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" /> {product.rating}</p>}
-        <div className="flex items-center gap-2 text-xs text-slate-600 font-semibold">
-          {product.seller_verified && <BadgeCheck className="w-4 h-4 text-emerald-600" />} {product.seller_name}
+        {product.image_urls.length > 1 && (
+          <div className="flex gap-2 overflow-x-auto">
+            {product.image_urls.map((u, i) => (
+              <button key={u} type="button" onClick={() => setImg(i)} aria-label={`Photo ${i + 1}`}
+                className={`w-14 h-14 rounded-xl overflow-hidden shrink-0 border-2 ${i === img ? 'border-orange-500' : 'border-transparent'}`}>
+                <img src={u} alt="" className="w-full h-full object-cover" />
+              </button>
+            ))}
+          </div>
+        )}
+        <h3 className="text-lg font-extrabold text-slate-900">{product.title}</h3>
+        {product.price != null && <PriceLine p={product} big />}
+        {product.promo_label && (
+          <p className="inline-flex items-center gap-1 bg-red-50 text-red-700 text-xs font-bold px-2.5 py-1 rounded-full">
+            <Tag className="w-3 h-3" /> {product.promo_label}{promoPct(product) > 0 ? ` (-${promoPct(product)}%)` : ''}
+          </p>
+        )}
+        {product.promo_ends_at && <p className="text-[11px] text-slate-500 font-medium">Offer ends {new Date(product.promo_ends_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</p>}
+        <div className="flex items-center gap-3 text-xs text-slate-600 font-semibold flex-wrap">
+          <span>{product.seller_name || 'HireMercyAJO'}</span>
           {product.location && <span className="flex items-center gap-1 text-slate-400"><MapPin className="w-3 h-3" /> {product.location}</span>}
         </div>
-        {product.description && <p className="text-sm text-slate-600 leading-relaxed">{product.description}</p>}
+        {product.description && <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">{product.description}</p>}
       </Card>
-      <NotLive title="Ordering is not switched on yet">Buying needs the order and payment system, which is not live. No order is placed from this page.</NotLive>
-      <PrimaryButton disabled className="w-full">Buy now</PrimaryButton>
+
+      {isAd ? (
+        <div className="space-y-2">
+          {product.link_url && <a href={product.link_url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-700 to-emerald-600 text-white font-bold py-3 px-4 rounded-xl text-sm">Open link</a>}
+          {waNumber && <a href={whatsappUrl(waNumber, waText()) || '#'} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 bg-white border border-emerald-200 text-emerald-800 font-bold py-3 px-4 rounded-xl text-sm">Chat on WhatsApp</a>}
+        </div>
+      ) : done ? (
+        <Card className="space-y-2">
+          <p className="text-sm font-extrabold text-emerald-900">Request sent</p>
+          <p className="text-xs text-slate-600 font-medium">Reference <b>{done.reference}</b> - total {naira(done.total)}. Nothing has been charged. Our team will contact you to arrange payment and delivery. You can follow it under My Orders.</p>
+          {done.wa && <a href={done.wa} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-700 to-emerald-600 text-white font-bold py-3 px-4 rounded-xl text-sm">Chat on WhatsApp now</a>}
+          <SecondaryButton onClick={onBack}>Back to shop</SecondaryButton>
+        </Card>
+      ) : (
+        <Card className="space-y-3">
+          {!product.in_stock && <p className="text-xs font-bold text-red-600">This item is out of stock.</p>}
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-700">Quantity</span>
+            <div className="flex items-center gap-3">
+              <button type="button" aria-label="Less" onClick={() => setQty(q => Math.max(1, q - 1))} className="w-9 h-9 rounded-xl bg-slate-100 font-black text-lg">-</button>
+              <span className="w-8 text-center font-black">{qty}</span>
+              <button type="button" aria-label="More" onClick={() => setQty(q => Math.min(100, q + 1))} className="w-9 h-9 rounded-xl bg-slate-100 font-black text-lg">+</button>
+            </div>
+          </div>
+          <textarea value={note} onChange={e => setNote(e.target.value.slice(0, 300))} rows={2} placeholder="Note for the seller (size, colour, delivery address...)"
+            className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white text-sm font-semibold outline-none focus:border-orange-400" />
+          <div className="flex items-center justify-between text-sm"><span className="font-bold text-slate-700">Total</span><span className="font-black text-emerald-800">{naira(unit * qty)}</span></div>
+          {err && <p className="text-[11px] text-red-600 font-semibold">{err}</p>}
+          <PrimaryButton disabled={busy || !product.in_stock} onClick={send} className="w-full">{busy ? 'Sending...' : 'Request to buy'}</PrimaryButton>
+          <p className="text-[11px] text-slate-500 font-medium">This sends a request only - you pay nothing now. We confirm availability and arrange payment with you.</p>
+        </Card>
+      )}
     </div>
   );
 }
@@ -152,18 +212,30 @@ type OjaTab = 'shop' | 'orders' | 'sell';
 export function OjaScreen({
   customer, supportDetails, onSection
 }: { customer: Profile; supportDetails: SupportSettings; onSection: (s: SectionKey) => void }) {
-  const { products, orders } = useOjaData();
+  const [listings, setListings] = useState<OjaListing[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [requests, setRequests] = useState<OjaRequest[]>([]);
   const [tab, setTab] = useState<OjaTab>('shop');
   const [query, setQuery] = useState('');
   const [cat, setCat] = useState<string>('All');
-  const [orderFilter, setOrderFilter] = useState<'All' | OjaOrderStatus>('All');
+  const [orderFilter, setOrderFilter] = useState<'All' | OjaRequest['status']>('All');
   const [open, setOpen] = useState<OjaProduct | null>(null);
 
-  const shown = products.filter(p =>
-    (cat === 'All' || p.category === cat) && p.name.toLowerCase().includes(query.trim().toLowerCase()));
-  const shownOrders = orders.filter(o => orderFilter === 'All' || o.status === orderFilter);
+  const reload = useCallback(async () => {
+    const [l, r] = await Promise.all([loadOjaListings(), loadMyOjaRequests()]);
+    setListings(l); setRequests(r); setLoading(false);
+  }, []);
+  useEffect(() => { reload(); }, [reload]);
 
-  if (open) return <ProductDetails product={open} onBack={() => setOpen(null)} />;
+  const adverts = (listings || []).filter(l => l.kind === 'advert');
+  const products = (listings || []).filter(l => l.kind === 'product');
+  const q = query.trim().toLowerCase();
+  const shown = products.filter(p => (cat === 'All' || p.category === cat) && (p.title.toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q)));
+  const onSale = shown.filter(p => promoPct(p) > 0);
+  const rest = shown.filter(p => promoPct(p) === 0);
+  const shownOrders = requests.filter(o => orderFilter === 'All' || o.status === orderFilter);
+
+  if (open) return <ProductDetails product={open} customer={customer} supportDetails={supportDetails} onBack={() => setOpen(null)} onPlaced={reload} />;
 
   return (
     <div className="space-y-4 fade-in max-w-3xl mx-auto">
@@ -184,10 +256,8 @@ export function OjaScreen({
         </div>
       </div>
 
-      {!FEATURES.marketplace && (
-        <NotLive title="Gbagede OJA is not open yet">
-          The marketplace is being prepared. You can see how it will look and tell us you want to sell; no products, orders or payments exist yet.
-        </NotLive>
+      {!loading && listings === null && (
+        <NotLive title="Gbagede OJA could not be loaded">The marketplace is not reachable right now. Please try again in a moment.</NotLive>
       )}
 
       <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100 rounded-xl" role="tablist" aria-label="Marketplace sections">
@@ -201,6 +271,21 @@ export function OjaScreen({
 
       {tab === 'shop' && (
         <>
+          {adverts.length > 0 && (
+            <div className="hm-scroll-x gap-3 -mx-1 px-1">
+              {adverts.map(a => (
+                <button key={a.id} type="button" onClick={() => setOpen(a)}
+                  className="relative overflow-hidden text-left rounded-3xl text-white shadow-md w-[85%] sm:w-[calc(50%-6px)] min-h-[120px] p-4 bg-gradient-to-br from-violet-700 to-purple-600">
+                  {a.image_urls[0] && <img src={a.image_urls[0]} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover opacity-35" />}
+                  <div className="relative">
+                    <span className="inline-flex items-center gap-1 bg-amber-400 text-emerald-950 text-[10px] font-black uppercase px-2 py-0.5 rounded-full"><Megaphone className="w-3 h-3" /> {a.promo_label || 'Advert'}</span>
+                    <p className="text-base font-extrabold leading-snug mt-2 line-clamp-2">{a.title}</p>
+                    {a.description && <p className="text-xs text-white/85 font-medium mt-1 line-clamp-2">{a.description}</p>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
           <div className="hm-scroll-x gap-2 -mx-1 px-1" role="group" aria-label="Categories">
             {OJA_CATEGORIES.map(c => (
               <button key={c} type="button" onClick={() => setCat(c)} aria-pressed={cat === c}
@@ -209,46 +294,55 @@ export function OjaScreen({
               </button>
             ))}
           </div>
-          <div>
-            <SectionTitle>Featured products</SectionTitle>
-            {shown.length === 0 ? (
-              <Card>
-                <EmptyState pose="megaphone" title={products.length === 0 ? 'No products yet' : 'No matching products'}
-                  text={products.length === 0 ? 'Sellers will appear here once Gbagede OJA opens.' : 'Try another category or search.'}
-                  action={products.length === 0 ? <SecondaryButton onClick={() => setTab('sell')}>I want to sell</SecondaryButton> : undefined} />
-              </Card>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {shown.map(p => <ProductCard key={p.id} product={p} onOpen={setOpen} />)}
+          {loading ? <p className="text-center text-xs text-slate-500 font-semibold py-6">Loading...</p> : (
+            <>
+              {onSale.length > 0 && (
+                <div>
+                  <SectionTitle>Deals and promos</SectionTitle>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{onSale.map(p => <ProductCard key={p.id} product={p} onOpen={setOpen} />)}</div>
+                </div>
+              )}
+              <div>
+                <SectionTitle>{onSale.length > 0 ? 'All products' : 'Featured products'}</SectionTitle>
+                {shown.length === 0 ? (
+                  <Card>
+                    <EmptyState pose="megaphone" title={products.length === 0 ? 'No products yet' : 'No matching products'}
+                      text={products.length === 0 ? 'New products will appear here soon. Want to sell? Tap below.' : 'Try another category or search.'}
+                      action={products.length === 0 ? <SecondaryButton onClick={() => setTab('sell')}>I want to sell</SecondaryButton> : undefined} />
+                  </Card>
+                ) : rest.length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{rest.map(p => <ProductCard key={p.id} product={p} onOpen={setOpen} />)}</div>
+                )}
               </div>
-            )}
-          </div>
+            </>
+          )}
         </>
       )}
 
       {tab === 'orders' && (
         <Card>
-          <SectionTitle>Order history</SectionTitle>
+          <SectionTitle>My requests</SectionTitle>
           <div className="hm-scroll-x gap-2 mb-3">
-            {(['All', 'Pending', 'In Progress', 'Completed'] as const).map(s => (
+            {(['All', 'pending', 'contacted', 'completed', 'cancelled'] as const).map(s => (
               <button key={s} type="button" onClick={() => setOrderFilter(s)} aria-pressed={orderFilter === s}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-bold border ${orderFilter === s ? 'bg-emerald-700 text-white border-emerald-700' : 'bg-white text-slate-600 border-slate-200'}`}>{s}</button>
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold border ${orderFilter === s ? 'bg-emerald-700 text-white border-emerald-700' : 'bg-white text-slate-600 border-slate-200'}`}>{s === 'All' ? 'All' : STATUS_TEXT[s]}</button>
             ))}
           </div>
           {shownOrders.length === 0 ? (
-            <EmptyState pose="shrug" title="No orders yet" text="Orders you place and their status will appear here." />
+            <EmptyState pose="shrug" title="No requests yet" text="Items you request to buy and their status will appear here." />
           ) : (
             <ul className="divide-y divide-slate-100">
               {shownOrders.map(o => (
                 <li key={o.id} className="py-3 flex items-center gap-3">
                   <span className="w-10 h-10 rounded-xl bg-orange-50 text-orange-500 flex items-center justify-center shrink-0"><Package className="w-5 h-5" /></span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-bold text-slate-800 truncate">{o.product_name}</p>
-                    <p className="text-[11px] text-slate-500 font-medium">{o.seller_name}</p>
+                    <p className="text-xs font-bold text-slate-800 truncate">{o.listing_title}{o.quantity > 1 ? ` x${o.quantity}` : ''}</p>
+                    <p className="text-[11px] text-slate-500 font-medium">{o.reference} · {new Date(o.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}</p>
+                    {o.admin_note && <p className="text-[11px] text-emerald-800 font-semibold mt-0.5">{o.admin_note}</p>}
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-xs font-black text-emerald-800">{naira(o.amount)}</p>
-                    <Pill tone={STATUS_TONE[o.status]}>{o.status}</Pill>
+                    <p className="text-xs font-black text-emerald-800">{naira(o.total)}</p>
+                    <Pill tone={STATUS_TONE[o.status]}>{STATUS_TEXT[o.status]}</Pill>
                   </div>
                 </li>
               ))}
@@ -262,10 +356,6 @@ export function OjaScreen({
           <Card>
             <SectionTitle>Sell on Gbagede OJA</SectionTitle>
             <SellerRequestForm customer={customer} supportDetails={supportDetails} />
-          </Card>
-          <Card>
-            <SectionTitle>Seller requests & orders</SectionTitle>
-            <EmptyState pose="shrug" title="Nothing here yet" text="Requests to buy your products and their status will be managed here once the marketplace opens." />
           </Card>
           <div className="rounded-3xl bg-gradient-to-r from-violet-600 to-purple-700 text-white p-4 flex items-center gap-3">
             <div className="min-w-0 flex-1">
