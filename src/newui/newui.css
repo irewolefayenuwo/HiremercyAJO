@@ -1,0 +1,96 @@
+/* =========================================================================
+   HireMercyAJO - new interface animations & helpers
+   Scoped with the "hm-" prefix so nothing existing is affected.
+   Only transform / opacity are animated (GPU friendly on low-end Android).
+   ========================================================================= */
+
+@keyframes hm-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@keyframes hm-wave {
+  0%, 100% { transform: rotate(-8deg); }
+  50% { transform: rotate(16deg); }
+}
+@keyframes hm-cheer {
+  0%, 100% { transform: rotate(-7deg); }
+  50% { transform: rotate(9deg); }
+}
+@keyframes hm-bounce {
+  0%, 100% { transform: translateY(0); }
+  35% { transform: translateY(-12px); }
+  55% { transform: translateY(0); }
+  70% { transform: translateY(-4px); }
+}
+@keyframes hm-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95% { transform: scaleY(0.1); }
+}
+@keyframes hm-confetti {
+  0% { transform: translateY(-10px) rotate(0deg); opacity: 0; }
+  15% { opacity: 1; }
+  100% { transform: translateY(70px) rotate(260deg); opacity: 0; }
+}
+@keyframes hm-sound {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 1; }
+}
+@keyframes hm-pop {
+  0% { transform: scale(0.88); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes hm-sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@keyframes hm-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes hm-shimmer-move {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.hm-float { animation: hm-float 3.6s ease-in-out infinite; }
+.hm-bounce { animation: hm-bounce 1.8s ease-in-out infinite; }
+.hm-pop { animation: hm-pop 0.35s ease-out both; }
+.hm-sheet { animation: hm-sheet-up 0.28s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.hm-fade { animation: hm-fade 0.2s ease-out both; }
+.hm-wave-arm { transform-origin: 146px 182px; animation: hm-wave 1.5s ease-in-out infinite; }
+.hm-cheer-l { transform-origin: 54px 182px; animation: hm-cheer 0.9s ease-in-out infinite; }
+.hm-cheer-r { transform-origin: 146px 182px; animation: hm-cheer 0.9s ease-in-out infinite reverse; }
+.hm-blink { transform-box: fill-box; transform-origin: center; animation: hm-blink 5s infinite; }
+.hm-confetti { animation: hm-confetti 2.4s ease-in infinite; }
+.hm-sound { animation: hm-sound 1.2s ease-in-out infinite; }
+
+/* Subtle moving shine used on primary action cards */
+.hm-shine { position: relative; overflow: hidden; }
+.hm-shine::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.18) 50%, transparent 65%);
+  transform: translateX(-100%);
+  animation: hm-shimmer-move 4.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Horizontal scrollers without visible scrollbars (carousels, chips) */
+.hm-scroll-x {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.hm-scroll-x::-webkit-scrollbar { display: none; }
+.hm-scroll-x > * { scroll-snap-align: center; flex-shrink: 0; }
+
+/* Respect the device's "reduce motion" setting */
+@media (prefers-reduced-motion: reduce) {
+  .hm-float, .hm-bounce, .hm-pop, .hm-sheet, .hm-fade, .hm-wave-arm, .hm-cheer-l, .hm-cheer-r,
+  .hm-blink, .hm-confetti, .hm-sound, .hm-shine::after {
+    animation: none !important;
+  }
+}

@@ -6,10 +6,16 @@ import {
   Bell, Settings, HelpCircle, MessageSquare, Building2, UserPlus, Coins, Clock, FileText, Edit2, X,
   BarChart3, ArrowLeftRight, Wallet, CalendarRange, HandCoins, PieChart, TrendingUp, ShieldCheck,
   Sparkles, Headphones, Target, ArrowUpRight, Lock as LockIcon, Save,
-  Copy, Share2, Check, ExternalLink, Megaphone
+  Copy, Share2, Check, ExternalLink, Megaphone,
+  Gift, Link2, Send, MessageCircle, MoreHorizontal
 } from 'lucide-react';
 import { type Session, type AuthChangeEvent } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
+import {
+  Mascot, AuthHero, HomeScreen, WalletScreen, OjaScreen, BillsScreen, RewardsScreen, AdvertiseScreen, ProfileScreen,
+  NewBottomNav, NewDesktopNav, sectionForTab, tabForSection, useReferralDashboard, type SectionKey,
+  AdminWalletPanel, PromotionsPanel
+} from './newui';
 
 // --- TS Type Definitions matched to Supabase SQL ---
 export interface Profile {
@@ -905,9 +911,7 @@ function WelcomeScreen({ onComplete }: { onComplete: () => void }) {
       <div className="floating-shape shape-1" />
       <div className="floating-shape shape-2" />
       <div className="text-center space-y-5 fade-in px-6">
-        <div className="w-24 h-24 sm:w-28 sm:h-28 mx-auto bg-gradient-to-br from-amber-400 to-amber-500 rounded-3xl flex items-center justify-center shadow-xl">
-          <PiggyBank className="w-12 h-12 sm:w-14 sm:h-14 text-emerald-950" />
-        </div>
+        <div className="mx-auto flex justify-center"><Mascot pose="wave" size={150} /></div>
         <h1 className="text-3xl sm:text-4xl font-black text-white tracking-widest">HIREMERCY AJO</h1>
         <p className="text-emerald-300 font-semibold tracking-wider uppercase text-xs">Continuous Daily Target Thrift Tracker</p>
         <div className="w-24 h-1 bg-amber-500 mx-auto rounded-full mt-4" />
@@ -6703,6 +6707,12 @@ function AdminDashboard({
           <div className="md:col-span-2">
             <AdminReferralPanel profiles={profiles} triggerToast={triggerToast} />
           </div>
+          <div className="md:col-span-2">
+            <AdminWalletPanel toast={(m, t) => triggerToast?.(m, t)} />
+          </div>
+          <div className="md:col-span-2">
+            <PromotionsPanel toast={(m, t) => triggerToast?.(m, t)} />
+          </div>
         </div>
       )}
       </div>
@@ -7366,6 +7376,11 @@ interface MyReferralDashboard {
   welcome_bonus_status: string | null;
   welcome_bonus_withdrawable: boolean;
   points: number;
+  // Optional: not returned by get_my_referral_dashboard today. When a later,
+  // approved database change adds them, the interface picks them up automatically.
+  reward_percentage?: number | null;
+  max_reward_cap?: number | null;
+  rewards_enabled?: boolean | null;
   history: {
     referred_name: string;
     joined_at: string;
@@ -7376,11 +7391,106 @@ interface MyReferralDashboard {
   }[];
 }
 
+type ReferralHistoryFilter = 'all' | 'qualified' | 'pending';
+
+// Bottom-sheet with the copyable link and one-tap share targets. Presentational
+// only: it opens plain share URLs and never reads or writes referral data.
+function ReferralShareSheet({ open, onClose, link, code, onCopy, onNativeShare, copied }: {
+  open: boolean;
+  onClose: () => void;
+  link: string;
+  code: string;
+  onCopy: () => void;
+  onNativeShare: () => void;
+  copied: boolean;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  const message = `Save daily with HireMercyAJO. Use my referral code ${code} to join:`;
+  const enc = encodeURIComponent;
+  const openUrl = (url: string) => { window.open(url, '_blank', 'noopener,noreferrer'); };
+
+  const targets: { key: string; label: string; bg: string; glyph: React.ReactNode; run: () => void }[] = [
+    { key: 'wa', label: 'WhatsApp', bg: 'bg-[#25D366]', glyph: <MessageCircle className="w-6 h-6" />,
+      run: () => openUrl(`https://wa.me/?text=${enc(`${message} ${link}`)}`) },
+    { key: 'fb', label: 'Facebook', bg: 'bg-[#1877F2]', glyph: <span className="text-2xl font-black leading-none">f</span>,
+      run: () => openUrl(`https://www.facebook.com/sharer/sharer.php?u=${enc(link)}`) },
+    { key: 'x', label: 'X', bg: 'bg-black', glyph: <span className="text-xl font-black leading-none">X</span>,
+      run: () => openUrl(`https://twitter.com/intent/tweet?text=${enc(message)}&url=${enc(link)}`) },
+    { key: 'tg', label: 'Telegram', bg: 'bg-[#229ED9]', glyph: <Send className="w-5 h-5" />,
+      run: () => openUrl(`https://t.me/share/url?url=${enc(link)}&text=${enc(message)}`) },
+    { key: 'sms', label: 'SMS', bg: 'bg-emerald-600', glyph: <MessageSquare className="w-5 h-5" />,
+      run: () => { window.location.href = `sms:?&body=${enc(`${message} ${link}`)}`; } },
+    { key: 'more', label: 'More', bg: 'bg-slate-100 !text-slate-700', glyph: <MoreHorizontal className="w-6 h-6" />,
+      run: onNativeShare }
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" role="dialog" aria-modal="true" aria-label="Share your referral link">
+      <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-black/50 cursor-default" />
+      <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-xl max-h-[90vh] overflow-y-auto pb-[env(safe-area-inset-bottom)]">
+        <div className="bg-gradient-to-br from-emerald-800 to-emerald-600 text-white px-5 pt-5 pb-4 rounded-t-3xl sm:rounded-t-3xl flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-base font-extrabold">Share Referral Link</h3>
+            <p className="text-xs text-emerald-100 font-medium mt-0.5">Invite your friends and family to join HireMercyAJO</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close"
+            className="shrink-0 w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center transition">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-5">
+          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-3">
+            <div className="flex items-start gap-2">
+              <Link2 className="w-4 h-4 text-emerald-700 mt-0.5 shrink-0" />
+              <p className="text-[12px] font-semibold text-slate-700 break-all select-all">{link}</p>
+            </div>
+            <button type="button" onClick={onCopy}
+              className="mt-3 w-full flex items-center justify-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl transition text-sm">
+              {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />} {copied ? 'Copied' : 'Copy Link'}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-3 gap-y-4 gap-x-2">
+            {targets.map(t => (
+              <button key={t.key} type="button" onClick={t.run} className="flex flex-col items-center gap-1.5 group">
+                <span className={`w-12 h-12 rounded-full flex items-center justify-center text-white shadow-sm transition group-active:scale-95 ${t.bg}`}>
+                  {t.glyph}
+                </span>
+                <span className="text-[11px] font-bold text-slate-600">{t.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ReferralCustomerSection({ customer }: { customer: Profile }) {
   const [data, setData] = useState<MyReferralDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [hint, setHint] = useState<string | null>(null);
+  const [copied, setCopied] = useState<'code' | 'link' | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [filter, setFilter] = useState<ReferralHistoryFilter>('all');
+  const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -7397,22 +7507,40 @@ function ReferralCustomerSection({ customer }: { customer: Profile }) {
       setLoading(false);
     })();
     return () => { alive = false; };
-  }, [customer.id]);
+  }, [customer.id, reloadKey]);
+
+  useEffect(() => () => {
+    if (hintTimer.current) clearTimeout(hintTimer.current);
+    if (copiedTimer.current) clearTimeout(copiedTimer.current);
+  }, []);
 
   const flash = (msg: string) => {
     setHint(msg);
-    setTimeout(() => setHint(null), 2500);
+    if (hintTimer.current) clearTimeout(hintTimer.current);
+    hintTimer.current = setTimeout(() => setHint(null), 2500);
+  };
+  const markCopied = (what: 'code' | 'link') => {
+    setCopied(what);
+    if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    copiedTimer.current = setTimeout(() => setCopied(null), 2000);
   };
 
   const code = data?.referral_code || customer.referral_code || '';
   const link = code ? buildReferralLink(code) : '';
 
-  const handleCopy = async () => {
+  const handleCopyLink = async () => {
     if (!link) return;
-    flash((await referralCopyToClipboard(link)) ? 'Referral link copied!' : 'Could not copy - please copy the link manually.');
+    if (await referralCopyToClipboard(link)) { markCopied('link'); flash('Referral link copied!'); }
+    else flash('Could not copy - please copy the link manually.');
   };
 
-  const handleShare = async () => {
+  const handleCopyCode = async () => {
+    if (!code) return;
+    if (await referralCopyToClipboard(code)) { markCopied('code'); flash('Referral code copied!'); }
+    else flash('Could not copy - please copy the code manually.');
+  };
+
+  const handleNativeShare = async () => {
     if (!link) return;
     const shareData = {
       title: 'Join HireMercyAJO',
@@ -7427,128 +7555,258 @@ function ReferralCustomerSection({ customer }: { customer: Profile }) {
         if (err && err.name === 'AbortError') return; // user closed the share sheet
       }
     }
-    flash((await referralCopyToClipboard(link)) ? 'Sharing is not available here - link copied instead.' : 'Please copy the link manually.');
+    if (await referralCopyToClipboard(link)) { markCopied('link'); flash('Sharing is not available here - link copied instead.'); }
+    else flash('Please copy the link manually.');
   };
 
   const naira = (n: number | null | undefined) => `₦${Number(n || 0).toLocaleString()}`;
+  const fmtDate = (iso: string) => {
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
 
-  const statusStyle = (s: string | null) =>
-    s === 'paid' || s === 'earned' ? 'bg-emerald-100 text-emerald-800'
-      : s === 'pending' ? 'bg-amber-100 text-amber-800'
-      : s === 'reversed' ? 'bg-red-100 text-red-700'
-      : 'bg-slate-100 text-slate-500';
+  // Everything below is derived from the real dashboard payload.
+  const history = data?.history ?? [];
+  const qualifiedRows = history.filter(h => h.qualified && h.reward_status !== 'reversed');
+  const pendingRows = history.filter(h => !h.qualified);
+  const visibleRows = filter === 'qualified' ? qualifiedRows : filter === 'pending' ? pendingRows : history;
+
+  const pct = data?.reward_percentage != null && Number(data.reward_percentage) > 0 ? Number(data.reward_percentage) : null;
+  const cap = data?.max_reward_cap != null && Number(data.max_reward_cap) > 0 ? Number(data.max_reward_cap) : null;
+  const rewardsOff = data?.rewards_enabled === false;
+
+  const chip = (h: MyReferralDashboard['history'][number]) => {
+    if (!h.qualified) return { text: 'Pending', cls: 'bg-sky-50 text-sky-700' };
+    switch (h.reward_status) {
+      case 'paid': return { text: 'Paid', cls: 'bg-emerald-100 text-emerald-800' };
+      case 'earned': return { text: 'Qualified', cls: 'bg-emerald-100 text-emerald-800' };
+      case 'pending': return { text: 'Reward pending', cls: 'bg-amber-100 text-amber-800' };
+      case 'reversed': return { text: 'Reversed', cls: 'bg-red-100 text-red-700' };
+      default: return { text: 'Qualified', cls: 'bg-emerald-100 text-emerald-800' };
+    }
+  };
+
+  const steps = [
+    'Share your referral link with friends and family.',
+    'They register using your link or code.',
+    'They make their first approved contribution.',
+    pct ? `You earn ${pct}% of that contribution as your reward${cap ? ` (up to ${naira(cap)})` : ''}.` : 'You earn a referral reward.'
+  ];
 
   return (
-    <div className="space-y-4 animate-fade-in max-w-4xl mx-auto text-slate-800">
-      <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs space-y-4">
-        <div>
-          <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5">
-            <Users className="w-5 h-5 text-emerald-700" /> Refer &amp; Earn
-          </h3>
-          <p className="text-xs text-slate-500 mt-0.5 font-medium">
-            Share your link. When someone you refer makes their first approved contribution, you earn a referral reward.
+    <div className="space-y-4 animate-fade-in max-w-2xl mx-auto text-slate-800 pb-4">
+      {/* Hero */}
+      <div className="relative overflow-hidden rounded-3xl p-5 text-white bg-gradient-to-br from-emerald-900 via-emerald-800 to-emerald-600 shadow-md">
+        <div className="absolute -right-8 -top-10 w-40 h-40 rounded-full bg-amber-300/20 blur-2xl pointer-events-none" />
+        <div className="absolute -left-10 -bottom-12 w-36 h-36 rounded-full bg-emerald-300/10 blur-2xl pointer-events-none" />
+        <div className="relative flex items-center gap-3">
+          <span className="shrink-0 w-12 h-12 rounded-2xl bg-white/15 border border-white/20 flex items-center justify-center">
+            <Gift className="w-6 h-6 text-amber-300" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-lg font-extrabold leading-tight">Refer &amp; Earn</h3>
+            <p className="text-xs text-emerald-100 font-medium mt-0.5">Invite friends and family to join HireMercyAJO.</p>
+          </div>
+          <div className="shrink-0 -my-4 -mr-1"><Mascot pose="point" size={88} /></div>
+        </div>
+      </div>
+
+      {loading && !data && (
+        <div className="space-y-3" aria-busy="true">
+          <div className="grid grid-cols-3 gap-3">
+            {[0, 1, 2].map(i => <div key={i} className="skeleton-green h-20" />)}
+          </div>
+          <div className="skeleton-green h-40" />
+        </div>
+      )}
+
+      {!loading && failed && !code && (
+        <div className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-2xl p-4 font-medium flex items-center justify-between gap-3">
+          <span>Referral details are not available right now.</span>
+          <button type="button" onClick={() => setReloadKey(k => k + 1)}
+            className="shrink-0 px-3 py-1.5 rounded-lg bg-white border border-amber-200 font-bold text-amber-800">Try again</button>
+        </div>
+      )}
+
+      {data && (
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-white rounded-2xl border border-emerald-100 shadow-xs p-3 text-center">
+            <p className="text-2xl font-black text-emerald-900 leading-none">{data.total_referred}</p>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 mt-1.5">Total Referrals</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-emerald-100 shadow-xs p-3 text-center">
+            <p className="text-2xl font-black text-emerald-900 leading-none">{data.successful_referrals}</p>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 mt-1.5">Qualified</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-amber-200 shadow-xs p-3 text-center">
+            <p className="text-lg sm:text-2xl font-black text-emerald-900 leading-none break-words">{naira(data.total_earnings)}</p>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 mt-1.5">Earned</p>
+            {Number(data.pending_rewards) > 0 && (
+              <p className="text-[10px] font-bold text-amber-700 mt-0.5">+{naira(data.pending_rewards)} pending</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {code && (
+        <div className="bg-white rounded-3xl border border-emerald-100 shadow-xs p-4 sm:p-5 space-y-3">
+          <p className="text-[11px] font-black uppercase tracking-wide text-emerald-800">Your Referral Code</p>
+          <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 rounded-2xl p-2 pl-4">
+            <p className="flex-1 min-w-0 text-xl font-black text-emerald-900 tracking-widest select-all truncate">{code}</p>
+            <button type="button" onClick={handleCopyCode}
+              className="shrink-0 flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-3.5 py-2.5 rounded-xl transition text-xs">
+              {copied === 'code' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />} {copied === 'code' ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button type="button" onClick={() => setShareOpen(true)}
+              className="flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-700 to-emerald-600 hover:from-emerald-800 hover:to-emerald-700 text-white font-bold py-3 rounded-xl transition text-sm shadow-sm active:scale-[0.98]">
+              <Share2 className="w-4 h-4" /> Share My Referral Link
+            </button>
+            <button type="button" onClick={handleCopyLink}
+              className="flex items-center justify-center gap-2 bg-white border border-emerald-200 hover:bg-emerald-50 text-emerald-800 font-bold py-3 rounded-xl transition text-sm active:scale-[0.98]">
+              {copied === 'link' ? <Check className="w-4 h-4" /> : <Link2 className="w-4 h-4" />} {copied === 'link' ? 'Link copied' : 'Copy Link'}
+            </button>
+          </div>
+          <p className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> Your referral code is permanent and cannot be changed.
           </p>
         </div>
-
-        {loading && <p className="text-xs text-slate-400 font-medium">Loading your referral details...</p>}
-        {!loading && failed && !code && (
-          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl p-3 font-medium">
-            Referral details are not available yet. Please try again later.
-          </p>
-        )}
-
-        {code && (
-          <div className="space-y-3">
-            <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3">
-              <p className="text-[10px] font-black uppercase text-emerald-700 tracking-wide">My Referral Code</p>
-              <p className="text-xl font-black text-emerald-900 tracking-widest select-all">{code}</p>
-            </div>
-            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3">
-              <p className="text-[10px] font-black uppercase text-slate-500 tracking-wide">My Referral Link</p>
-              <p className="text-[11px] font-bold text-slate-700 break-all select-all">{link}</p>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <button type="button" onClick={handleCopy}
-                className="flex items-center justify-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl transition text-xs uppercase tracking-wide">
-                <Copy className="w-4 h-4" /> Copy Link
-              </button>
-              <button type="button" onClick={handleShare}
-                className="flex items-center justify-center gap-1.5 bg-white border border-emerald-200 hover:bg-emerald-50 text-emerald-800 font-bold py-2.5 rounded-xl transition text-xs uppercase tracking-wide">
-                <Share2 className="w-4 h-4" /> Share
-              </button>
-            </div>
-            {hint && <p className="text-[11px] font-bold text-emerald-700 text-center">{hint}</p>}
-          </div>
-        )}
-      </div>
+      )}
 
       {data && (
         <>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-xs">
-              <p className="text-[10px] font-black uppercase text-slate-500">People Referred</p>
-              <p className="text-xl font-black text-emerald-900">{data.total_referred}</p>
-            </div>
-            <div className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-xs">
-              <p className="text-[10px] font-black uppercase text-slate-500">Successful Referrals</p>
-              <p className="text-xl font-black text-emerald-900">{data.successful_referrals}</p>
-            </div>
-            <div className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-xs">
-              <p className="text-[10px] font-black uppercase text-slate-500">Referral Earnings</p>
-              <p className="text-xl font-black text-emerald-900">{naira(data.total_earnings)}</p>
-              {Number(data.pending_rewards) > 0 && (
-                <p className="text-[10px] font-bold text-amber-700">Pending: {naira(data.pending_rewards)}</p>
-              )}
-            </div>
-            <div className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-xs">
-              <p className="text-[10px] font-black uppercase text-slate-500">Reward Points</p>
-              <p className="text-xl font-black text-emerald-900">{Number(data.points).toLocaleString()}</p>
+          {/* Reward explainer */}
+          <div className="rounded-3xl border border-amber-200 bg-gradient-to-br from-amber-50 to-emerald-50 p-4 sm:p-5">
+            <div className="flex items-start gap-3">
+              <span className="shrink-0 w-11 h-11 rounded-full bg-emerald-800 flex items-center justify-center">
+                <Coins className="w-5 h-5 text-amber-300" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-extrabold text-emerald-950">{pct ? `${pct}% Referral Reward` : 'Referral Reward'}</p>
+                <p className="text-xs text-slate-600 font-medium mt-0.5">
+                  {pct
+                    ? `Earn ${pct}% of each qualified referral's first contribution${cap ? `, up to ${naira(cap)}` : ''}.`
+                    : 'Earn a reward when someone you refer makes their first approved contribution.'}
+                </p>
+                {rewardsOff && (
+                  <p className="text-[11px] font-bold text-amber-800 bg-amber-100/70 rounded-lg px-2 py-1 mt-2 inline-block">
+                    Referral rewards are not active at the moment.
+                  </p>
+                )}
+              </div>
             </div>
           </div>
 
-          {Number(data.welcome_bonus_amount) > 0 && (
-          <div className="bg-gradient-to-br from-emerald-700 to-emerald-900 text-white p-4 rounded-2xl shadow-sm flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-black uppercase text-emerald-200 tracking-wide">Welcome Bonus</p>
-              <p className="text-2xl font-black">{naira(data.welcome_bonus_amount)}</p>
-            </div>
-            <span className="flex items-center gap-1 bg-white/15 border border-white/20 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide">
-              <LockIcon className="w-3 h-3" /> Non-withdrawable
-            </span>
+          {/* How it works */}
+          <div className="bg-white rounded-3xl border border-emerald-100 shadow-xs p-4 sm:p-5">
+            <h4 className="text-sm font-extrabold text-emerald-950 mb-3">How It Works</h4>
+            <ol className="space-y-3">
+              {steps.map((s, i) => (
+                <li key={i} className="flex items-start gap-3">
+                  <span className="shrink-0 w-7 h-7 rounded-full bg-emerald-700 text-white text-xs font-black flex items-center justify-center">{i + 1}</span>
+                  <p className="text-xs font-semibold text-slate-700 pt-1.5">{s}</p>
+                </li>
+              ))}
+            </ol>
           </div>
+
+          {Number(data.welcome_bonus_amount) > 0 && (
+            <div className="bg-gradient-to-br from-emerald-800 to-emerald-950 text-white p-4 rounded-2xl shadow-sm flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase text-amber-300 tracking-wide">Welcome Bonus</p>
+                <p className="text-2xl font-black">{naira(data.welcome_bonus_amount)}</p>
+              </div>
+              <span className="flex items-center gap-1 bg-white/15 border border-white/20 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide">
+                <LockIcon className="w-3 h-3" /> Non-withdrawable
+              </span>
+            </div>
           )}
+
+          {Number(data.points) > 0 && (
+            <div className="bg-white rounded-2xl border border-emerald-100 shadow-xs p-4 flex items-center justify-between">
+              <p className="text-xs font-bold text-slate-600">Reward Points</p>
+              <p className="text-lg font-black text-emerald-900">{Number(data.points).toLocaleString()}</p>
+            </div>
+          )}
+
           <p className="text-[10px] text-slate-400 font-medium px-1">
             Referral earnings, any Welcome Bonus and reward points are kept separate from your Ajo savings balance.
           </p>
 
-          <div className="bg-white p-5 rounded-3xl border border-emerald-100 shadow-xs">
-            <h4 className="text-xs font-black text-emerald-950 uppercase tracking-wide mb-3">Referral History</h4>
-            {data.history.length === 0 ? (
-              <p className="text-xs text-slate-400 font-medium">No referrals yet. Share your link to get started.</p>
-            ) : (
-              <div className="space-y-2">
-                {data.history.map((h, i) => (
-                  <div key={i} className="border border-slate-100 rounded-xl p-3 flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-xs font-black text-slate-800 truncate">{h.referred_name || 'Customer'}</p>
-                      <p className="text-[10px] text-slate-500 font-medium">Joined {new Date(h.joined_at).toLocaleDateString()}</p>
-                      <p className="text-[10px] text-slate-500 font-medium">
-                        First contribution: {h.qualified ? naira(h.first_contribution_amount) : 'Not yet'}
-                      </p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-xs font-black text-emerald-800">{h.qualified ? naira(h.reward_amount) : '—'}</p>
-                      <span className={`inline-block mt-0.5 px-2 py-0.5 rounded-full font-black uppercase text-[9px] ${statusStyle(h.reward_status)}`}>
-                        {h.reward_status || 'Awaiting'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+          {/* History */}
+          <div className="bg-white rounded-3xl border border-emerald-100 shadow-xs p-4 sm:p-5">
+            <h4 className="text-sm font-extrabold text-emerald-950 mb-3">Referral History</h4>
+
+            <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100 rounded-xl mb-3" role="tablist" aria-label="Filter referrals">
+              {([
+                ['all', 'All', history.length],
+                ['qualified', 'Qualified', qualifiedRows.length],
+                ['pending', 'Pending', pendingRows.length]
+              ] as [ReferralHistoryFilter, string, number][]).map(([key, label, n]) => (
+                <button key={key} type="button" role="tab" aria-selected={filter === key} onClick={() => setFilter(key)}
+                  className={`py-2 rounded-lg text-xs font-bold transition ${filter === key ? 'bg-emerald-700 text-white shadow-sm' : 'text-slate-600 hover:bg-white'}`}>
+                  {label} <span className={filter === key ? 'text-emerald-100' : 'text-slate-400'}>({n})</span>
+                </button>
+              ))}
+            </div>
+
+            {history.length === 0 ? (
+              <div className="text-center py-6">
+                <span className="mx-auto w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center mb-2">
+                  <UserPlus className="w-6 h-6 text-emerald-600" />
+                </span>
+                <p className="text-sm font-bold text-slate-700">No referrals yet</p>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">Share your link to get started.</p>
               </div>
+            ) : visibleRows.length === 0 ? (
+              <p className="text-xs text-slate-400 font-medium text-center py-4">Nothing in this list yet.</p>
+            ) : (
+              <ul className="divide-y divide-slate-100">
+                {visibleRows.map((h, i) => {
+                  const c = chip(h);
+                  const name = h.referred_name || 'Customer';
+                  return (
+                    <li key={i} className="flex items-center gap-3 py-3">
+                      <span className="shrink-0 w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 font-black flex items-center justify-center">
+                        {name.trim().charAt(0).toUpperCase() || 'C'}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-slate-800 truncate">{name}</p>
+                        <p className="text-[11px] text-slate-500 font-medium">
+                          Joined {fmtDate(h.joined_at)}
+                          {h.qualified && h.first_contribution_amount != null ? ` · First contribution ${naira(h.first_contribution_amount)}` : ''}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-sm font-black text-emerald-800">{h.qualified && h.reward_status !== 'reversed' ? `+${naira(h.reward_amount)}` : '—'}</p>
+                        <span className={`inline-block mt-0.5 px-2 py-0.5 rounded-full font-bold text-[10px] ${c.cls}`}>{c.text}</span>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </div>
         </>
       )}
+
+      {hint && (
+        <div role="status" aria-live="polite"
+          className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[60] max-w-[90vw] bg-emerald-900 text-white text-xs font-bold px-4 py-2.5 rounded-full shadow-lg">
+          {hint}
+        </div>
+      )}
+
+      <ReferralShareSheet
+        open={shareOpen && !!link}
+        onClose={() => setShareOpen(false)}
+        link={link}
+        code={code}
+        onCopy={handleCopyLink}
+        onNativeShare={handleNativeShare}
+        copied={copied === 'link'}
+      />
     </div>
   );
 }
@@ -7801,15 +8059,18 @@ function AdminReferralPanel({ profiles, triggerToast: toast }: { profiles: Profi
 function CustomerDashboard({ 
   customer, transactions, markedDays, supportDetails, onAddPayoutRequest, payoutRequests, savedMonths, cycleArchives, onAddCustomerPendingTransaction, onUpdateCustomerSettings,
   activeLoan, myLoans, myLoanRequests, onRequestLoan, profiles,
-  myMonthlySavingsPlan, myMonthlySavingsMonths, creditBalance, onSelfEnrollMonthly, myBalanceAdjustments, broadcastMessages
+  myMonthlySavingsPlan, myMonthlySavingsMonths, creditBalance, onSelfEnrollMonthly, myBalanceAdjustments, broadcastMessages, notifications, onLogout
 }: { 
   customer: Profile, transactions: Transaction[], markedDays: MarkedDay[], supportDetails: SupportSettings, payoutRequests: PayoutRequest[], savedMonths: SavedMonth[], cycleArchives: any[], onAddPayoutRequest: (bank: string, acctNum: string, acctName: string, contributionIds: string[]) => void, broadcastMessages?: BroadcastMessage[],
   onAddCustomerPendingTransaction: (amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => void, onUpdateCustomerSettings: (phone: string, dailyAmount: number, email: string) => void,
   activeLoan: Loan | null, myLoans: Loan[], myLoanRequests: LoanRequest[], onRequestLoan: (customerId: string) => void, profiles: Profile[],
   myMonthlySavingsPlan: MonthlySavingsPlan | null, myMonthlySavingsMonths: MonthlySavingsMonth[], creditBalance: CustomerCreditBalance | null,
-  onSelfEnrollMonthly: (amount: number) => void, myBalanceAdjustments: BalanceAdjustment[]
+  onSelfEnrollMonthly: (amount: number) => void, myBalanceAdjustments: BalanceAdjustment[],
+  notifications?: Notification[], onLogout?: () => void
 }) {
-  const [customerTab, setCustomerTab] = useState<'tracker' | 'transactions' | 'deposit' | 'settings' | 'history' | 'monthly-savings' | 'referral'>('tracker');
+  const [customerTab, setCustomerTab] = useState<'home' | 'wallet' | 'oja' | 'bills' | 'rewards' | 'advertise' | 'profile' | 'tracker' | 'transactions' | 'deposit' | 'settings' | 'history' | 'monthly-savings' | 'referral'>('home');
+  // Read-only referral/reward summary shared by the new Home, Rewards and Profile screens
+  const refDash = useReferralDashboard(customer.id);
   const [selectedTrackerMonthKey, setSelectedTrackerMonthKey] = useState<string | null>(null);
   const [showSupportOptions, setShowSupportOptions] = useState(false);
   const [showLoanDetails, setShowLoanDetails] = useState(false);
@@ -8006,16 +8267,28 @@ function CustomerDashboard({
     }
   };
 
+  // --- New interface navigation (additive): sections map onto the existing tabs ---
+  const inAjo = ['tracker', 'history', 'transactions', 'deposit', 'settings', 'monthly-savings'].includes(customerTab);
+  const activeSection: SectionKey = sectionForTab(customerTab);
+  const goSection = (s: SectionKey) => setCustomerTab(tabForSection(s) as any);
+  const goTab = (tab: string) => setCustomerTab(tab as any);
+  const todayLocal = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in the customer's timezone
+  const paidToday = markedDays.some(d => String(d.date || '').slice(0, 10) === todayLocal);
+  const dayCount = markedDays.reduce((m, d) => Math.max(m, d.day_number || 0), 0);
+
   return (
-    <div className="space-y-5 sm:space-y-6 pb-20 sm:pb-6">
+    <div className="space-y-5 sm:space-y-6 pb-28 sm:pb-6">
+      <NewDesktopNav active={activeSection} onSelect={goSection} />
+
       {/* Slim identity + tab bar (hero banner above already carries the visual "welcome" moment) */}
+      {inAjo && (
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-base sm:text-lg font-black text-emerald-950">Welcome, {customer.name.split(' ')[0]}!</h2>
           <p className="text-[11px] text-slate-500">Your personal 32-day savings tracker</p>
         </div>
         <div className="hidden sm:flex gap-2 overflow-x-auto -mx-1 px-1 pb-1">
-          {(['tracker', 'history', 'transactions', 'deposit', 'referral', 'settings', ...(myMonthlySavingsPlan ? ['monthly-savings'] : [])] as const).map((tab: any) => (
+          {(['tracker', 'history', 'transactions', 'deposit', 'settings', ...(myMonthlySavingsPlan ? ['monthly-savings'] : [])] as const).map((tab: any) => (
             <button
               key={tab}
               onClick={() => setCustomerTab(tab)}
@@ -8036,6 +8309,7 @@ function CustomerDashboard({
           ))}
         </div>
       </div>
+      )}
 
       {(() => {
         // "The active broadcast" = the newest row that's still active. RLS
@@ -8060,9 +8334,9 @@ function CustomerDashboard({
         );
       })()}
 
-      {customerTab !== 'tracker' && (
+      {inAjo && customerTab !== 'tracker' && (
         <div className="sm:hidden flex gap-2 overflow-x-auto -mx-1 px-1 pb-1">
-          {(['tracker', 'history', 'transactions', 'deposit', 'referral', 'settings', ...(myMonthlySavingsPlan ? ['monthly-savings'] : [])] as const).map((tab: any) => (
+          {(['tracker', 'history', 'transactions', 'deposit', 'settings', ...(myMonthlySavingsPlan ? ['monthly-savings'] : [])] as const).map((tab: any) => (
             <button
               key={tab}
               onClick={() => setCustomerTab(tab)}
@@ -8082,6 +8356,23 @@ function CustomerDashboard({
             </button>
           ))}
         </div>
+      )}
+
+      {customerTab === 'home' && (
+        <HomeScreen customer={customer} totalSaved={totalSaved} dayCount={dayCount} paidToday={paidToday}
+          myTransactions={myTransactions} notifications={notifications || []} supportDetails={supportDetails}
+          dash={refDash.data} onSection={goSection} onTab={goTab} />
+      )}
+      {customerTab === 'wallet' && <WalletScreen customer={customer} supportDetails={supportDetails} onTab={goTab} />}
+      {customerTab === 'oja' && <OjaScreen customer={customer} supportDetails={supportDetails} onSection={goSection} />}
+      {customerTab === 'bills' && <BillsScreen defaultPhone={customer.phone} />}
+      {customerTab === 'rewards' && (
+        <RewardsScreen customer={customer} myTransactions={myTransactions} dash={refDash.data} onSection={goSection} onTab={goTab} />
+      )}
+      {customerTab === 'advertise' && <AdvertiseScreen customer={customer} supportDetails={supportDetails} />}
+      {customerTab === 'profile' && (
+        <ProfileScreen customer={customer} dash={refDash.data} myTransactions={myTransactions} supportDetails={supportDetails}
+          onTab={goTab} onSection={goSection} onLogout={onLogout} />
       )}
 
       {customerTab === 'history' && (() => {
@@ -9058,28 +9349,8 @@ function CustomerDashboard({
         </div>
       )}
 
-      {/* Fixed bottom navigation - mobile only */}
-      <nav className="sm:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-emerald-100 shadow-[0_-4px_16px_rgba(6,78,59,0.08)] px-2 py-2 flex items-center justify-around">
-        {([
-          { tab: 'tracker', label: 'Home', icon: LayoutDashboard },
-          { tab: 'deposit', label: 'Deposit', icon: Wallet },
-          { tab: 'history', label: 'Tracker', icon: Target },
-          { tab: 'transactions', label: 'History', icon: FileText },
-          { tab: 'settings', label: 'Profile', icon: UserIcon },
-        ] as const).map(({ tab, label, icon: Icon }) => (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => setCustomerTab(tab)}
-            className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-xl transition-colors duration-200 ${
-              customerTab === tab ? 'text-emerald-700' : 'text-slate-400'
-            }`}
-          >
-            <Icon className={`w-5 h-5 ${customerTab === tab ? 'text-emerald-700' : 'text-slate-400'}`} />
-            <span className="text-[9px] font-bold">{label}</span>
-          </button>
-        ))}
-      </nav>
+      {/* Fixed bottom navigation - mobile only (new interface) */}
+      <NewBottomNav active={activeSection} onSelect={goSection} onLogout={onLogout} />
     </div>
   );
 }
@@ -11967,7 +12238,7 @@ export default function App() {
 
       {/* Main workspace */}
       <main className="max-w-7xl mx-auto py-5 sm:py-8 px-3 sm:px-6">
-        <AdvertisementBanner details={supportDetails} />
+        {currentUser?.role !== 'Customer' && <AdvertisementBanner details={supportDetails} />}
         {isLoading && (
           <div className="flex items-center justify-center gap-2 py-6 text-emerald-700 font-semibold text-sm">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -11979,17 +12250,23 @@ export default function App() {
           authScreen === 'admin_setup' ? (
             <AdminSetupScreen onCreate={handleCreateAdmin} />
           ) : authScreen === 'login' ? (
-            <LoginScreen 
-              onLogin={handleLogin} 
-              onSwitch={() => setAuthScreen('register')} 
-            />
+            <div className="max-w-5xl mx-auto md:grid md:grid-cols-2 md:gap-6 md:items-center">
+              <AuthHero mode="login" onLogin={() => setAuthScreen('login')} onRegister={() => setAuthScreen('register')} />
+              <LoginScreen
+                onLogin={handleLogin}
+                onSwitch={() => setAuthScreen('register')}
+              />
+            </div>
           ) : (
-            <RegisterScreen 
-              onBack={() => setAuthScreen('login')} 
-              onRegister={handleRegister} 
-              branches={branches}
-              referralCode={pendingReferralCode}
-            />
+            <div className="max-w-5xl mx-auto md:grid md:grid-cols-2 md:gap-6 md:items-start">
+              <AuthHero mode="register" onLogin={() => setAuthScreen('login')} onRegister={() => setAuthScreen('register')} />
+              <RegisterScreen
+                onBack={() => setAuthScreen('login')}
+                onRegister={handleRegister}
+                branches={branches}
+                referralCode={pendingReferralCode}
+              />
+            </div>
           )
         ) : (
           <div className="space-y-8">
@@ -12092,6 +12369,8 @@ export default function App() {
                 creditBalance={customerCreditBalance}
                 onSelfEnrollMonthly={handleCustomerSelfEnrollMonthly}
                 myBalanceAdjustments={balanceAdjustments[currentUser.id] || []}
+                notifications={notifications}
+                onLogout={handleLogout}
               />
             )}
           </div>
