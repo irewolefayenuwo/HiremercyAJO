@@ -14,7 +14,7 @@ import { supabase } from './lib/supabase';
 import {
   Mascot, AuthHero, HomeScreen, WalletScreen, OjaScreen, BillsScreen, RewardsScreen, AdvertiseScreen, ProfileScreen,
   NewBottomNav, NewDesktopNav, sectionForTab, tabForSection, useReferralDashboard, type SectionKey,
-  AdminWalletPanel, PromotionsPanel, AdminOjaPanel
+  AdminWalletPanel, PromotionsPanel, AdminOjaPanel, StreakAdminPanel, useAdminAlerts, AdminAlertBanner
 } from './newui';
 
 // --- TS Type Definitions matched to Supabase SQL ---
@@ -1790,6 +1790,7 @@ function AdminDashboard({
   onEnsurePayoutHistoryLoaded: () => void, onEnsureLoanHistoryLoaded: () => void, cycleArchives: Record<string, any[]>
 }) {
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
+  const { alerts: adminAlerts } = useAdminAlerts(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [saverPreviewSearch, setSaverPreviewSearch] = useState('');
   const [loanSubView, setLoanSubView] = useState<'pending' | 'active' | 'completed' | 'history'>('pending');
@@ -3154,6 +3155,9 @@ function AdminDashboard({
 
       {/* Main content column */}
       <div className="flex-1 min-w-0 space-y-5 sm:space-y-6">
+      <AdminAlertBanner alerts={adminAlerts}
+        onOpenWallet={() => { setActiveTab('settings'); setTimeout(() => document.getElementById('admin-wallet-panel')?.scrollIntoView({ behavior: 'smooth' }), 300); }}
+        onOpenOja={() => setActiveTab('oja')} />
       <div className="flex flex-col gap-4 card-green">
         <div className="hidden lg:flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
           <div>
@@ -6714,10 +6718,13 @@ function AdminDashboard({
             <AdminReferralPanel profiles={profiles} triggerToast={triggerToast} />
           </div>
           <div className="md:col-span-2">
-            <AdminWalletPanel toast={(m, t) => triggerToast?.(m, t)} />
+            <div id="admin-wallet-panel"><AdminWalletPanel toast={(m, t) => triggerToast?.(m, t)} startTab={adminAlerts && adminAlerts.pending_deposits > 0 ? 'deposits' : 'orders'} /></div>
           </div>
           <div className="md:col-span-2">
             <PromotionsPanel toast={(m, t) => triggerToast?.(m, t)} />
+          </div>
+          <div className="md:col-span-2">
+            <StreakAdminPanel toast={(m, t) => triggerToast?.(m, t)} />
           </div>
         </div>
       )}
