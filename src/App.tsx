@@ -14,7 +14,7 @@ import { supabase } from './lib/supabase';
 import {
   Mascot, AuthHero, HomeScreen, WalletScreen, OjaScreen, BillsScreen, RewardsScreen, AdvertiseScreen, ProfileScreen,
   NewBottomNav, NewDesktopNav, sectionForTab, tabForSection, useReferralDashboard, type SectionKey,
-  AdminWalletPanel, PromotionsPanel
+  AdminWalletPanel, PromotionsPanel, AdminOjaPanel
 } from './newui';
 
 // --- TS Type Definitions matched to Supabase SQL ---
@@ -701,7 +701,7 @@ const nigerianBanks = [
   'United Bank for Africa (UBA)', 'Unity Bank', 'Wema Bank', 'Zenith Bank'
 ];
 
-type AdminTab = 'overview' | 'customers' | 'branches' | 'staff' | 'payouts' | 'records' | 'transactions' | 'settings' | 'reports' | 'cashsheet' | 'loans' | 'monthly-savings';
+type AdminTab = 'overview' | 'customers' | 'branches' | 'staff' | 'payouts' | 'records' | 'transactions' | 'settings' | 'reports' | 'cashsheet' | 'loans' | 'monthly-savings' | 'oja';
 
 export interface CashReconciliation {
   id: string;
@@ -3065,6 +3065,7 @@ function AdminDashboard({
     { key: 'cashsheet', label: 'Cash Sheet', icon: Wallet },
     { key: 'loans', label: 'Loan Management', icon: HandCoins },
     { key: 'monthly-savings', label: 'Monthly Savings', icon: CalendarRange },
+    { key: 'oja', label: 'Gbagede OJA', icon: Megaphone },
     { key: 'customers', label: 'Customers', icon: Users },
     { key: 'branches', label: 'Branches', icon: Building2 },
     { key: 'staff', label: 'Staff', icon: UserIcon },
@@ -3183,7 +3184,7 @@ function AdminDashboard({
           </button>
         </div>
         <div className="lg:hidden flex gap-2 overflow-x-auto -mx-1 px-1 pb-1">
-          {(['overview', 'customers', 'branches', 'staff', 'payouts', 'records', 'transactions', 'cashsheet', 'loans', 'monthly-savings', 'settings', 'reports'] as const).map(tab => (
+          {(['overview', 'customers', 'branches', 'staff', 'payouts', 'records', 'transactions', 'cashsheet', 'loans', 'monthly-savings', 'oja', 'settings', 'reports'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -3193,7 +3194,7 @@ function AdminDashboard({
                   : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
               }`}
             >
-              {tab === 'cashsheet' ? 'Cash Sheet' : tab === 'loans' ? 'Loan Management' : tab === 'monthly-savings' ? 'Monthly Savings' : tab}
+              {tab === 'cashsheet' ? 'Cash Sheet' : tab === 'loans' ? 'Loan Management' : tab === 'monthly-savings' ? 'Monthly Savings' : tab === 'oja' ? 'Gbagede OJA' : tab}
             </button>
           ))}
         </div>
@@ -5659,6 +5660,11 @@ function AdminDashboard({
           </div>
         );
       })()}
+
+      {/* Gbagede OJA marketplace management */}
+      {activeTab === 'oja' && (
+        <AdminOjaPanel toast={(m, t) => triggerToast?.(m, t)} />
+      )}
 
       {/* Monthly Savings Management tab */}
       {activeTab === 'monthly-savings' && (
