@@ -8,6 +8,8 @@ import { Mascot, type MascotPose } from './Mascot';
 import { Card, EmptyState, Pill, ProgressBar, SectionTitle, firstName, greeting, naira, whatsappUrl } from './ui';
 import type { SectionKey } from './config';
 import { useLiveFlags } from './liveFlags';
+import { useStreak } from './useStreak';
+import { StreakStrip } from './StreakStrip';
 import { buildWelcomeSteps } from './rewardsLogic';
 import type { DashboardLite } from './useReferralDashboard';
 
@@ -104,9 +106,10 @@ function PromoCarousel({ slides }: { slides: Slide[] }) {
 export function HomeScreen(p: HomeProps) {
   const { customer, totalSaved, dayCount, paidToday, myTransactions, notifications, supportDetails, dash, onSection, onTab } = p;
   const name = firstName(customer.name);
+  const { streak, loaded: streakLoaded } = useStreak(customer.id);
   const live = useLiveFlags();
   const hasSuccessful = myTransactions.some(t => t.status !== 'Pending');
-  const steps = buildWelcomeSteps({ customer, hasSuccessfulContribution: hasSuccessful, dash });
+  const steps = buildWelcomeSteps({ customer, hasSuccessfulContribution: hasSuccessful, dash, bestStreak: streak?.longest || 0 });
   const doneSteps = steps.filter(s => s.status === 'done').length;
   const bonus = Number(dash?.welcome_bonus_amount || 0);
 
@@ -251,17 +254,8 @@ export function HomeScreen(p: HomeProps) {
       {/* Streak + Welcome challenge */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Card>
-          <SectionTitle action={<Pill tone="slate">Not tracked yet</Pill>}>Login streak</SectionTitle>
-          <div className="flex items-center gap-1.5">
-            {[0, 1, 2, 3, 4, 5, 6].map(i => (
-              <span key={i} className="flex-1 aspect-square max-w-[34px] rounded-full border-2 border-dashed border-slate-200 flex items-center justify-center">
-                <Flame className="w-3.5 h-3.5 text-slate-300" />
-              </span>
-            ))}
-          </div>
-          <p className="text-[11px] text-slate-500 font-medium mt-3 leading-relaxed">
-            Daily login streaks and their rewards will start once HireMercyAJO switches them on. Nothing is counted yet.
-          </p>
+          <SectionTitle action={streak ? <Pill tone={streak.streak > 0 ? 'gold' : 'slate'}>{streak.streak} day{streak.streak === 1 ? '' : 's'}</Pill> : undefined}>Login streak</SectionTitle>
+          <StreakStrip streak={streak} loaded={streakLoaded} compact />
         </Card>
 
         <Card>

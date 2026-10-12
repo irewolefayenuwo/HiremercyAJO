@@ -20,8 +20,11 @@ export function buildWelcomeSteps(args: {
   customer: Profile;
   hasSuccessfulContribution: boolean;
   dash: DashboardLite | null;
+  /** longest real login streak (days) recorded by the server */
+  bestStreak?: number;
 }): ChallengeStep[] {
   const { customer, hasSuccessfulContribution, dash } = args;
+  const best = args.bestStreak || 0;
   const profileDone = Boolean(customer.name && customer.phone && customer.email);
   const referred = Number(dash?.total_referred || 0);
   const qualified = Number(dash?.successful_referrals || 0);
@@ -55,8 +58,8 @@ export function buildWelcomeSteps(args: {
     {
       key: 'streak',
       title: 'Keep a 3-day login streak',
-      detail: 'Daily streak tracking is not switched on yet.',
-      status: 'soon'
+      detail: best >= 3 ? 'You have logged in 3 days in a row.' : `Log in 3 days in a row. Your best so far: ${best} day${best === 1 ? '' : 's'}.`,
+      status: best >= 3 ? 'done' : 'todo'
     },
     {
       key: 'share',

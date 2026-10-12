@@ -17,3 +17,5 @@ export type { SectionKey } from './config';
 export { AdminWalletPanel, PromotionsPanel } from './AdminWallet';
 export { AdminOjaPanel } from './AdminOja';
 export { useLiveFlags } from './liveFlags';
+export { StreakAdminPanel } from './AdminStreak';
+export { useAdminAlerts, AdminAlertBanner } from './AdminAlerts';

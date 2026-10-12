@@ -18,8 +18,8 @@ async function rpc(name: string, args: Record<string, unknown> | undefined, toas
   return { ok: true as const, data };
 }
 
-export function AdminWalletPanel({ toast }: { toast: Toast }) {
-  const [tab, setTab] = useState<'orders' | 'deposits' | 'services' | 'recon'>('orders');
+export function AdminWalletPanel({ toast, startTab = 'orders' }: { toast: Toast; startTab?: 'orders' | 'deposits' | 'services' | 'recon' }) {
+  const [tab, setTab] = useState<'orders' | 'deposits' | 'services' | 'recon'>(startTab);
   const tabs = [['orders', 'Orders'], ['deposits', 'Wallet deposits'], ['services', 'Services & pricing'], ['recon', 'Reconciliation']] as const;
   return (
     <div className="space-y-4">

@@ -4,7 +4,9 @@ import { supabase } from '../lib/supabase';
 import type { Profile, Transaction } from '../App';
 import { Mascot } from './Mascot';
 import { Card, EmptyState, NotLive, Pill, ProgressBar, ScreenHeader, SectionTitle, naira } from './ui';
-import { FEATURES, type SectionKey } from './config';
+import type { SectionKey } from './config';
+import { useStreak } from './useStreak';
+import { StreakStrip } from './StreakStrip';
 import { buildWelcomeSteps } from './rewardsLogic';
 import type { DashboardLite } from './useReferralDashboard';
 
@@ -47,7 +49,9 @@ export function RewardsScreen({
     return () => { alive = false; };
   }, [customer.id]);
 
+  const { streak, loaded: streakLoaded } = useStreak(customer.id);
   const steps = buildWelcomeSteps({
+    bestStreak: streak?.longest || 0,
     customer,
     hasSuccessfulContribution: myTransactions.some(t => t.status !== 'Pending'),
     dash
@@ -118,17 +122,10 @@ export function RewardsScreen({
       </Card>
 
       <Card>
-        <SectionTitle action={<Pill tone={FEATURES.loginStreak ? 'green' : 'slate'}>{FEATURES.loginStreak ? 'On' : 'Not tracked yet'}</Pill>}>
+        <SectionTitle action={streak ? <Pill tone={streak.streak > 0 ? 'gold' : 'slate'}>{streak.streak} day{streak.streak === 1 ? '' : 's'}</Pill> : undefined}>
           Daily login streak
         </SectionTitle>
-        <div className="flex items-center gap-1.5">
-          {[0, 1, 2, 3, 4, 5, 6].map(i => (
-            <span key={i} className="flex-1 aspect-square max-w-[38px] rounded-full border-2 border-dashed border-slate-200 flex items-center justify-center">
-              <Flame className="w-4 h-4 text-slate-300" />
-            </span>
-          ))}
-        </div>
-        <p className="text-[11px] text-slate-500 font-medium mt-3">Streaks will count real daily logins once switched on. Nothing is counted yet.</p>
+        <StreakStrip streak={streak} loaded={streakLoaded} />
       </Card>
 
       <Card>
