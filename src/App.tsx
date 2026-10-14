@@ -14,7 +14,8 @@ import { supabase } from './lib/supabase';
 import {
   Mascot, AuthHero, HomeScreen, WalletScreen, OjaScreen, BillsScreen, RewardsScreen, AdvertiseScreen, ProfileScreen,
   NewBottomNav, NewDesktopNav, sectionForTab, tabForSection, useReferralDashboard, type SectionKey,
-  AdminWalletPanel, PromotionsPanel, AdminOjaPanel, StreakAdminPanel, useAdminAlerts, AdminAlertBanner
+  AdminWalletPanel, PromotionsPanel, AdminOjaPanel, StreakAdminPanel, RewardsAdminPanel, useAdminAlerts, AdminAlertBanner,
+  ShopAdminPanel, BonusAdminPanel, GamesAdminPanel, PopupsAdminPanel, BonusBanner, GamesScreen, PopupHost, PublicShopPage, shopSlugFromUrl
 } from './newui';
 
 // --- TS Type Definitions matched to Supabase SQL ---
@@ -3157,7 +3158,8 @@ function AdminDashboard({
       <div className="flex-1 min-w-0 space-y-5 sm:space-y-6">
       <AdminAlertBanner alerts={adminAlerts}
         onOpenWallet={() => { setActiveTab('settings'); setTimeout(() => document.getElementById('admin-wallet-panel')?.scrollIntoView({ behavior: 'smooth' }), 300); }}
-        onOpenOja={() => setActiveTab('oja')} />
+        onOpenOja={() => setActiveTab('oja')}
+        onOpenShop={() => { setActiveTab('settings'); setTimeout(() => document.getElementById('admin-shop-panel')?.scrollIntoView({ behavior: 'smooth' }), 300); }} />
       <div className="flex flex-col gap-4 card-green">
         <div className="hidden lg:flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
           <div>
@@ -6726,6 +6728,21 @@ function AdminDashboard({
           <div className="md:col-span-2">
             <StreakAdminPanel toast={(m, t) => triggerToast?.(m, t)} />
           </div>
+          <div className="md:col-span-2">
+            <RewardsAdminPanel toast={(m, t) => triggerToast?.(m, t)} />
+          </div>
+          <div className="md:col-span-2" id="admin-shop-panel">
+            <ShopAdminPanel toast={(m, t) => triggerToast?.(m, t)} />
+          </div>
+          <div className="md:col-span-2">
+            <BonusAdminPanel toast={(m, t) => triggerToast?.(m, t)} />
+          </div>
+          <div className="md:col-span-2">
+            <PopupsAdminPanel toast={(m, t) => triggerToast?.(m, t)} />
+          </div>
+          <div className="md:col-span-2">
+            <GamesAdminPanel toast={(m, t) => triggerToast?.(m, t)} />
+          </div>
         </div>
       )}
       </div>
@@ -8081,7 +8098,7 @@ function CustomerDashboard({
   onSelfEnrollMonthly: (amount: number) => void, myBalanceAdjustments: BalanceAdjustment[],
   notifications?: Notification[], onLogout?: () => void
 }) {
-  const [customerTab, setCustomerTab] = useState<'home' | 'wallet' | 'oja' | 'bills' | 'rewards' | 'advertise' | 'profile' | 'tracker' | 'transactions' | 'deposit' | 'settings' | 'history' | 'monthly-savings' | 'referral'>('home');
+  const [customerTab, setCustomerTab] = useState<'home' | 'wallet' | 'oja' | 'bills' | 'rewards' | 'advertise' | 'profile' | 'games' | 'tracker' | 'transactions' | 'deposit' | 'settings' | 'history' | 'monthly-savings' | 'referral'>('home');
   // Read-only referral/reward summary shared by the new Home, Rewards and Profile screens
   const refDash = useReferralDashboard(customer.id);
   const [selectedTrackerMonthKey, setSelectedTrackerMonthKey] = useState<string | null>(null);
@@ -8283,6 +8300,7 @@ function CustomerDashboard({
   // --- New interface navigation (additive): sections map onto the existing tabs ---
   const inAjo = ['tracker', 'history', 'transactions', 'deposit', 'settings', 'monthly-savings'].includes(customerTab);
   const activeSection: SectionKey = sectionForTab(customerTab);
+  const [bonusTick, setBonusTick] = useState(0);
   const goSection = (s: SectionKey) => setCustomerTab(tabForSection(s) as any);
   const goTab = (tab: string) => setCustomerTab(tab as any);
   const todayLocal = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in the customer's timezone
@@ -8291,6 +8309,7 @@ function CustomerDashboard({
 
   return (
     <div className="space-y-5 sm:space-y-6 pb-28 sm:pb-6">
+      <PopupHost onSection={goSection} />
       <NewDesktopNav active={activeSection} onSelect={goSection} />
 
       {/* Slim identity + tab bar (hero banner above already carries the visual "welcome" moment) */}
@@ -8376,13 +8395,15 @@ function CustomerDashboard({
           myTransactions={myTransactions} notifications={notifications || []} supportDetails={supportDetails}
           dash={refDash.data} onSection={goSection} onTab={goTab} />
       )}
-      {customerTab === 'wallet' && <WalletScreen customer={customer} supportDetails={supportDetails} onTab={goTab} />}
-      {customerTab === 'oja' && <OjaScreen customer={customer} supportDetails={supportDetails} onSection={goSection} />}
+      {(customerTab === 'home' || customerTab === 'wallet') && <BonusBanner onSection={goSection} onClaimed={() => setBonusTick(t => t + 1)} />}
+      {customerTab === 'games' && <GamesScreen onSection={goSection} />}
+      {customerTab === 'wallet' && <WalletScreen key={bonusTick} customer={customer} supportDetails={supportDetails} onTab={goTab} />}
+      {customerTab === 'oja' && <OjaScreen customer={customer} supportDetails={supportDetails} onSection={goSection} referralCode={refDash.data?.referral_code} />}
       {customerTab === 'bills' && <BillsScreen defaultPhone={customer.phone} />}
       {customerTab === 'rewards' && (
-        <RewardsScreen customer={customer} myTransactions={myTransactions} dash={refDash.data} onSection={goSection} onTab={goTab} />
+        <RewardsScreen supportDetails={supportDetails} customer={customer} myTransactions={myTransactions} dash={refDash.data} onSection={goSection} onTab={goTab} />
       )}
-      {customerTab === 'advertise' && <AdvertiseScreen customer={customer} supportDetails={supportDetails} />}
+      {customerTab === 'advertise' && <AdvertiseScreen customer={customer} supportDetails={supportDetails} referralCode={refDash.data?.referral_code} />}
       {customerTab === 'profile' && (
         <ProfileScreen customer={customer} dash={refDash.data} myTransactions={myTransactions} supportDetails={supportDetails}
           onTab={goTab} onSection={goSection} onLogout={onLogout} />
@@ -9372,7 +9393,7 @@ function CustomerDashboard({
 // 5. MAIN APPLICATION COMPONENT
 // =========================================================================
 
-export default function App() {
+function AppMain() {
   const [showSplash, setShowSplash] = useState(() => !sessionStorage.getItem('hm_splash_shown'));
   const [currentUser, setCurrentUser] = useState<Profile | null>(null);
   const [sessionUser, setSessionUser] = useState<any>(null);
@@ -12391,4 +12412,11 @@ export default function App() {
       </main>
     </div>
   );
+}
+
+/** Public shop pages (?shop=name) open without login; everything else is the normal app. */
+export default function App() {
+  const slug = shopSlugFromUrl();
+  if (slug) return <PublicShopPage slug={slug} />;
+  return <AppMain />;
 }
