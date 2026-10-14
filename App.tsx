@@ -1,0 +1,12422 @@
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { 
+  PiggyBank, Phone, Lock, EyeOff, Eye as EyeIcon, Mail, User as UserIcon, 
+  ChevronLeft, ChevronRight, ChevronDown, LayoutDashboard, Users, Plus, Search, Trash2, Calendar, 
+  CheckCircle2, XCircle, LogOut, Shield, Briefcase, Landmark, Info, Key,
+  Bell, Settings, HelpCircle, MessageSquare, Building2, UserPlus, Coins, Clock, FileText, Edit2, X,
+  BarChart3, ArrowLeftRight, Wallet, CalendarRange, HandCoins, PieChart, TrendingUp, ShieldCheck,
+  Sparkles, Headphones, Target, ArrowUpRight, Lock as LockIcon, Save,
+  Copy, Share2, Check, ExternalLink, Megaphone,
+  Gift, Link2, Send, MessageCircle, MoreHorizontal
+} from 'lucide-react';
+import { type Session, type AuthChangeEvent } from '@supabase/supabase-js';
+import { supabase } from './lib/supabase';
+import {
+  Mascot, AuthHero, HomeScreen, WalletScreen, OjaScreen, BillsScreen, RewardsScreen, AdvertiseScreen, ProfileScreen,
+  NewBottomNav, NewDesktopNav, sectionForTab, tabForSection, useReferralDashboard, type SectionKey,
+  AdminWalletPanel, PromotionsPanel, AdminOjaPanel, StreakAdminPanel, RewardsAdminPanel, useAdminAlerts, AdminAlertBanner,
+  ShopAdminPanel, BonusAdminPanel, GamesAdminPanel, PopupsAdminPanel, BonusBanner, GamesScreen, PopupHost, PublicShopPage, shopSlugFromUrl
+} from './newui';
+
+// --- TS Type Definitions matched to Supabase SQL ---
+export interface Profile {
+  id: string;
+  name: string;
+  email?: string;
+  phone: string;
+  role: 'Admin' | 'Staff' | 'Customer';
+  branch_id?: string;
+  daily_amount: number;
+  is_active: boolean;
+  created_at?: string;
+  last_amount_change_at?: string;
+  allow_anytime_change?: boolean;
+  admin_note?: string;
+  loan_status: 'No Loan' | 'Pending Approval' | 'Active Loan' | 'Loan Cleared';
+  savings_type: 'daily' | 'monthly' | 'both';
+  monthly_savings_terms_accepted: boolean;
+  monthly_savings_terms_accepted_at?: string;
+  paystack_customer_code?: string;
+  virtual_account_number?: string;
+  virtual_account_bank?: string;
+  referral_code?: string;
+}
+
+export interface Loan {
+  id: string;
+  customer_id: string;
+  customer_name?: string;
+  status: 'Active Loan' | 'Loan Cleared';
+  loan_amount: number;
+  repayment_amount: number;
+  service_charge: number;
+  daily_amount_snapshot: number;
+  outstanding_balance: number;
+  date_issued?: string;
+  due_date?: string;
+  installments?: number;
+  amount_repaid: number;
+  amount_remaining: number;
+  amount_already_counted: number;
+  days_repaid: number;
+  total_days: number;
+  approved_by?: string;
+  remarks?: string;
+  source: 'customer_request' | 'admin_assigned';
+  loan_request_id?: string;
+  completed_at?: string;
+  created_at?: string;
+}
+
+export interface LoanRequest {
+  id: string;
+  customer_id: string;
+  customer_name?: string;
+  daily_amount_snapshot: number;
+  loan_amount: number;
+  repayment_amount: number;
+  service_charge: number;
+  status: 'Pending Approval' | 'Approved' | 'Rejected';
+  requested_at: string;
+  decided_at?: string;
+  decided_by?: string;
+  rejection_reason?: string;
+}
+
+export interface Branch {
+  id: string;
+  name: string;
+  address?: string;
+  phone?: string;
+  manager?: string;
+}
+
+export interface MonthlySavingsPlan {
+  id: string;
+  customer_id: string;
+  year: number;
+  status: 'Active' | 'Completed' | 'Withdrawn';
+  total_saved: number;
+  monthly_target_amount: number;
+  created_at: string;
+  created_by?: string;
+}
+
+export interface MonthlySavingsMonth {
+  id: string;
+  plan_id: string;
+  customer_id: string;
+  month_number: number;
+  total_deposited: number;
+  is_complete: boolean;
+  completed_at?: string;
+}
+
+export interface CustomerCreditBalance {
+  customer_id: string;
+  credit_amount: number;
+  updated_at: string;
+}
+
+export interface BalanceAdjustment {
+  id: string;
+  customer_id: string;
+  amount: number;
+  note?: string;
+  created_by?: string;
+  created_at: string;
+}
+
+export interface ManualExpense {
+  id: string;
+  description?: string;
+  amount: number;
+  expense_date: string;
+  created_by?: string;
+  created_at: string;
+}
+
+export interface Transaction {
+  id: string;
+  customer_id: string;
+  customer_name?: string;
+  amount: number;
+  date: string;
+  payment_method: 'Cash' | 'Bank Transfer' | 'Mobile Money';
+  days_covered: number;
+  start_day: number;
+  end_day: number;
+  branch_id?: string;
+  status?: 'Pending' | 'Successful';
+}
+
+export interface MarkedDay {
+  id?: string;
+  day_number: number;
+  amount: number;
+  date: string;
+  period_key?: string;
+  transaction_id?: string;
+}
+
+export interface BroadcastMessage {
+  id: string;
+  message: string;
+  is_active: boolean;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SupportSettings {
+  id: number;
+  support_phone: string;
+  support_whatsapp: string;
+  support_email: string;
+  admin_bank_name?: string;
+  admin_account_number?: string;
+  admin_account_name?: string;
+  advert_title?: string;
+  advert_description?: string;
+  advert_image_url?: string;
+  advert_video_url?: string;
+  advert_enabled?: boolean;
+  theme_background_color?: string;
+  withdrawal_charge_enabled?: boolean;
+  withdrawal_charge_amount?: number;
+  withdrawal_charge_label?: string;
+}
+
+export interface WithdrawalRequest {
+  id: string;
+  customer_id: string;
+  customer_name?: string;
+  bank_name: string;
+  account_number: string;
+  account_name: string;
+  amount: number;
+  status: 'Pending' | 'Successful' | 'Rejected';
+  created_at: string;
+}
+
+export interface Notification {
+  id: string;
+  user_id?: string;
+  title: string;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface PayoutRequest {
+  id: string;
+  customer_id: string;
+  customer_name?: string;
+  account_name?: string;
+  account_number?: string;
+  bank_name?: string;
+  payout_method: 'Transfer' | 'Cash';
+  amount: number;
+  payout_amount: number;
+  status: 'Pending' | 'Successful' | 'Rejected';
+  created_at: string;
+  month_paid?: string;
+  contribution_ids?: string[];
+  charge_amount?: number;
+  charge_label?: string | null;
+  net_amount?: number;
+}
+
+// --- 32-DAY SAVED MONTH (CONTRIBUTIONS LEDGER) & PAYOUT ARCHIVE TYPES ---
+export interface SavedMonth {
+  id: string;
+  customer_id: string;
+  customer_name?: string;
+  month_label: string;
+  period_key: string;
+  total_days: number;
+  total_amount: number;
+  status: 'saved' | 'requested' | 'paid';
+  created_at: string;
+}
+
+export interface PayoutHistoryRecord {
+  id: string;
+  customer_id: string;
+  customer_name?: string;
+  contribution_id?: string;
+  payout_request_id?: string;
+  month_label: string;
+  total_amount: number;
+  payout_amount: number;
+  bank_name?: string;
+  account_number?: string;
+  account_name?: string;
+  payout_method: 'Transfer' | 'Cash';
+  approved_at: string;
+  charge_amount?: number;
+  charge_label?: string | null;
+  net_amount?: number;
+}
+
+// --- GLOBAL NIGERIAN PHONE FORMATTING HELPER ---
+const formatNigerianPhone = (phone: string): string => {
+  const cleanPhone = phone.trim().replace(/[\s\-\(\)\[\]]/g, '');
+  if (cleanPhone.startsWith('+')) return cleanPhone;
+  if (cleanPhone.startsWith('234') && cleanPhone.length >= 13) return `+${cleanPhone}`;
+  if (cleanPhone.startsWith('0')) return `+234${cleanPhone.slice(1)}`;
+  return `+234${cleanPhone}`;
+};
+
+// Global helper to track current collection period
+const getNigerianMonthName = () => {
+  const months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  return `${months[new Date().getMonth()]} Collected`;
+};
+
+// Unique key (YYYY-MM) identifying the calendar month a 32-day cycle was frozen/saved in
+const getCurrentPeriodKey = () => new Date().toISOString().slice(0, 7);
+
+// Mirrors the DB function next_period_key(text) — advances a 'YYYY-MM'
+// string by exactly one calendar month. Used client-side to calculate
+// the next cycle label without a round-trip to the DB.
+const nextPeriodKey = (periodKey: string): string => {
+  const [year, month] = periodKey.split('-').map(Number);
+  if (!year || !month) return getCurrentPeriodKey();
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const nextYear = month === 12 ? year + 1 : year;
+  return `${nextYear}-${String(nextMonth).padStart(2, '0')}`;
+};
+
+
+export interface TrackingHistoryEntry {
+  key: string;
+  period_key: string;
+  month_label: string;
+  total_days: number;
+  total_amount: number;
+  status: 'Running' | 'Uncollected' | 'Collected';
+}
+
+// Combines the three data sources into one normalized timeline for a single
+// customer: whatever's still open in marked_days (Running), whatever's been
+// frozen into contributions but not yet paid out (Uncollected), and whatever
+// has been archived to cycle_archives once admin approves payout (Collected).
+const buildTrackingHistory = (
+  markedDaysForCustomer: MarkedDay[],
+  savedMonthsForCustomer: SavedMonth[],
+  cycleArchiveRowsForCustomer: any[]
+): TrackingHistoryEntry[] => {
+  const rows: TrackingHistoryEntry[] = [];
+
+  // Running: group whatever's currently open in marked_days by period_key.
+  // Anything still sitting in marked_days is by definition not yet frozen,
+  // so it's always the active/ongoing cycle.
+  const runningGroups: Record<string, MarkedDay[]> = {};
+  markedDaysForCustomer.forEach(d => {
+    const pk = (d as any).period_key || getCurrentPeriodKey();
+    if (!runningGroups[pk]) runningGroups[pk] = [];
+    runningGroups[pk].push(d);
+  });
+  Object.entries(runningGroups).forEach(([pk, days]) => {
+    rows.push({
+      key: `running-${pk}`,
+      period_key: pk,
+      month_label: periodLabelFromKey(pk),
+      total_days: days.length,
+      total_amount: sumCurrencyValues(days.map(d => Number(d.amount || 0))),
+      status: 'Running'
+    });
+  });
+
+  // Uncollected: frozen 32-day (or expired) cycles awaiting payout
+  savedMonthsForCustomer
+    .filter(m => m.status === 'saved' || m.status === 'requested')
+    .forEach(m => {
+      rows.push({
+        key: `uncollected-${m.id}`,
+        period_key: m.period_key,
+        month_label: m.month_label || periodLabelFromKey(m.period_key),
+        total_days: m.total_days,
+        total_amount: m.total_amount,
+        status: 'Uncollected'
+      });
+    });
+
+  // Collected: approved payouts, sourced from cycle_archives (pre-existing table)
+  cycleArchiveRowsForCustomer.forEach((row, idx) => {
+    const periodKey = pickField(row, ['period_key', 'month_key', 'period']) || '';
+    rows.push({
+      key: `collected-${pickField(row, ['id']) || idx}`,
+      period_key: periodKey,
+      month_label: pickField(row, ['month_label', 'month', 'period_label', 'label']) || periodLabelFromKey(periodKey) || 'Archived month',
+      total_days: Number(pickField(row, ['total_days', 'days_completed', 'days']) || 32),
+      total_amount: Number(pickField(row, ['total_amount', 'amount', 'payout_amount', 'amount_paid']) || 0),
+      status: 'Collected'
+    });
+  });
+
+  return rows.sort((a, b) => (b.period_key || '').localeCompare(a.period_key || ''));
+};
+
+// Badge styling exactly per spec: Running = amber, Uncollected = neutral slate
+// (deliberately no green), Collected = emerald with a checkmark.
+const TrackingStatusBadge = ({ status }: { status: TrackingHistoryEntry['status'] }) => {
+  if (status === 'Running') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-amber-700">
+        Running
+      </span>
+    );
+  }
+  if (status === 'Collected') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-emerald-700">
+        <CheckCircle2 className="w-3 h-3" /> Collected
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-slate-700">
+      Uncollected
+    </span>
+  );
+};
+
+// Read-only loan status badge for the Customer Directory. Colors per spec:
+// green = No Loan, yellow = Pending Approval, orange = Active Loan,
+// blue = Loan Repaid (stored as 'Loan Cleared'). This used to be a manual
+// dropdown editor from before the real Loan Management module existed;
+// now that loans/loan_requests + the repayment trigger manage this field
+// automatically, making it editable here would let it drift out of sync
+// with the real loan record, so it's now display-only.
+const LoanStatusBadge = ({ status }: { status: Profile['loan_status'] }) => {
+  const dotColor =
+    status === 'Pending Approval' ? 'bg-yellow-500' :
+    status === 'Active Loan' ? 'bg-orange-500' :
+    status === 'Loan Cleared' ? 'bg-blue-500' :
+    'bg-emerald-500';
+  const label = status === 'Loan Cleared' ? 'Loan Repaid' : status;
+  return (
+    <div className="inline-flex items-center gap-1.5">
+      <span className={`w-2 h-2 rounded-full ${dotColor}`} />
+      <span className="text-[10px] font-bold text-slate-700">{label}</span>
+    </div>
+  );
+};
+
+// Full customer detail view, opened by clicking a name in the Customer
+// Directory. Transaction history and loan info are fetched on-demand for
+// just this one customer (not from the global, 90-day-windowed admin
+// state) so this always shows complete history regardless of that filter.
+const CustomerDetailsModal = ({
+  customer, branches, profiles, markedDays, savedMonths, payoutHistory,
+  dateFilter, setDateFilter, customFrom, setCustomFrom, customTo, setCustomTo,
+  viewingDay, setViewingDay, onClose,
+}: {
+  customer: Profile, branches: Branch[], profiles: Profile[],
+  markedDays: Record<string, MarkedDay[]>, savedMonths: Record<string, SavedMonth[]>,
+  payoutHistory: PayoutHistoryRecord[],
+  dateFilter: 'today' | 'week' | 'month' | 'custom', setDateFilter: (v: 'today' | 'week' | 'month' | 'custom') => void,
+  customFrom: string, setCustomFrom: (v: string) => void, customTo: string, setCustomTo: (v: string) => void,
+  viewingDay: MarkedDay | null, setViewingDay: (d: MarkedDay | null) => void,
+  onClose: () => void,
+}) => {
+  const [fullTransactions, setFullTransactions] = useState<any[]>([]);
+  const [loadingTx, setLoadingTx] = useState(true);
+  const [loanRecord, setLoanRecord] = useState<Loan | null>(null);
+  const [loadingLoan, setLoadingLoan] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingTx(true);
+    supabase
+      .from('transactions')
+      .select('id, customer_id, amount, date, payment_method, days_covered, start_day, end_day, branch_id, status, staff_id, created_at')
+      .eq('customer_id', customer.id)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => { if (!cancelled) { setFullTransactions(data || []); setLoadingTx(false); } });
+
+    setLoadingLoan(true);
+    supabase
+      .from('loans')
+      .select('*')
+      .eq('customer_id', customer.id)
+      .maybeSingle()
+      .then(({ data }) => { if (!cancelled) { setLoanRecord(data as Loan || null); setLoadingLoan(false); } });
+
+    return () => { cancelled = true; };
+  }, [customer.id]);
+
+  const branch = branches.find(b => b.id === customer.branch_id);
+  const staffLookup = (id?: string) => profiles.find(p => p.id === id)?.name || 'Admin';
+
+  const filteredTx = useMemo(() => {
+    const now = new Date();
+    return fullTransactions.filter((t: any) => {
+      const txDate = new Date(t.created_at || t.date);
+      if (dateFilter === 'today') return txDate.toDateString() === now.toDateString();
+      if (dateFilter === 'week') { const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7); return txDate >= weekAgo; }
+      if (dateFilter === 'month') return txDate.getMonth() === now.getMonth() && txDate.getFullYear() === now.getFullYear();
+      if (dateFilter === 'custom') { if (!customFrom || !customTo) return true; return txDate >= new Date(customFrom) && txDate <= new Date(customTo + 'T23:59:59'); }
+      return true;
+    });
+  }, [fullTransactions, dateFilter, customFrom, customTo]);
+
+  const marked = markedDays[customer.id] || [];
+  const daysCompleted = marked.length;
+  const totalContribution = marked.reduce((s, d) => s + d.amount, 0);
+  const uncollected = (savedMonths[customer.id] || []).filter(s => s.status === 'saved' || s.status === 'requested');
+  const collected = payoutHistory.filter(p => p.customer_id === customer.id);
+  const viewingDayTx = viewingDay ? fullTransactions.find((t: any) => t.id === viewingDay.transaction_id) : null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={onClose}>
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-black text-emerald-950">{customer.name}</h2>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+        </div>
+
+        <section className="mb-6 bg-emerald-50/50 rounded-2xl p-4">
+          <h3 className="text-xs font-black uppercase text-emerald-800 mb-3">Customer Information</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+            <div><p className="text-slate-500 font-bold">Full Name</p><p className="font-bold">{customer.name}</p></div>
+            <div><p className="text-slate-500 font-bold">Phone</p><p className="font-bold">{customer.phone}</p></div>
+            <div><p className="text-slate-500 font-bold">Email</p><p className="font-bold">{customer.email || '—'}</p></div>
+            <div><p className="text-slate-500 font-bold">Branch</p><p className="font-bold">{branch?.name || '—'}</p></div>
+            <div><p className="text-slate-500 font-bold">Daily Target</p><p className="font-bold">₦{customer.daily_amount.toLocaleString()}</p></div>
+            <div><p className="text-slate-500 font-bold">Registered</p><p className="font-bold">{customer.created_at ? new Date(customer.created_at).toLocaleDateString() : '—'}</p></div>
+            <div><p className="text-slate-500 font-bold">Status</p><p className="font-bold">{customer.is_active ? 'Active' : 'Inactive'}</p></div>
+          </div>
+        </section>
+
+        <section className="mb-6">
+          <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
+            <h3 className="text-xs font-black uppercase text-emerald-800">Transaction History</h3>
+            <div className="flex gap-1 items-center">
+              {(['today', 'week', 'month', 'custom'] as const).map(f => (
+                <button key={f} type="button" onClick={() => setDateFilter(f)}
+                  className={`px-2 py-1 rounded-xl text-[10px] font-black uppercase ${dateFilter === f ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                  {f}
+                </button>
+              ))}
+            </div>
+          </div>
+          {dateFilter === 'custom' && (
+            <div className="flex gap-2 mb-2 text-[10px]">
+              <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="border rounded-xl px-2 py-1" />
+              <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className="border rounded-xl px-2 py-1" />
+            </div>
+          )}
+          {loadingTx ? (
+            <p className="text-xs text-slate-400">Loading...</p>
+          ) : filteredTx.length === 0 ? (
+            <p className="text-xs text-slate-400">No transactions in this range.</p>
+          ) : (
+            <div className="overflow-x-auto max-h-56 overflow-y-auto">
+              <table className="w-full text-left text-[11px]">
+                <thead><tr className="text-slate-500 font-bold border-b border-slate-100 text-[10px] uppercase tracking-wide"><th className="p-1.5">Date</th><th className="p-1.5">Time</th><th className="p-1.5">Amount</th><th className="p-1.5">Method</th><th className="p-1.5">Staff</th></tr></thead>
+                <tbody className="divide-y">
+                  {filteredTx.map((t: any) => (
+                    <tr key={t.id}>
+                      <td className="p-1.5">{new Date(t.created_at || t.date).toLocaleDateString()}</td>
+                      <td className="p-1.5">{t.created_at ? new Date(t.created_at).toLocaleTimeString() : '—'}</td>
+                      <td className="p-1.5 font-bold">₦{t.amount.toLocaleString()}</td>
+                      <td className="p-1.5">{t.payment_method}</td>
+                      <td className="p-1.5">{staffLookup(t.staff_id)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className="mb-6">
+          <h3 className="text-xs font-black uppercase text-emerald-800 mb-2">32-Day Contribution Grid</h3>
+          <div className="grid grid-cols-8 gap-1.5 mb-2">
+            {Array.from({ length: 32 }, (_, i) => i + 1).map(dayNum => {
+              const day = marked.find(d => d.day_number === dayNum);
+              return (
+                <button key={dayNum} type="button" disabled={!day} onClick={() => day && setViewingDay(day)}
+                  className={`aspect-square rounded-xl text-[10px] font-black flex items-center justify-center ${day ? 'bg-emerald-600 text-white cursor-pointer hover:bg-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
+                  {dayNum}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex gap-4 text-[11px] font-bold text-slate-600">
+            <span>Days Completed: {daysCompleted}</span>
+            <span>Remaining: {32 - daysCompleted}</span>
+            <span>Total: ₦{totalContribution.toLocaleString()}</span>
+          </div>
+        </section>
+
+        <section className="mb-6">
+          <h3 className="text-xs font-black uppercase text-emerald-800 mb-2">Savings History</h3>
+          <p className="text-[10px] font-black uppercase text-slate-500 mb-1">Completed but Uncollected</p>
+          {uncollected.length === 0 ? <p className="text-xs text-slate-400 mb-3">None.</p> : (
+            <div className="overflow-x-auto mb-3">
+              <table className="w-full text-left text-[11px]">
+                <thead><tr className="text-slate-500 font-bold border-b border-slate-100 text-[10px] uppercase tracking-wide"><th className="p-1.5">Month</th><th className="p-1.5">Total Saved</th><th className="p-1.5">Completion Date</th><th className="p-1.5">Status</th></tr></thead>
+                <tbody className="divide-y">
+                  {uncollected.map(u => (
+                    <tr key={u.id}>
+                      <td className="p-1.5">{u.month_label}</td>
+                      <td className="p-1.5 font-bold">₦{u.total_amount.toLocaleString()}</td>
+                      <td className="p-1.5">{new Date(u.created_at).toLocaleDateString()}</td>
+                      <td className="p-1.5 capitalize">{u.status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="text-[10px] font-black uppercase text-slate-500 mb-1">Collected Savings</p>
+          {collected.length === 0 ? <p className="text-xs text-slate-400">None.</p> : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-[11px]">
+                <thead><tr className="text-slate-500 font-bold border-b border-slate-100 text-[10px] uppercase tracking-wide"><th className="p-1.5">Month</th><th className="p-1.5">Total Saved</th><th className="p-1.5">Collection Date</th><th className="p-1.5">Amount Collected</th></tr></thead>
+                <tbody className="divide-y">
+                  {collected.map(c => (
+                    <tr key={c.id}>
+                      <td className="p-1.5">{c.month_label}</td>
+                      <td className="p-1.5">₦{c.total_amount.toLocaleString()}</td>
+                      <td className="p-1.5">{new Date(c.approved_at).toLocaleDateString()}</td>
+                      <td className="p-1.5 font-bold">₦{c.payout_amount.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section>
+          <h3 className="text-xs font-black uppercase text-emerald-800 mb-2">Loan Information</h3>
+          {loadingLoan ? (
+            <p className="text-xs text-slate-400">Loading...</p>
+          ) : !loanRecord || customer.loan_status === 'No Loan' ? (
+            <p className="text-xs text-slate-500 font-semibold">This customer has no active loan.</p>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+              <div><p className="text-slate-500 font-bold">Status</p><p className="font-bold">{loanRecord.status}</p></div>
+              <div><p className="text-slate-500 font-bold">Loan Amount</p><p className="font-bold">₦{loanRecord.loan_amount.toLocaleString()}</p></div>
+              <div><p className="text-slate-500 font-bold">Outstanding</p><p className="font-bold">₦{loanRecord.outstanding_balance.toLocaleString()}</p></div>
+              <div><p className="text-slate-500 font-bold">Issued</p><p className="font-bold">{loanRecord.date_issued ? new Date(loanRecord.date_issued).toLocaleDateString() : '—'}</p></div>
+              <div><p className="text-slate-500 font-bold">Due Date</p><p className="font-bold">{loanRecord.due_date ? new Date(loanRecord.due_date).toLocaleDateString() : '—'}</p></div>
+              <div><p className="text-slate-500 font-bold">Installments</p><p className="font-bold">{loanRecord.installments ?? '—'}</p></div>
+              <div><p className="text-slate-500 font-bold">Repaid</p><p className="font-bold">₦{loanRecord.amount_repaid.toLocaleString()}</p></div>
+              <div><p className="text-slate-500 font-bold">Remaining</p><p className="font-bold">₦{loanRecord.amount_remaining.toLocaleString()}</p></div>
+            </div>
+          )}
+        </section>
+
+        {viewingDay && (
+          <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4" onClick={() => setViewingDay(null)}>
+            <div className="bg-white rounded-2xl p-5 max-w-xs w-full" onClick={e => e.stopPropagation()}>
+              <h4 className="text-sm font-black text-emerald-950 mb-3">Day {viewingDay.day_number} Payment</h4>
+              <div className="space-y-1.5 text-xs">
+                <p><span className="text-slate-500 font-bold">Date:</span> {new Date(viewingDay.date).toLocaleDateString()}</p>
+                <p><span className="text-slate-500 font-bold">Time:</span> {viewingDayTx?.created_at ? new Date(viewingDayTx.created_at).toLocaleTimeString() : '—'}</p>
+                <p><span className="text-slate-500 font-bold">Amount:</span> ₦{viewingDay.amount.toLocaleString()}</p>
+                <p><span className="text-slate-500 font-bold">Staff:</span> {staffLookup(viewingDayTx?.staff_id)}</p>
+              </div>
+              <button type="button" onClick={() => setViewingDay(null)} className="mt-4 w-full bg-emerald-700 text-white text-xs font-bold py-2 rounded-xl">Close</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const TrackingHistoryCard = ({ entry }: { entry: TrackingHistoryEntry }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setIsOpen(o => !o)}
+        className="w-full flex items-center justify-between gap-3 p-3.5 text-left hover:bg-slate-50/60 transition"
+      >
+        <div>
+          <p className="text-xs font-black text-slate-800">{entry.month_label}</p>
+          <p className="text-[11px] font-semibold text-slate-500">
+            {entry.total_days}/32 days • ₦{entry.total_amount.toLocaleString()}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <TrackingStatusBadge status={entry.status} />
+          {isOpen ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
+        </div>
+      </button>
+      {isOpen && (
+        <div className="border-t border-slate-50 bg-slate-50/40 px-3.5 py-3 text-[11px] font-semibold text-slate-600 space-y-1">
+          <p>Cycle period: <span className="font-bold text-slate-800">{entry.period_key || 'N/A'}</span></p>
+          <p>Days completed: <span className="font-bold text-slate-800">{entry.total_days} / 32</span></p>
+          <p>Amount: <span className="font-bold text-emerald-800">₦{entry.total_amount.toLocaleString()}</span></p>
+          <p>Status: <span className="font-bold text-slate-800">{entry.status}</span></p>
+          {entry.status === 'Uncollected' && (
+            <p className="text-amber-700 pt-1">This month is saved and waiting - request a payout from the tracker tab to collect it.</p>
+          )}
+          {entry.status === 'Running' && (
+            <p className="text-amber-700 pt-1">Still in progress - this will automatically save once it reaches 32 days.</p>
+          )}
+          {entry.status === 'Collected' && (
+            <p className="text-emerald-700 pt-1">Paid out - this cycle is fully settled.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+const periodLabelFromKey = (periodKey?: string) => {
+  if (!periodKey) return 'Unknown period';
+  const [y, m] = periodKey.split('-').map(Number);
+  if (!y || !m) return periodKey;
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  return `${months[m - 1] || ''} ${y}`.trim();
+};
+
+// Reads the first present key from a list of candidate field names - used when
+// pulling from tables (like `cycle_archives`) whose exact column names we're
+// normalizing defensively rather than assuming.
+const pickField = (row: any, keys: string[]) => {
+  for (const k of keys) {
+    if (row && row[k] !== undefined && row[k] !== null) return row[k];
+  }
+  return undefined;
+};
+
+const nigerianBanks = [
+  'Access Bank', 'Citibank Nigeria', 'Ecobank Nigeria', 'Fidelity Bank',
+  'First Bank of Nigeria', 'First City Monument Bank (FCMB)', 'Globus Bank',
+  'Guaranty Trust Bank (GTBank)', 'Heritage Bank', 'Keystone Bank', 'Moniepoint',
+  'OPay', 'PalmPay', 'Polaris Bank', 'Providus Bank', 'Stanbic IBTC Bank',
+  'Standard Chartered Bank', 'Sterling Bank', 'SunTrust Bank', 'Union Bank of Nigeria',
+  'United Bank for Africa (UBA)', 'Unity Bank', 'Wema Bank', 'Zenith Bank'
+];
+
+type AdminTab = 'overview' | 'customers' | 'branches' | 'staff' | 'payouts' | 'records' | 'transactions' | 'settings' | 'reports' | 'cashsheet' | 'loans' | 'monthly-savings' | 'oja';
+
+export interface CashReconciliation {
+  id: string;
+  folder_name: string;
+  record_date: string;
+  record_type: 'full_reconciliation' | 'denomination';
+  denominations: { denom: number; pieces: number; total: number }[];
+  grand_cash_total: number;
+  trf_amount: number;
+  cash_plus_trf: number;
+  today_contribution: number;
+  total_expenses: number;
+  summary_balance: number;
+  account_check: number;
+  notes?: string;
+  created_by?: string;
+  created_at: string;
+}
+
+const isTransferMethod = (method?: string) => Boolean(method && /transfer/i.test(method));
+
+const getOrdinalSuffix = (day: number) => {
+  if (day > 3 && day < 21) return 'th';
+  switch (day % 10) {
+    case 1: return 'st';
+    case 2: return 'nd';
+    case 3: return 'rd';
+    default: return 'th';
+  }
+};
+
+const formatTransactionDateLabel = (value: string) => {
+  if (!value) return 'Unknown date';
+  const normalizedDate = value.includes('T') ? value.split('T')[0] : value;
+  const parsed = new Date(`${normalizedDate}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  const month = parsed.toLocaleDateString('en-US', { month: 'short' });
+  const day = parsed.getDate();
+  const year = parsed.getFullYear();
+  return `${month} ${day}${getOrdinalSuffix(day)}, ${year}`;
+};
+
+const getWATDateKey = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 2 }).format(value);
+
+const sumCurrencyValues = (values: number[]) => {
+  const cents = values.reduce((total, value) => total + Math.round(Number(value || 0) * 100), 0);
+  return cents / 100;
+};
+
+// The company fee deducted from a payout must reflect the rate that was
+// ACTUALLY in effect when that specific month was saved - never the
+// customer's current daily_amount. If a customer's daily contribution is
+// changed later, already-saved/past months must be completely unaffected;
+// only the presently-running cycle should ever use the current rate. Since
+// each saved month's total_amount/total_days already reflects whatever was
+// really collected at the time, dividing them back out gives the exact
+// historical per-day rate for that month without needing any new column.
+const monthHistoricalDailyRate = (m: { total_amount: number; total_days: number }) =>
+  m.total_days > 0 ? Math.round(m.total_amount / m.total_days) : 0;
+
+// Single source of truth for the loan formula, per business rule:
+// Maximum Loan = Daily Contribution x 30, Repayment = Daily Contribution x 32.
+// Used identically by both the customer Request Loan flow and the Admin
+// Assign Loan flow, so the two methods can never diverge in their math.
+const computeLoanEligibility = (dailyAmount: number) => {
+  const maxLoan = sumCurrencyValues([dailyAmount * 30]);
+  const repaymentAmount = sumCurrencyValues([dailyAmount * 32]);
+  const serviceCharge = sumCurrencyValues([repaymentAmount - maxLoan]);
+  return { maxLoan, repaymentAmount, serviceCharge };
+};
+
+function LiveTransactionCounter({ count, label = 'Live transactions' }: { count: number; label?: string }) {
+  return (
+    <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-black text-emerald-800 shadow-sm">
+      <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
+      {label}: <span className="text-emerald-950">{count}</span>
+    </div>
+  );
+}
+
+// Small secondary page-switcher used inside long admin sections (Payouts,
+// etc.) so each part shows on its own screen instead of one continuous
+// scroll. Presentation-only - just toggles which already-existing block of
+// content is visible.
+function SectionPageBar<T extends string>({ pages, active, onChange }: { pages: { key: T; label: string; icon?: any }[]; active: T; onChange: (key: T) => void }) {
+  return (
+    <div className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1 mb-1">
+      {pages.map(({ key, label, icon: Icon }) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onChange(key)}
+          className={`shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[11px] font-bold tracking-wide uppercase transition-all duration-200 ${
+            active === key ? 'bg-emerald-700 text-white shadow-sm' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+          }`}
+        >
+          {Icon && <Icon className="w-3.5 h-3.5" />}
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Purely decorative mini trend line for stat cards. This does NOT represent
+// a real historical data series (no such time-series is tracked anywhere in
+// the app) - it is a visual flourish only, in the spirit of the reference
+// design. `positive` just picks an upward- or flat/soft-leaning shape so it
+// doesn't visually contradict a real, adjacent honest stat (e.g. a computed
+// % change) shown next to it.
+function MiniSparkline({ color = '#059669', positive = true }: { color?: string; positive?: boolean }) {
+  const points = positive
+    ? '0,28 12,24 24,26 36,18 48,20 60,12 72,14 84,6 96,8 108,2'
+    : '0,10 12,14 24,11 36,16 48,14 60,18 72,15 84,20 96,17 108,20';
+  return (
+    <svg viewBox="0 0 108 32" className="w-full h-8" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points={points} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.85" />
+    </svg>
+  );
+}
+
+// Reusable Autocomplete Searchable Customer Select Component
+function SearchableCustomerSelect({ 
+  customers, 
+  selectedId, 
+  onSelect, 
+  placeholder = "Search customer..." 
+}: { 
+  customers: Profile[], 
+  selectedId: string, 
+  onSelect: (id: string) => void,
+  placeholder?: string
+}) {
+  const [search, setSearch] = useState('');
+  const [isOpen, setIsOpen] = useState(false);
+  const selected = customers.find(c => c.id === selectedId);
+
+  const filtered = customers.filter(c => 
+    c.name.toLowerCase().includes(search.toLowerCase()) || 
+    c.phone.includes(search)
+  );
+
+  return (
+    <div className="relative w-full text-slate-800">
+      <div 
+        className="input-green bg-white text-sm cursor-pointer flex justify-between items-center"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <span className={selected ? "text-slate-800 font-bold text-xs" : "text-slate-400 text-xs"}>
+          {selected ? `${selected.name} (₦${selected.daily_amount.toLocaleString()}/day)` : placeholder}
+        </span>
+        <span className="text-[9px] text-slate-400">▼</span>
+      </div>
+
+      {isOpen && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-emerald-100 rounded-xl shadow-lg p-2 space-y-2">
+          <input 
+            type="text"
+            autoFocus
+            placeholder="Type name or phone number..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full px-3 py-1.5 border border-emerald-100 rounded-xl text-xs outline-none focus:ring-2 focus:ring-emerald-500"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <div className="max-h-40 overflow-y-auto divide-y divide-emerald-50 text-xs">
+            {filtered.map(c => (
+              <div 
+                key={c.id}
+                className="p-2 hover:bg-emerald-50 cursor-pointer"
+                onClick={() => {
+                  onSelect(c.id);
+                  setSearch('');
+                  setIsOpen(false);
+                }}
+              >
+                <p className="font-bold text-slate-800">{c.name}</p>
+                <p className="text-[10px] text-slate-500">{c.phone} • ₦{c.daily_amount.toLocaleString()}/day</p>
+              </div>
+            ))}
+            {filtered.length === 0 && (
+              <div className="p-2 text-center text-slate-400">No customers found</div>
+            )}
+          </div>
+        </div>
+      )}
+      {isOpen && <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />}
+    </div>
+  );
+}
+
+// =========================================================================
+// 1. ISOLATED SUBCOMPONENTS
+// =========================================================================
+
+function WelcomeScreen({ onComplete }: { onComplete: () => void }) {
+  useEffect(() => {
+    const timer = setTimeout(onComplete, 900);
+    return () => clearTimeout(timer);
+  }, [onComplete]);
+
+  return (
+    <div className="fixed inset-0 bg-gradient-to-br from-emerald-900 via-emerald-800 to-teal-950 flex items-center justify-center z-50 overflow-hidden">
+      <div className="floating-shape shape-1" />
+      <div className="floating-shape shape-2" />
+      <div className="text-center space-y-5 fade-in px-6">
+        <div className="mx-auto flex justify-center"><Mascot pose="wave" size={150} /></div>
+        <h1 className="text-3xl sm:text-4xl font-black text-white tracking-widest">HIREMERCY AJO</h1>
+        <p className="text-emerald-300 font-semibold tracking-wider uppercase text-xs">Continuous Daily Target Thrift Tracker</p>
+        <div className="w-24 h-1 bg-amber-500 mx-auto rounded-full mt-4" />
+      </div>
+    </div>
+  );
+}
+
+function AdminSetupScreen({ onCreate }: { onCreate: (data: any) => void }) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password !== confirmPassword) {
+      alert("Passwords do not match!");
+      return;
+    }
+    onCreate({ name, email: email || '', phone, password });
+  };
+
+  return (
+    <div className="max-w-md mx-auto my-8 sm:my-12 mx-4 sm:mx-auto bg-white rounded-3xl shadow-xl border border-amber-200/70 overflow-hidden">
+      <div className="bg-gradient-to-r from-emerald-800 to-emerald-900 text-white p-6 sm:p-7 text-center">
+        <div className="inline-flex p-2.5 bg-amber-400 rounded-xl mb-3 text-emerald-950 shadow-sm">
+          <Key className="w-6 h-6" />
+        </div>
+        <h2 className="text-xl sm:text-2xl font-extrabold text-amber-400">First-Time Setup</h2>
+        <p className="text-xs text-emerald-200 mt-1">Configure your primary master Admin account below</p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-4 text-slate-800">
+        <div>
+          <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Owner / Director Name *</label>
+          <input 
+            type="text" 
+            required
+            placeholder="Mercy Paul"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="input-green text-sm"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Email Address</label>
+          <input 
+            type="email"
+            placeholder="admin@hiremercy.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="input-green text-sm"
+          />
+          <span className="text-[11px] text-slate-400 block mt-1.5">Optional. You can register with phone and password only.</span>
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Direct Phone Line *</label>
+          <input 
+            type="text" 
+            required
+            placeholder="08012345678"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            className="input-green text-sm"
+          />
+          <span className="text-[11px] text-slate-400 block mt-1.5">Accepts local formats (e.g. 080...) or international (+234...)</span>
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Secure Password *</label>
+          <div className="relative">
+            <input 
+              type={showPassword ? 'text' : 'password'} 
+              required
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="input-green text-sm pr-11"
+            />
+            <button 
+              type="button" 
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-emerald-700 focus:outline-none p-1"
+            >
+              {showPassword ? <EyeOff className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Confirm Password *</label>
+          <input 
+            type="password" 
+            required
+            placeholder="••••••••"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            className="input-green text-sm"
+          />
+        </div>
+
+        <button 
+          type="submit" 
+          className="w-full bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-emerald-950 font-bold py-3.5 rounded-xl transition-all duration-200 shadow-md mt-4"
+        >
+          Initialize Administration
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function LoginScreen({ onLogin, onSwitch }: { onLogin: (phone: string, pass: string) => void, onSwitch: () => void }) {
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [forgotPasswordMode, setForgotPasswordMode] = useState(false);
+  const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!phone || !password) return;
+    onLogin(phone.trim(), password);
+  };
+
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!recoveryEmail) return;
+    setIsResetting(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(recoveryEmail.trim(), {
+        redirectTo: window.location.origin,
+      });
+      if (error) throw error;
+      alert('Password reset instructions have been sent to your email.');
+      setForgotPasswordMode(false);
+    } catch (err: any) {
+      alert(`Reset Failed: ${err.message}`);
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  if (forgotPasswordMode) {
+    return (
+      <div className="w-full max-w-md mx-auto my-8 sm:my-12 bg-white rounded-3xl shadow-xl border border-emerald-100 overflow-hidden fade-in">
+        <div className="bg-gradient-to-br from-emerald-800 to-emerald-900 text-white p-7 sm:p-8 text-center">
+          <h2 className="text-xl font-extrabold">Forgot Password</h2>
+          <p className="text-xs text-emerald-200 mt-1.5">We'll send a secure reset link to your account email address</p>
+        </div>
+        <form onSubmit={handleForgotPasswordSubmit} className="p-6 sm:p-8 space-y-4">
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Registered Email Address</label>
+            <input 
+              type="email" 
+              required
+              placeholder="e.g. name@domain.com"
+              value={recoveryEmail}
+              onChange={(e) => setRecoveryEmail(e.target.value)}
+              className="input-green text-sm"
+            />
+          </div>
+          <button 
+            type="submit" 
+            disabled={isResetting}
+            className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white py-3.5 rounded-xl font-bold transition-all duration-200 disabled:opacity-50"
+          >
+            {isResetting ? 'Sending Reset Email...' : 'Request Password Reset Link'}
+          </button>
+          <div className="text-center">
+            <button 
+              type="button" 
+              onClick={() => setForgotPasswordMode(false)}
+              className="text-xs text-emerald-700 font-bold hover:underline"
+            >
+              Back to Login
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full flex items-center justify-center px-4 py-6 sm:py-10">
+      <div className="w-full max-w-md bg-white rounded-3xl shadow-xl border border-emerald-100 overflow-hidden fade-in">
+        <div className="bg-gradient-to-br from-emerald-800 to-emerald-900 text-white p-7 sm:p-8 text-center">
+          <div className="w-14 h-14 mx-auto mb-3 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center">
+            <PiggyBank className="w-7 h-7 text-amber-400" />
+          </div>
+          <h2 className="text-xl sm:text-2xl font-extrabold">Welcome back</h2>
+          <p className="text-xs text-emerald-200 mt-1.5">Sign in with your phone number and password</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-5 text-slate-800">
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Phone Number</label>
+            <div className="relative">
+              <Phone className="w-4 h-4 text-emerald-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input 
+                type="text" 
+                required
+                placeholder="e.g. 08012345678"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="input-green text-sm pl-10"
+              />
+            </div>
+            <span className="text-[11px] text-slate-400 block mt-1.5">Accepts local formats (e.g. 080...) or international (+234...)</span>
+          </div>
+
+          <div>
+            <div className="flex justify-between items-center mb-1.5">
+              <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800">Password</label>
+              <button 
+                type="button" 
+                onClick={() => setForgotPasswordMode(true)}
+                className="text-[11px] text-emerald-700 font-bold hover:underline"
+              >
+                Forgot Password?
+              </button>
+            </div>
+            <div className="relative">
+              <Lock className="w-4 h-4 text-emerald-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input 
+                type={showPassword ? 'text' : 'password'} 
+                required
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="input-green text-sm pl-10 pr-11"
+              />
+              <button 
+                type="button" 
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-emerald-700 focus:outline-none p-1"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          <button 
+            type="submit" 
+            className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white py-3.5 rounded-xl font-bold transition-all duration-200 shadow-md"
+          >
+            Verify & Sign In
+          </button>
+
+          <div className="text-center pt-1">
+            <p className="text-xs text-slate-500">
+              Don't have a Customer profile yet?{' '}
+              <button type="button" onClick={onSwitch} className="text-emerald-700 font-bold hover:underline">
+                Register as Customer
+              </button>
+            </p>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function RegisterScreen({ onBack, onRegister: onRegisterBase, branches, referralCode }: { onBack: () => void, onRegister: (data: any) => void, branches: Branch[], referralCode?: string | null }) {
+  // --- Referral: validate ?ref= code and carry it through registration ---
+  const [refState, setRefState] = useState<{ status: 'none' | 'checking' | 'valid' | 'invalid'; name?: string }>(
+    referralCode ? { status: 'checking' } : { status: 'none' }
+  );
+  useEffect(() => {
+    let alive = true;
+    if (!referralCode) { setRefState({ status: 'none' }); return; }
+    setRefState({ status: 'checking' });
+    supabase.rpc('validate_referral_code', { p_code: referralCode }).then(({ data, error }: any) => {
+      if (!alive) return;
+      if (!error && data && data.valid) setRefState({ status: 'valid', name: data.referrer_name || '' });
+      else setRefState({ status: 'invalid' });
+    });
+    return () => { alive = false; };
+  }, [referralCode]);
+  // Only a validated code is sent; the database re-validates it and still
+  // lets registration succeed without a referral if anything is off.
+  const onRegister = (d: any) => onRegisterBase(
+    refState.status === 'valid' && referralCode ? { ...d, referral_code: referralCode } : d
+  );
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [dailyAmount, setDailyAmount] = useState('1000');
+  const [monthlyTargetAmount, setMonthlyTargetAmount] = useState('5000');
+  const [branchId, setBranchId] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [savingsType, setSavingsType] = useState<'daily' | 'monthly' | 'both'>('daily');
+  const [showTerms, setShowTerms] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [pendingSubmit, setPendingSubmit] = useState(false);
+
+  const needsTerms = savingsType === 'monthly' || savingsType === 'both';
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name || !phone || !password) return;
+    if ((savingsType === 'daily' || savingsType === 'both') && Number(dailyAmount) < 300) {
+      alert("Daily Contribution must be a minimum of ₦300.");
+      return;
+    }
+    if ((savingsType === 'monthly' || savingsType === 'both') && Number(monthlyTargetAmount) < 5000) {
+      alert("Monthly Savings Target must be a minimum of ₦5,000.");
+      return;
+    }
+    if (needsTerms && !termsAccepted) {
+      setPendingSubmit(true);
+      setShowTerms(true);
+      return;
+    }
+    onRegister({ name, email: email || '', phone, password, daily_amount: Number(dailyAmount), monthly_target_amount: Number(monthlyTargetAmount), branch_id: branchId, savings_type: savingsType, monthly_savings_terms_accepted: termsAccepted });
+  };
+
+  return (
+    <div className="w-full max-w-md mx-auto my-6 sm:my-12 bg-white rounded-3xl shadow-xl border border-emerald-100 overflow-hidden fade-in">
+      <div className="bg-gradient-to-br from-emerald-800 to-emerald-900 text-white p-6 sm:p-7 relative">
+        <button onClick={onBack} className="absolute left-4 top-6 text-emerald-200 hover:text-white flex items-center gap-1 text-xs font-semibold">
+          <ChevronLeft className="w-4 h-4" /> Back
+        </button>
+        <div className="text-center mt-4">
+          <h2 className="text-xl sm:text-2xl font-extrabold">Register Customer</h2>
+          <p className="text-xs text-emerald-200 mt-1.5">Choose your savings plan and set your contribution target</p>
+        </div>
+      </div>
+
+      <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-4 text-slate-800">
+        {refState.status === 'valid' && (
+          <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3 text-xs font-bold text-emerald-800">
+            You were referred by {refState.name ? refState.name : 'a HireMercyAJO customer'} (code {referralCode}).
+          </div>
+        )}
+        {refState.status === 'invalid' && (
+          <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3 text-xs font-medium text-amber-800">
+            This referral code is not valid, so it will be ignored. You can still register normally.
+          </div>
+        )}
+        <div>
+          <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Full Name *</label>
+          <input type="text" required placeholder="Chinedu Osei" value={name} onChange={(e) => setName(e.target.value)} className="input-green text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Phone Number *</label>
+          <input type="text" required placeholder="e.g. 08012345678" value={phone} onChange={(e) => setPhone(e.target.value)} className="input-green text-sm" />
+          <span className="text-[11px] text-slate-400 block mt-1.5">Accepts local formats (e.g. 080...) or international (+234...)</span>
+        </div>
+        <div>
+          <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Email Address</label>
+          <input type="email" placeholder="chinedu@domain.com" value={email} onChange={(e) => setEmail(e.target.value)} className="input-green text-sm" />
+          <span className="text-[11px] text-slate-400 block mt-1.5">Optional.</span>
+        </div>
+        <div>
+          <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Password *</label>
+          <div className="relative">
+            <input type={showPassword ? 'text' : 'password'} required placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} className="input-green text-sm pr-11" />
+            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-emerald-700 p-1">
+              {showPassword ? <EyeOff className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Savings Plan Selection */}
+        <div>
+          <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-2">Savings Plan *</label>
+          <div className="grid grid-cols-3 gap-2">
+            {(['daily', 'monthly', 'both'] as const).map(type => (
+              <button key={type} type="button" onClick={() => { setSavingsType(type); setTermsAccepted(false); }}
+                className={`py-2.5 px-2 rounded-xl text-[11px] font-bold uppercase border-2 transition-all duration-200 ${savingsType === type ? 'bg-emerald-700 border-emerald-700 text-white shadow-sm' : 'bg-white border-emerald-200 text-emerald-800 hover:border-emerald-400'}`}>
+                {type === 'daily' ? '32-Day Daily' : type === 'monthly' ? 'Monthly Salary' : 'Both Plans'}
+              </button>
+            ))}
+          </div>
+          {savingsType === 'daily' && <p className="text-[11px] text-slate-500 mt-1.5 font-medium">32-day rotating daily contribution cycle.</p>}
+          {savingsType === 'monthly' && <p className="text-[11px] text-slate-500 mt-1.5 font-medium">Monthly salary savings — Jan to Dec, minimum ₦5,000/month.</p>}
+          {savingsType === 'both' && <p className="text-[11px] text-slate-500 mt-1.5 font-medium">Both plans run simultaneously and independently.</p>}
+        </div>
+
+        {(savingsType === 'daily' || savingsType === 'both') && (
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Daily Contribution Target (₦) *</label>
+            <input type="number" required min={300} placeholder="Minimum ₦300" value={dailyAmount} onChange={(e) => setDailyAmount(e.target.value)} className="input-green text-sm font-semibold" />
+            <span className="text-[11px] text-slate-400 block mt-1.5">Minimum ₦300 per day.</span>
+          </div>
+        )}
+
+        {(savingsType === 'monthly' || savingsType === 'both') && (
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Monthly Savings Target (₦) *</label>
+            <input type="number" required min={5000} placeholder="Minimum ₦5,000" value={monthlyTargetAmount} onChange={(e) => setMonthlyTargetAmount(e.target.value)} className="input-green text-sm font-semibold" />
+            <span className="text-[11px] text-slate-400 block mt-1.5">Minimum ₦5,000 per month — choose how much you want to save each month.</span>
+          </div>
+        )}
+
+        <div>
+          <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 mb-1.5">Assign Home Branch</label>
+          <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className="input-green bg-white text-sm">
+            <option value="">-- Choose Branch --</option>
+            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+        </div>
+
+        {needsTerms && (
+          <div className={`rounded-xl border-2 p-3.5 flex items-start gap-3 cursor-pointer transition-colors ${termsAccepted ? 'border-emerald-500 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}
+            onClick={() => setShowTerms(true)}>
+            <div className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5 ${termsAccepted ? 'bg-emerald-600 text-white' : 'border-2 border-amber-400'}`}>
+              {termsAccepted && <span className="text-[10px] font-black">✓</span>}
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-700">{termsAccepted ? 'Terms & Conditions accepted ✓' : 'Read & Accept Terms and Conditions'}</p>
+              <p className="text-[11px] text-slate-500 mt-0.5">Monthly Salary Savings Plan terms apply. Tap to read.</p>
+            </div>
+          </div>
+        )}
+
+        <button type="submit" className="w-full bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-emerald-950 font-bold py-3.5 rounded-xl transition-all duration-200 shadow-md mt-2">
+          Activate Savings Cycle
+        </button>
+      </form>
+
+      {/* Terms and Conditions Modal */}
+      {showTerms && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setShowTerms(false)}>
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full max-h-[88vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="bg-gradient-to-br from-emerald-800 to-emerald-900 text-white p-5 rounded-t-3xl">
+              <h3 className="text-base font-black">Monthly Salary Savings Plan</h3>
+              <p className="text-emerald-200 text-xs mt-0.5">Terms and Conditions — Please read carefully</p>
+            </div>
+            <div className="overflow-y-auto p-5 space-y-3 text-xs text-slate-700 flex-1">
+              {[
+                { title: '1. Plan Duration', text: 'The Monthly Salary Savings Plan runs for a full calendar year (January to December). Your plan begins in the month you enroll and covers all 12 months of that year.' },
+                { title: '2. Minimum Monthly Contribution', text: 'You are required to save a minimum of ₦5,000 per month. Deposits can be made in multiple installments throughout the month. A month is marked complete once ₦5,000 has been deposited.' },
+                { title: '3. Company Profit Month', text: 'One month\'s savings (1 out of 12) is retained by HireMercyAJO as a service charge. This is the agreed compensation for managing and securing your savings throughout the year.' },
+                { title: '4. Withdrawal Policy — Customers', text: 'Customers CANNOT make self-service withdrawal requests from this plan. Withdrawals are processed exclusively by the Admin or authorized staff. You may only request your savings after December of the plan year.' },
+                { title: '5. Withdrawal Policy — Admin', text: 'The Admin or authorized staff may process withdrawals on your behalf at any time during the year, where necessary and in your interest.' },
+                { title: '6. No Loan on This Plan', text: 'The Monthly Salary Savings Plan does not support loan applications. Loans are only available on the 32-Day Daily Savings Plan.' },
+                { title: '7. Account Conduct', text: 'Your account must remain active throughout the year. Suspended or inactive accounts will not be eligible for withdrawals.' },
+                { title: '8. Independent Plan', text: 'The Monthly Salary Savings Plan is completely separate from the 32-Day Daily Savings Plan. If you enroll in Both Plans, each plan operates independently with its own balance, deposits, and rules.' },
+                { title: '9. Record and Transparency', text: 'All deposits, month completions, and withdrawals are recorded and visible on your dashboard. HireMercyAJO maintains full records of your savings at all times.' },
+                { title: '10. Agreement', text: 'By accepting these terms, you confirm that you have read, understood, and agreed to all conditions of the HireMercyAJO Monthly Salary Savings Plan. These terms are binding from the moment of enrollment.' },
+              ].map(item => (
+                <div key={item.title}>
+                  <p className="font-black text-emerald-800 mb-0.5">{item.title}</p>
+                  <p className="text-slate-600 leading-relaxed">{item.text}</p>
+                </div>
+              ))}
+            </div>
+            <div className="p-4 border-t border-slate-100 flex gap-2 bg-white rounded-b-3xl">
+              <button type="button" onClick={() => setShowTerms(false)}
+                className="flex-1 py-3 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors">
+                Close
+              </button>
+              <button type="button" onClick={() => {
+                setTermsAccepted(true);
+                setShowTerms(false);
+                if (pendingSubmit) {
+                  setPendingSubmit(false);
+                  const syntheticData = { name, email: email || '', phone, password, daily_amount: Number(dailyAmount), monthly_target_amount: Number(monthlyTargetAmount), branch_id: branchId, savings_type: savingsType, monthly_savings_terms_accepted: true };
+                  onRegister(syntheticData);
+                }
+              }}
+                className="flex-1 py-3 bg-emerald-700 hover:bg-emerald-800 active:scale-[0.98] text-white rounded-xl text-xs font-bold uppercase tracking-wide transition-all duration-200 shadow-sm">
+                I Accept These Terms
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Grid32({ trackingDays, dailyAmount }: { trackingDays: MarkedDay[], dailyAmount: number }) {
+  const daysTotal = 32;
+
+  const completionPct = Math.round((trackingDays.length / daysTotal) * 100);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 sm:gap-2.5">
+        {Array.from({ length: daysTotal }, (_, i) => {
+          const dayNum = i + 1;
+          const markedInfo = trackingDays.find(item => item.day_number === dayNum);
+
+          return (
+            <div 
+              key={dayNum}
+              className={`relative flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-2xl border transition-all duration-200 ${
+                markedInfo 
+                  ? 'bg-amber-50 border-amber-400 text-amber-950 shadow-sm' 
+                  : 'bg-emerald-50/40 border-emerald-100 text-slate-400'
+              }`}
+            >
+              <span className="text-[10px] font-bold block mb-1">Day {dayNum}</span>
+              {markedInfo ? (
+                <div className="w-6 h-6 rounded-full bg-amber-400 text-emerald-950 flex items-center justify-center text-[11px] font-black shadow-inner">
+                  ★
+                </div>
+              ) : (
+                <div className="w-6 h-6 rounded-full border border-dashed border-emerald-200 text-emerald-600/60 flex items-center justify-center text-[9px] font-bold">
+                  {dayNum}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="pt-3 border-t border-emerald-50">
+        <div className="flex justify-between items-center text-xs font-bold text-slate-600 mb-1.5">
+          <span>Completion Rate</span>
+          <span className="text-emerald-800">{trackingDays.length} / {daysTotal} days &middot; {completionPct}%</span>
+        </div>
+        <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+          <div 
+            className="bg-gradient-to-r from-amber-400 to-amber-500 h-full rounded-full transition-all duration-500"
+            style={{ width: `${completionPct}%` }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SupportWidget({ details }: { details: SupportSettings }) {
+  const whatsappClean = details.support_whatsapp.replace(/[\s\+]/g, '');
+
+  return (
+    <div className="card-green space-y-4">
+      <div>
+        <h4 className="text-sm font-bold text-emerald-950 uppercase tracking-wide">Need Assistance?</h4>
+        <p className="text-[11px] text-slate-500 mt-1">Contact direct support channels managed by HireMercy administration.</p>
+      </div>
+
+      <div className="space-y-2">
+        <a 
+          href={`tel:${details.support_phone}`}
+          className="flex items-center gap-3 p-3 bg-emerald-50/60 hover:bg-emerald-100/70 rounded-xl border border-emerald-100 text-xs text-emerald-900 transition-colors duration-150 font-semibold"
+        >
+          <span className="icon-circle-light w-8 h-8 sm:w-8 sm:h-8"><Phone className="w-4 h-4" /></span>
+          <span>Call: {details.support_phone}</span>
+        </a>
+        <a 
+          href={`https://wa.me/${whatsappClean}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-3 p-3 bg-emerald-50/60 hover:bg-emerald-100/70 rounded-xl border border-emerald-100 text-xs text-emerald-900 transition-colors duration-150 font-semibold"
+        >
+          <span className="icon-circle-light w-8 h-8 sm:w-8 sm:h-8"><MessageSquare className="w-4 h-4" /></span>
+          <span>WhatsApp: Chat Live</span>
+        </a>
+        <a 
+          href={`mailto:${details.support_email}`}
+          className="flex items-center gap-3 p-3 bg-emerald-50/60 hover:bg-emerald-100/70 rounded-xl border border-emerald-100 text-xs text-emerald-900 transition-colors duration-150 font-semibold"
+        >
+          <span className="icon-circle-light w-8 h-8 sm:w-8 sm:h-8"><Mail className="w-4 h-4" /></span>
+          <span>Email: Support Inbox</span>
+        </a>
+      </div>
+    </div>
+  );
+}
+
+function AdvertisementBanner({ details }: { details: SupportSettings }) {
+  if (!details.advert_enabled) return null;
+
+  return (
+    <div className="overflow-hidden rounded-3xl border border-amber-200/60 bg-gradient-to-br from-emerald-900 via-emerald-800 to-emerald-950 shadow-lg mb-6 fade-in relative">
+      <div className="grid gap-4 p-5 sm:p-7 md:grid-cols-[1.3fr_0.9fr] md:items-center">
+        <div className="space-y-3">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-400 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-950">
+            <Sparkles className="w-3 h-3" /> Featured campaign
+          </span>
+          <h3 className="text-lg sm:text-2xl font-black text-white leading-snug">
+            {details.advert_title ? details.advert_title : (
+              <>Save today and <span className="text-emerald-400">grow together</span>, prosper with confidence</>
+            )}
+          </h3>
+          <p className="text-sm text-emerald-100 max-w-md">{details.advert_description || 'Join the smart daily savings circle with HireMercyAJO.'}</p>
+          <button type="button" className="mt-1 inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all duration-200 shadow-sm">
+            Learn More <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        <div className="overflow-hidden rounded-2xl border border-emerald-700/60 bg-white/10 p-2">
+          {details.advert_video_url ? (
+            <video src={details.advert_video_url} className="h-40 sm:h-48 w-full rounded-xl object-cover" autoPlay loop muted playsInline />
+          ) : details.advert_image_url ? (
+            <img src={details.advert_image_url} alt="Advertisement" className="h-40 sm:h-48 w-full rounded-xl object-cover" />
+          ) : (
+            <div className="flex h-40 sm:h-48 items-center justify-center rounded-xl bg-emerald-900/70 text-center text-sm font-bold text-emerald-100 px-4">Daily contributions made simple.</div>
+          )}
+        </div>
+      </div>
+      <div className="flex justify-center gap-1.5 pb-4">
+        <span className="w-5 h-1.5 rounded-full bg-amber-400" />
+        <span className="w-1.5 h-1.5 rounded-full bg-white/30" />
+        <span className="w-1.5 h-1.5 rounded-full bg-white/30" />
+        <span className="w-1.5 h-1.5 rounded-full bg-white/30" />
+      </div>
+    </div>
+  );
+}
+
+// =========================================================================
+// 2. ADMIN DASHBOARD COMPONENT
+// =========================================================================
+
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+function MonthlySavingsAdminTab({ monthlySavingsPlans, monthlySavingsMonths, profiles, branches, customers, msSelectedCustomer, setMsSelectedCustomer, msSelectedYear, setMsSelectedYear, msDepositMonth, setMsDepositMonth, msDepositAmount, setMsDepositAmount, msDepositMethod, setMsDepositMethod, msShowDepositModal, setMsShowDepositModal, onEnrollMonthlySavings, onRecordMonthlyDeposit }: {
+  monthlySavingsPlans: MonthlySavingsPlan[], monthlySavingsMonths: MonthlySavingsMonth[],
+  profiles: Profile[], branches: Branch[], customers: Profile[],
+  msSelectedCustomer: string, setMsSelectedCustomer: (v: string) => void,
+  msSelectedYear: number, setMsSelectedYear: (v: number) => void,
+  msDepositMonth: number, setMsDepositMonth: (v: number) => void,
+  msDepositAmount: string, setMsDepositAmount: (v: string) => void,
+  msDepositMethod: 'Cash' | 'Bank Transfer' | 'Mobile Money', setMsDepositMethod: (v: any) => void,
+  msShowDepositModal: boolean, setMsShowDepositModal: (v: boolean) => void,
+  onEnrollMonthlySavings: (customerId: string, year: number, monthlyTargetAmount: number) => void,
+  onRecordMonthlyDeposit: (customerId: string, year: number, month: number, amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => void
+}) {
+  const currentYear = new Date().getFullYear();
+  const [msEnrollAmount, setMsEnrollAmount] = useState('5000');
+  const customerPlan = msSelectedCustomer
+    ? monthlySavingsPlans.find(p => p.customer_id === msSelectedCustomer && p.year === msSelectedYear)
+    : null;
+  const planMonths = customerPlan ? monthlySavingsMonths.filter(m => m.plan_id === customerPlan.id) : [];
+  const getMonthData = (monthNum: number) => planMonths.find(m => m.month_number === monthNum) || null;
+  const completedCount = planMonths.filter(m => m.is_complete).length;
+  const totalSaved = customerPlan?.total_saved || 0;
+  const enrolled = monthlySavingsPlans.filter(p => p.year === msSelectedYear);
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Enrolled Customers', value: enrolled.length },
+          { label: 'Completed Plans', value: monthlySavingsPlans.filter(p => p.status === 'Completed').length },
+          { label: 'Total Saved (All)', value: '₦' + enrolled.reduce((s, p) => s + Number(p.total_saved), 0).toLocaleString() },
+          { label: 'Min Monthly', value: '₦5,000' }
+        ].map(c => (
+          <div key={c.label} className="bg-white border border-emerald-100 rounded-2xl p-4 shadow-sm">
+            <p className="text-[10px] font-black uppercase text-emerald-800">{c.label}</p>
+            <p className="text-xl font-black text-emerald-950 mt-1">{c.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs space-y-4">
+        <div className="flex flex-wrap justify-between items-center gap-3">
+          <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide">Monthly Salary Savings</h3>
+          <select value={msSelectedYear} onChange={e => setMsSelectedYear(Number(e.target.value))}
+            className="border border-emerald-200 rounded-xl px-2 py-1.5 text-xs font-bold">
+            {[currentYear - 1, currentYear, currentYear + 1].map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+
+        <div>
+          <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">Select Customer</label>
+          <SearchableCustomerSelect customers={customers} selectedId={msSelectedCustomer} onSelect={setMsSelectedCustomer} placeholder="Search customer..." />
+        </div>
+
+        {msSelectedCustomer && !customerPlan && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-3">
+            <div>
+              <p className="text-xs font-bold text-amber-800">Not enrolled in {msSelectedYear} Monthly Savings Plan.</p>
+              <p className="text-[10px] text-amber-600">Set their monthly target and enroll them for this year.</p>
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+              <div className="flex-1">
+                <label className="text-[10px] font-black uppercase text-amber-700 mb-1 block">Monthly Target (₦)</label>
+                <input type="number" min={5000} value={msEnrollAmount} onChange={e => setMsEnrollAmount(e.target.value)}
+                  placeholder="e.g. 5000" className="w-full border border-amber-200 rounded-xl px-3 py-2 text-xs font-semibold" />
+                <span className="text-[9px] text-amber-600 block mt-1">Minimum ₦5,000.</span>
+              </div>
+              <button type="button" onClick={() => onEnrollMonthlySavings(msSelectedCustomer, msSelectedYear, Number(msEnrollAmount))}
+                className="bg-emerald-700 hover:bg-emerald-800 text-white font-black px-4 py-2 rounded-xl text-xs uppercase whitespace-nowrap">
+                Enroll Now
+              </button>
+            </div>
+          </div>
+        )}
+
+        {customerPlan && (
+          <>
+            <div className="flex flex-wrap justify-between items-center gap-2 text-xs">
+              <span className="font-bold text-slate-600">
+                {completedCount}/12 months complete —
+                Total saved: <span className="text-emerald-700 font-black">₦{totalSaved.toLocaleString()}</span>
+              </span>
+              <button type="button"
+                onClick={() => { setMsDepositMonth(new Date().getMonth() + 1); setMsDepositAmount(''); setMsShowDepositModal(true); }}
+                className="bg-amber-500 hover:bg-amber-600 text-emerald-950 font-black px-3 py-1.5 rounded-xl text-xs uppercase">
+                + Record Deposit
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-emerald-50/50 text-emerald-900 font-extrabold border-b border-emerald-200">
+                    <th className="p-2.5">Month</th>
+                    <th className="p-2.5">Deposited</th>
+                    <th className="p-2.5">Remaining</th>
+                    <th className="p-2.5">Status</th>
+                    <th className="p-2.5 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-emerald-50">
+                  {MONTH_NAMES.map((name, idx) => {
+                    const monthNum = idx + 1;
+                    const md = getMonthData(monthNum);
+                    const isCurrentMonth = monthNum === new Date().getMonth() + 1 && msSelectedYear === currentYear;
+                    const remaining = md ? Math.max(0, customerPlan!.monthly_target_amount - md.total_deposited) : customerPlan!.monthly_target_amount;
+                    return (
+                      <tr key={monthNum} className={`transition ${isCurrentMonth ? 'bg-emerald-50/40' : 'hover:bg-slate-50/30'}`}>
+                        <td className="p-2.5 font-bold text-slate-800">
+                          {name}
+                          {isCurrentMonth && <span className="ml-1 text-[9px] bg-emerald-200 text-emerald-800 rounded-full px-1.5 py-0.5 font-black">Now</span>}
+                        </td>
+                        <td className="p-2.5 font-semibold">
+                          {md && md.total_deposited > 0 ? `₦${md.total_deposited.toLocaleString()}` : <span className="text-slate-300">—</span>}
+                        </td>
+                        <td className="p-2.5 text-amber-700 font-semibold">
+                          {md?.is_complete ? <span className="text-emerald-600">✓ Done</span> : `₦${remaining.toLocaleString()}`}
+                        </td>
+                        <td className="p-2.5">
+                          {md?.is_complete ? (
+                            <span className="bg-emerald-100 text-emerald-800 rounded-full px-2 py-0.5 text-[10px] font-black">Complete</span>
+                          ) : md && md.total_deposited > 0 ? (
+                            <span className="bg-amber-100 text-amber-800 rounded-full px-2 py-0.5 text-[10px] font-black">Partial</span>
+                          ) : (
+                            <span className="text-slate-300 text-[10px] font-bold">Not paid</span>
+                          )}
+                        </td>
+                        <td className="p-2.5 text-right">
+                          <button type="button"
+                            onClick={() => { setMsDepositMonth(monthNum); setMsDepositAmount(''); setMsShowDepositModal(true); }}
+                            className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-2.5 py-1 rounded-xl text-[10px] uppercase">
+                            {md?.is_complete ? 'Top Up' : 'Pay'}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {!msSelectedCustomer && (
+          <div className="py-10 text-center text-slate-400 text-xs font-semibold">
+            Search and select a customer above to view their Monthly Savings Plan.
+          </div>
+        )}
+      </div>
+
+      {/* All enrolled this year */}
+      <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
+        <h4 className="text-xs font-black uppercase text-emerald-800 mb-3">All Enrolled — {msSelectedYear}</h4>
+        {enrolled.length === 0 ? (
+          <p className="text-xs text-slate-400">No customers enrolled for {msSelectedYear} yet. Register a customer with Monthly or Both plan to get started.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead><tr className="text-slate-500 font-bold border-b border-slate-100 text-[10px] uppercase tracking-wide">
+                <th className="p-2">Customer</th><th className="p-2">Total Saved</th>
+                <th className="p-2">Months Complete</th><th className="p-2">Status</th>
+              </tr></thead>
+              <tbody className="divide-y">
+                {enrolled.map(plan => {
+                  const cust = profiles.find(p => p.id === plan.customer_id);
+                  const done = monthlySavingsMonths.filter(m => m.plan_id === plan.id && m.is_complete).length;
+                  return (
+                    <tr key={plan.id} className="cursor-pointer hover:bg-emerald-50/30"
+                      onClick={() => { setMsSelectedCustomer(plan.customer_id); setMsSelectedYear(plan.year); }}>
+                      <td className="p-2 font-bold">{cust?.name || plan.customer_id}</td>
+                      <td className="p-2">₦{Number(plan.total_saved).toLocaleString()}</td>
+                      <td className="p-2">{done}/12</td>
+                      <td className="p-2">
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${plan.status === 'Completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'}`}>
+                          {plan.status}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Deposit modal */}
+      {msShowDepositModal && msSelectedCustomer && customerPlan && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setMsShowDepositModal(false)}>
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-sm w-full p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-bold text-emerald-950 mb-1">Record Monthly Deposit</h3>
+            <p className="text-xs text-slate-500 mb-3">{MONTH_NAMES[msDepositMonth - 1]} {msSelectedYear} — {profiles.find(p => p.id === msSelectedCustomer)?.name}</p>
+            {(() => {
+              const existing = getMonthData(msDepositMonth);
+              const planTarget = customerPlan!.monthly_target_amount;
+              const remaining = existing ? Math.max(0, planTarget - existing.total_deposited) : planTarget;
+              return (
+                <div className="bg-emerald-50 rounded-xl p-3 text-xs mb-4 space-y-0.5 font-semibold">
+                  <p>Already paid: <span className="font-black">₦{existing?.total_deposited.toLocaleString() || '0'}</span></p>
+                  <p>Monthly target: <span className="font-black">₦{planTarget.toLocaleString()}</span></p>
+                  {remaining > 0 && <p className="text-amber-700 font-black">Still needed: ₦{remaining.toLocaleString()}</p>}
+                  {existing?.is_complete && <p className="text-emerald-700 font-black">✓ Month complete — any extra adds to total.</p>}
+                </div>
+              );
+            })()}
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">Month</label>
+                <select value={msDepositMonth} onChange={e => setMsDepositMonth(Number(e.target.value))}
+                  className="w-full border rounded-xl px-3 py-2 text-xs">
+                  {MONTH_NAMES.map((m, i) => <option key={i+1} value={i+1}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">Amount (₦)</label>
+                <input type="number" min="1" value={msDepositAmount} onChange={e => setMsDepositAmount(e.target.value)}
+                  placeholder="e.g. 5000" className="w-full border rounded-xl px-3 py-2 text-xs" />
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">Payment Method</label>
+                <select value={msDepositMethod} onChange={e => setMsDepositMethod(e.target.value as any)}
+                  className="w-full border rounded-xl px-3 py-2 text-xs">
+                  <option>Cash</option><option>Bank Transfer</option><option>Mobile Money</option>
+                </select>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setMsShowDepositModal(false)}
+                  className="flex-1 border border-slate-200 rounded-xl py-2.5 text-xs font-bold text-slate-600">Cancel</button>
+                <button type="button"
+                  disabled={!msDepositAmount || Number(msDepositAmount) < 1}
+                  onClick={async () => {
+                    await onRecordMonthlyDeposit(msSelectedCustomer, msSelectedYear, msDepositMonth, Number(msDepositAmount), msDepositMethod);
+                    setMsShowDepositModal(false); setMsDepositAmount('');
+                  }}
+                  className="flex-1 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 text-white font-black py-2.5 rounded-xl text-xs uppercase">
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AdminDashboard({ 
+  profiles, branches, transactions, markedDays, supportDetails, payoutRequests, savedMonths, payoutHistory, withdrawalRequests, broadcastMessages, onCreateBroadcast, onUpdateBroadcast, onToggleBroadcastActive, onDeleteBroadcast, onApprovePayout, onCreateBranch, onUpdateBranch, onDeleteBranch, onCreateStaff, onUpdateStaff, onDeleteStaff, onRegisterCustomer,
+  onDeleteTransaction, onAddTransaction, onUpdateSupport, onDeleteCustomer, onUpdateCustomer, onToggleCustomerActive, onUpdateLoanStatus, onTriggerManualPayout, onApproveTransaction, onApproveWithdrawal, routeTarget, onRouteHandled, onRejectPayout, triggerToast, onResetPasswordToDefault, onRefreshProfiles,
+  loans, loanRequests, loanHistory, onApproveLoanRequest, onRejectLoanRequest, onAssignLoan,
+  monthlySavingsPlans, monthlySavingsMonths, onEnrollMonthlySavings, onRecordMonthlyDeposit,
+  currentUserId, balanceAdjustments, manualExpenses, onRefreshAdjustmentsAndExpenses,
+  onEnsurePayoutHistoryLoaded, onEnsureLoanHistoryLoaded, cycleArchives
+}: { 
+  profiles: Profile[], branches: Branch[], transactions: Transaction[], markedDays: Record<string, MarkedDay[]>, supportDetails: SupportSettings, payoutRequests: PayoutRequest[], savedMonths: Record<string, SavedMonth[]>, payoutHistory: PayoutHistoryRecord[], withdrawalRequests: WithdrawalRequest[], broadcastMessages: BroadcastMessage[], onCreateBroadcast: (message: string) => void, onUpdateBroadcast: (id: string, message: string) => void, onToggleBroadcastActive: (id: string, isActive: boolean) => void, onDeleteBroadcast: (id: string) => void, onDeleteTransaction: (id: string) => void, onAddTransaction: (cId: string, amt: number, method: any, sId: string) => void, onUpdateSupport: (phone: string, whatsapp: string, email: string, bankName: string, acctNum: string, acctName: string, advertTitle: string, advertDescription: string, advertImageUrl: string, advertEnabled: boolean, advertVideoUrl: string, themeBackgroundColor: string, withdrawalChargeEnabled: boolean, withdrawalChargeAmount: number, withdrawalChargeLabel: string, opayAlertEmail: string, opayAutomationEnabled: boolean) => void, onApprovePayout: (reqId: string) => void, onCreateBranch: (name: string, address: string) => void, onUpdateBranch: (id: string, name: string, address: string) => void, onDeleteBranch: (id: string) => void, onCreateStaff: (name: string, phone: string, email: string, branchId: string, password: string) => void, onUpdateStaff: (id: string, name: string, phone: string, email: string, branchId: string) => void, onDeleteStaff: (id: string) => void, onRegisterCustomer: (data: any) => void,
+  onDeleteCustomer: (id: string) => void, onUpdateCustomer: (id: string, name: string, phone: string, email: string, dailyAmount: number, branchId: string, allowAnytimeChange: boolean) => void, onToggleCustomerActive: (id: string, is_active: boolean) => void, onUpdateLoanStatus: (id: string, loan_status: 'No Loan' | 'Pending Approval' | 'Active Loan' | 'Loan Cleared') => void, onTriggerManualPayout: (customerId: string, method: 'Transfer' | 'Cash', bank: string, acctNum: string, acctName: string) => void, onApproveTransaction: (id: string) => void, onApproveWithdrawal: (id: string, bankName: string, accountNumber: string, accountName: string) => void, routeTarget?: AdminTab | null, onRouteHandled?: () => void, onRejectPayout?: (reqId: string) => void, triggerToast?: (message: string, type?: 'success' | 'error') => void, onResetPasswordToDefault?: (customerId: string) => void, onRefreshProfiles: () => void,
+  loans: Loan[], loanRequests: LoanRequest[], loanHistory: any[], onApproveLoanRequest: (requestId: string) => void, onRejectLoanRequest: (requestId: string, reason: string) => void, onAssignLoan: (customerId: string, approvedAmount: number, remarks: string, disbursementDate: string) => void,
+  monthlySavingsPlans: MonthlySavingsPlan[], monthlySavingsMonths: MonthlySavingsMonth[], onEnrollMonthlySavings: (customerId: string, year: number, monthlyTargetAmount: number) => void, onRecordMonthlyDeposit: (customerId: string, year: number, month: number, amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => void,
+  currentUserId: string, balanceAdjustments: Record<string, BalanceAdjustment[]>, manualExpenses: ManualExpense[], onRefreshAdjustmentsAndExpenses: () => void,
+  onEnsurePayoutHistoryLoaded: () => void, onEnsureLoanHistoryLoaded: () => void, cycleArchives: Record<string, any[]>
+}) {
+  const [activeTab, setActiveTab] = useState<AdminTab>('overview');
+  const { alerts: adminAlerts } = useAdminAlerts(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [saverPreviewSearch, setSaverPreviewSearch] = useState('');
+  const [loanSubView, setLoanSubView] = useState<'pending' | 'active' | 'completed' | 'history'>('pending');
+  const [showAssignLoanModal, setShowAssignLoanModal] = useState(false);
+  const [assignLoanCustomerId, setAssignLoanCustomerId] = useState('');
+  const [assignLoanAmount, setAssignLoanAmount] = useState('');
+  const [assignLoanRemarks, setAssignLoanRemarks] = useState('');
+  const [assignLoanDate, setAssignLoanDate] = useState(new Date().toISOString().slice(0, 10));
+  const [rejectingRequestId, setRejectingRequestId] = useState<string | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [loanHistoryMonthFilter, setLoanHistoryMonthFilter] = useState('');
+  const [loanHistoryBranchFilter, setLoanHistoryBranchFilter] = useState('');
+  const [loanHistoryStatusFilter, setLoanHistoryStatusFilter] = useState('');
+  const [expandedOutstandingCustomerId, setExpandedOutstandingCustomerId] = useState<string | null>(null);
+  const [outstandingLedgerSearch, setOutstandingLedgerSearch] = useState('');
+  const [expandedSettlementMonth, setExpandedSettlementMonth] = useState<string | null>(null);
+  // --- UI-only additions: section navigation + search for Payouts/Records pages ---
+  const [payoutsPage, setPayoutsPage] = useState<'ledger' | 'trigger' | 'pending' | 'withdrawals' | 'archive'>('ledger');
+  const [withdrawalLogsSearch, setWithdrawalLogsSearch] = useState('');
+  const [payoutArchiveSearch, setPayoutArchiveSearch] = useState('');
+  const [activeSaversOpen, setActiveSaversOpen] = useState(false);
+  const [activeSaversSearch, setActiveSaversSearch] = useState('');
+  const [settledSaversSearch, setSettledSaversSearch] = useState('');
+  const [expandedFinancialMonth, setExpandedFinancialMonth] = useState<string | null>(null);
+  const [previewCreditBalance, setPreviewCreditBalance] = useState<number>(0);
+  const [msSelectedCustomer, setMsSelectedCustomer] = useState('');
+  const [msSelectedYear, setMsSelectedYear] = useState(new Date().getFullYear());
+  const [msDepositMonth, setMsDepositMonth] = useState(1);
+  const [msDepositAmount, setMsDepositAmount] = useState('');
+  const [msDepositMethod, setMsDepositMethod] = useState<'Cash' | 'Bank Transfer' | 'Mobile Money'>('Cash');
+  const [msShowDepositModal, setMsShowDepositModal] = useState(false);
+
+  // --- Cash Balance Sheet state ---
+  const [cashSheetView, setCashSheetView] = useState<'entry' | 'archive'>('entry');
+  const [cashRecords, setCashRecords] = useState<CashReconciliation[]>([]);
+  const [denomRows, setDenomRows] = useState([
+    { denom: 1000, pieces: 0 },
+    { denom: 500, pieces: 0 },
+    { denom: 200, pieces: 0 },
+    { denom: 100, pieces: 0 },
+    { denom: 50, pieces: 0 },
+  ]);
+  const [cashSheetDate, setCashSheetDate] = useState(new Date().toISOString().slice(0, 10));
+  const [totalExpensesInput, setTotalExpensesInput] = useState('');
+  const [cashFolderName, setCashFolderName] = useState(getNigerianMonthName().replace(' Collected', ''));
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
+  const [editingFolderName, setEditingFolderName] = useState('');
+
+  const fetchCashRecords = async () => {
+    const { data, error } = await supabase.from('cash_reconciliations').select('*').order('created_at', { ascending: false });
+    if (!error && data) setCashRecords(data);
+  };
+
+  useEffect(() => { fetchCashRecords(); }, []);
+
+  const denomComputed = denomRows.map(r => ({ ...r, total: r.denom * (r.pieces || 0) }));
+  const grandCashTotal = denomComputed.reduce((s, r) => s + r.total, 0);
+
+  const trfAmountForDate = useMemo(() => {
+    return sumCurrencyValues(
+      transactions
+        .filter(t => t.status === 'Successful' && t.date === cashSheetDate && isTransferMethod(t.payment_method))
+        .map(t => Number(t.amount || 0))
+    );
+  }, [transactions, cashSheetDate]);
+
+  // Today's Contribution: total of everything customers actually paid in for
+  // the selected date (cash + transfer combined), pulled straight from the
+  // transaction log - this is the "what should have come in" side of the
+  // reconciliation, independent of what was physically counted.
+  const todaysContributionForDate = useMemo(() => {
+    return sumCurrencyValues(
+      transactions
+        .filter(t => t.status === 'Successful' && t.date === cashSheetDate)
+        .map(t => Number(t.amount || 0))
+    );
+  }, [transactions, cashSheetDate]);
+
+  const cashPlusTrf = grandCashTotal + trfAmountForDate;
+  const totalExpensesNum = Number(totalExpensesInput) || 0;
+  // Summary Balance: physically reconciled Cash + TRF, plus expenses, so
+  // this balances against total contributions.
+  const summaryBalance = cashPlusTrf + totalExpensesNum;
+  // Account Check: compares what was reconciled (Summary Balance) against
+  // what customers actually contributed (Today's Contribution). Zero means
+  // everything is accounted for.
+  const accountCheck = summaryBalance - todaysContributionForDate;
+
+  const updateDenomPieces = (denom: number, pieces: string) => {
+    setDenomRows(prev => prev.map(r => r.denom === denom ? { ...r, pieces: Number(pieces) || 0 } : r));
+  };
+
+  const handleSubmitCashRecord = async () => {
+    const payload = {
+      folder_name: cashFolderName || getNigerianMonthName().replace(' Collected', ''),
+      record_date: cashSheetDate,
+      record_type: 'full_reconciliation',
+      denominations: denomComputed,
+      grand_cash_total: grandCashTotal,
+      trf_amount: trfAmountForDate,
+      cash_plus_trf: cashPlusTrf,
+      today_contribution: todaysContributionForDate,
+      total_expenses: totalExpensesNum,
+      summary_balance: summaryBalance,
+      account_check: accountCheck
+    };
+    const { error } = await supabase.from('cash_reconciliations').insert([payload]);
+    if (error) {
+      triggerToast?.(`Failed to save record: ${error.message}`, 'error');
+      return;
+    }
+    triggerToast?.('Cash record submitted and archived!', 'success');
+    setDenomRows([
+      { denom: 1000, pieces: 0 }, { denom: 500, pieces: 0 }, { denom: 200, pieces: 0 },
+      { denom: 100, pieces: 0 }, { denom: 50, pieces: 0 },
+    ]);
+    setTotalExpensesInput('');
+    await fetchCashRecords();
+    setCashSheetView('archive');
+  };
+
+  // Part 3: standalone "Save Denomination Record" - saves ONLY the date,
+  // each denomination's value, and the Grand Total, independent of the full
+  // reconciliation flow. Archived under the same Records -> [Month] folder
+  // structure, tagged so the archive view can tell the two apart.
+  const handleSaveDenominationRecord = async () => {
+    const payload = {
+      folder_name: cashFolderName || getNigerianMonthName().replace(' Collected', ''),
+      record_date: cashSheetDate,
+      record_type: 'denomination',
+      denominations: denomComputed,
+      grand_cash_total: grandCashTotal,
+      trf_amount: 0,
+      cash_plus_trf: 0,
+      today_contribution: 0,
+      total_expenses: 0,
+      summary_balance: 0,
+      account_check: 0
+    };
+    const { error } = await supabase.from('cash_reconciliations').insert([payload]);
+    if (error) {
+      triggerToast?.(`Failed to save denomination record: ${error.message}`, 'error');
+      return;
+    }
+    triggerToast?.('Denomination record saved!', 'success');
+    await fetchCashRecords();
+  };
+
+  const handleRenameFolder = async (recordId: string, newName: string) => {
+    await supabase.from('cash_reconciliations').update({ folder_name: newName }).eq('id', recordId);
+    setCashRecords(prev => prev.map(r => r.id === recordId ? { ...r, folder_name: newName } : r));
+    setEditingFolderId(null);
+  };
+
+  const cashFolders = useMemo(() => {
+    const grouped: Record<string, CashReconciliation[]> = {};
+    cashRecords.forEach(r => {
+      const key = r.folder_name || 'Uncategorized';
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(r);
+    });
+    return Object.entries(grouped).sort((a, b) => (b[1][0]?.created_at || '').localeCompare(a[1][0]?.created_at || ''));
+  }, [cashRecords]);
+
+  // --- Report Page: Monthly Financial Summary + Archive ---
+  const [monthlySummaries, setMonthlySummaries] = useState<any[]>([]);
+  const [expandedArchiveMonth, setExpandedArchiveMonth] = useState<string | null>(null);
+
+  const fetchMonthlySummaries = async () => {
+    const { data, error } = await supabase.from('monthly_summaries').select('*').order('period_key', { ascending: false });
+    if (!error && data) setMonthlySummaries(data);
+  };
+
+  useEffect(() => { fetchMonthlySummaries(); }, []);
+
+  // Computes the 4 base metrics for any given period_key ('YYYY-MM') from
+  // real data already loaded - used both for the live current-month display
+  // and for archiving a month that just ended.
+  // Moved here (was previously declared much later in the component) because
+  // computeMonthMetrics below references it and is called synchronously
+  // during render, before the old declaration's line would have run -
+  // that's exactly what caused "Cannot access 'customers' before
+  // initialization".
+  const customers = profiles.filter(p => p.role === 'Customer').sort((a, b) => a.name.localeCompare(b.name));
+
+  const computeMonthMetrics = (periodKey: string) => {
+    const [y, m] = periodKey.split('-').map(Number);
+
+    // Contributions/profit are based on which CYCLE (period_key) a payment
+    // was actually applied to via marked_days/contributions, not the
+    // calendar date it happened to be paid on. A customer who has already
+    // rolled into the next period_key (e.g. after an early payout) has
+    // their payments counted toward that period - not the calendar month
+    // they physically paid in - so August and September stay properly
+    // separated even while a customer is already mid-September and the
+    // calendar hasn't rolled over yet.
+    const periodContributions: number[] = [];
+    const contributingCustomerIds = new Set<string>();
+    customers.forEach(c => {
+      const liveTotal = sumCurrencyValues(
+        (markedDays[c.id] || []).filter(d => d.period_key === periodKey).map(d => Number(d.amount || 0))
+      );
+      const frozenTotal = sumCurrencyValues(
+        (savedMonths[c.id] || []).filter(s => s.period_key === periodKey).map(s => Number(s.total_amount || 0))
+      );
+      const total = liveTotal + frozenTotal;
+      if (total > 0) {
+        periodContributions.push(total);
+        if (c.is_active) contributingCustomerIds.add(c.id);
+      }
+    });
+    const contributions = sumCurrencyValues(periodContributions);
+    const profit = sumCurrencyValues(
+      customers.filter(c => contributingCustomerIds.has(c.id)).map(c => c.daily_amount)
+    );
+
+    // Expenses and payouts are operational events tied to the calendar day
+    // they happened on (an expense logged today is an August expense
+    // regardless of any customer's cycle), so these stay calendar-based.
+    // Includes both Cash Sheet reconciliation records AND ad-hoc entries
+    // saved from the admin Quick Notepad.
+    const cashSheetExpenses = sumCurrencyValues(
+      cashRecords.filter(r => {
+        if (!r.record_date) return false;
+        const [ry, rm] = r.record_date.split('-').map(Number);
+        return ry === y && rm === m;
+      }).map(r => Number(r.total_expenses || 0))
+    );
+    const notepadExpenses = sumCurrencyValues(
+      manualExpenses.filter(e => {
+        if (!e.expense_date) return false;
+        const [ey, em] = e.expense_date.split('-').map(Number);
+        return ey === y && em === m;
+      }).map(e => Number(e.amount || 0))
+    );
+    const expenses = cashSheetExpenses + notepadExpenses;
+    const payout = sumCurrencyValues(
+      payoutHistory.filter(p => {
+        if (!p.approved_at) return false;
+        const [py, pm] = p.approved_at.split('-').map(Number);
+        return py === y && pm === m;
+      }).map(p => Number(p.payout_amount || 0))
+    );
+    return { contributions, profit, expenses, payout, remaining: contributions - payout };
+  };
+
+  const currentPeriodKey = getCurrentPeriodKey();
+  const liveMonth = computeMonthMetrics(currentPeriodKey);
+  // Next period's profit, tracked separately from the live/current period -
+  // this stays populated as soon as any customer starts contributing into
+  // it (e.g. after an early payout), well before the calendar actually
+  // reaches that month.
+  const nextMonthPeriodKey = nextPeriodKey(currentPeriodKey);
+  const nextMonth = computeMonthMetrics(nextMonthPeriodKey);
+
+  // --- Registered Customers drilldown data (Overview tab) ---
+  const activeCustomersList = customers.filter(c => c.is_active);
+  const notContributingCustomersList = activeCustomersList.filter(c => {
+    const days = markedDays[c.id] || [];
+    return !days.some(d => d.period_key === currentPeriodKey);
+  });
+  // "New" window is a rolling 10 days per customer, computed live from
+  // created_at - it never needs a manual/monthly reset, it just naturally
+  // stops counting a customer once 10 days have passed since they joined.
+  const NEW_CUSTOMER_WINDOW_MS = 10 * 24 * 60 * 60 * 1000;
+  const newCustomersList = customers.filter(c => {
+    if (!c.created_at) return false;
+    return (Date.now() - new Date(c.created_at).getTime()) <= NEW_CUSTOMER_WINDOW_MS;
+  }).sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+
+  // --- Total Payout drilldown data (Reports tab, current month) ---
+  const currentMonthPayoutRecords = payoutHistory.filter(p => {
+    if (!p.approved_at) return false;
+    const [py, pm] = p.approved_at.split('-').map(Number);
+    const [cy, cm] = currentPeriodKey.split('-').map(Number);
+    return py === cy && pm === cm;
+  });
+  const paidCustomerIdsThisMonth = Array.from(new Set(currentMonthPayoutRecords.map(p => p.customer_id)));
+  const paidOnLoanIds = paidCustomerIdsThisMonth.filter(id => loans.some(l => l.customer_id === id && l.status === 'Active Loan'));
+  const paidNotOnLoanIds = paidCustomerIdsThisMonth.filter(id => !paidOnLoanIds.includes(id));
+  const paidCustomerLabel = (id: string) => profiles.find(p => p.id === id)?.name || 'Unknown customer';
+
+  // --- Total Expenses drilldown data (Reports tab, current month) ---
+  const currentMonthExpenseRecords = cashRecords.filter(r => {
+    if (!r.record_date) return false;
+    const [ry, rm] = r.record_date.split('-').map(Number);
+    const [cy, cm] = currentPeriodKey.split('-').map(Number);
+    return ry === cy && rm === cm && Number(r.total_expenses || 0) > 0;
+  }).sort((a, b) => (a.record_date < b.record_date ? 1 : -1));
+  const currentMonthManualExpenses = manualExpenses.filter(e => {
+    if (!e.expense_date) return false;
+    const [ey, em] = e.expense_date.split('-').map(Number);
+    const [cy, cm] = currentPeriodKey.split('-').map(Number);
+    return ey === cy && em === cm;
+  }).sort((a, b) => (a.expense_date < b.expense_date ? 1 : -1));
+
+  // Part 5: Monthly Payout card - a DIFFERENT metric from the "Total Monthly
+  // Payout" above (which is real money actually paid out via approved
+  // payouts). This one is the formula explicitly requested: what's left of
+  // contributions after profit is set aside.
+  const monthlyPayoutCard = liveMonth.contributions - liveMonth.profit;
+
+  // Auto-archive: if the calendar month immediately before this one has real
+  // transaction data but hasn't been archived yet, archive it now. This is
+  // what makes "when a new month begins, the previous month automatically
+  // archives" actually happen - checked once when the Report tab is viewed.
+  useEffect(() => {
+    (async () => {
+      const prevDate = new Date();
+      prevDate.setMonth(prevDate.getMonth() - 1);
+      const prevPeriodKey = prevDate.toISOString().slice(0, 7);
+
+      const alreadyArchived = monthlySummaries.some(s => s.period_key === prevPeriodKey);
+      if (alreadyArchived) return;
+
+      const hasData = transactions.some(t => t.date && t.date.startsWith(prevPeriodKey));
+      if (!hasData) return;
+
+      const metrics = computeMonthMetrics(prevPeriodKey);
+      const { error } = await supabase.from('monthly_summaries').insert([{
+        month_label: periodLabelFromKey(prevPeriodKey),
+        period_key: prevPeriodKey,
+        total_contributions: metrics.contributions,
+        total_profit: metrics.profit,
+        total_expenses: metrics.expenses,
+        total_payout: metrics.payout,
+        remaining_balance: metrics.remaining
+      }]);
+      if (!error) await fetchMonthlySummaries();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monthlySummaries.length, transactions.length]);
+
+  // --- Quick Notepad (mini-spreadsheet scratchpad) ---
+  const [notepadRows, setNotepadRows] = useState<{ description: string; amount: string; date: string }[]>([
+    { description: '', amount: '', date: '' }
+  ]);
+  const [notepadLoaded, setNotepadLoaded] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from('system_settings').select('notepad_data').limit(1).single();
+      if (data?.notepad_data && Array.isArray(data.notepad_data) && data.notepad_data.length > 0) {
+        setNotepadRows(data.notepad_data);
+      }
+      setNotepadLoaded(true);
+    })();
+  }, []);
+
+  const saveNotepad = async (rows: typeof notepadRows) => {
+    await supabase.from('system_settings').update({ notepad_data: rows }).neq('id', '00000000-0000-0000-0000-000000000000');
+  };
+
+  const updateNotepadCell = (idx: number, field: 'description' | 'amount' | 'date', value: string) => {
+    setNotepadRows(prev => {
+      const next = prev.map((r, i) => i === idx ? { ...r, [field]: value } : r);
+      saveNotepad(next);
+      return next;
+    });
+  };
+
+  const addNotepadRow = () => {
+    setNotepadRows(prev => {
+      const next = [...prev, { description: '', amount: '', date: '' }];
+      saveNotepad(next);
+      return next;
+    });
+  };
+
+  // Commits every notepad row with a non-zero amount into manual_expenses,
+  // where it's picked up by the Reports tab's Total Expenses figure. Rows
+  // with no date default to today. After saving, the notepad resets to a
+  // single blank row so the same entries can't accidentally be saved twice.
+  const handleSaveNotepadToExpenses = async () => {
+    const validRows = notepadRows.filter(r => r.amount && Number(r.amount) !== 0);
+    if (validRows.length === 0) {
+      triggerToast?.('No amounts entered yet - nothing to save.', 'error');
+      return;
+    }
+    const payload = validRows.map(r => ({
+      description: r.description || null,
+      amount: Number(r.amount),
+      expense_date: r.date || new Date().toISOString().slice(0, 10),
+      created_by: currentUserId || null
+    }));
+    const { error } = await supabase.from('manual_expenses').insert(payload);
+    if (error) {
+      triggerToast?.(`Failed to save expenses: ${error.message}`, 'error');
+      return;
+    }
+    const total = sumCurrencyValues(payload.map(p => p.amount));
+    triggerToast?.(`${validRows.length} expense entr${validRows.length === 1 ? 'y' : 'ies'} (₦${total.toLocaleString()}) saved to Reports.`, 'success');
+    const resetRows = [{ description: '', amount: '', date: '' }];
+    setNotepadRows(resetRows);
+    saveNotepad(resetRows);
+    onRefreshAdjustmentsAndExpenses();
+  };
+
+  // --- Admin-to-Customer Messaging ---
+  const [noteCustomerId, setNoteCustomerId] = useState('');
+  const [noteText, setNoteText] = useState('');
+  const [noteAmount, setNoteAmount] = useState('');
+  // Guards against rapid double/triple-tap creating duplicate balance
+  // adjustments - a real incident produced 4 identical -10,000 entries from
+  // one intended click, all within 37ms of each other.
+  const [noteSubmitting, setNoteSubmitting] = useState(false);
+
+  // When a customer is selected, load their existing note (if any) into the
+  // textarea so the admin is editing the current note, not overwriting blind.
+  const handleSelectNoteCustomer = (id: string) => {
+    setNoteCustomerId(id);
+    const target = profiles.find(p => p.id === id);
+    setNoteText(target?.admin_note || '');
+    setNoteAmount('');
+  };
+
+  const handleSendCustomerNote = async () => {
+    if (!noteCustomerId || noteSubmitting) return;
+    setNoteSubmitting(true);
+    const { error } = await supabase.from('profiles').update({ admin_note: noteText }).eq('id', noteCustomerId);
+    if (error) {
+      triggerToast?.(`Failed to send note: ${error.message}`, 'error');
+      setNoteSubmitting(false);
+      return;
+    }
+
+    // Optional balance adjustment: a negative amount (e.g. -10000) reduces
+    // the customer's balance right away - for things like a quick partial
+    // withdrawal that isn't a full payout of a saved/uncollected month.
+    // This is intentionally separate from the payout system - it's a
+    // lightweight top-level adjustment, and it's also subtracted from any
+    // later full payout calculation for this customer so they can't be
+    // double-paid for money already sent this way.
+    const amountNum = Number(noteAmount);
+    if (noteAmount.trim() !== '' && !isNaN(amountNum) && amountNum !== 0) {
+      const { error: adjError } = await supabase.from('balance_adjustments').insert([{
+        customer_id: noteCustomerId,
+        amount: amountNum,
+        note: noteText || null,
+        created_by: currentUserId || null
+      }]);
+      if (adjError) {
+        triggerToast?.(`Note sent, but balance adjustment failed: ${adjError.message}`, 'error');
+        setNoteText('');
+        setNoteAmount('');
+        setNoteCustomerId('');
+        setNoteSubmitting(false);
+        return;
+      }
+      onRefreshAdjustmentsAndExpenses();
+      triggerToast?.(`Note sent and ₦${Math.abs(amountNum).toLocaleString()} ${amountNum < 0 ? 'deducted from' : 'added to'} their balance.`, 'success');
+    } else {
+      triggerToast?.('Note sent to customer.', 'success');
+    }
+    setNoteText('');
+    setNoteAmount('');
+    setNoteCustomerId('');
+    setNoteSubmitting(false);
+  };
+
+  // Deleting clears admin_note entirely - since the customer dashboard only
+  // renders the note when it's non-empty, this makes it disappear from their
+  // view immediately on their next fetch/realtime update.
+  const handleDeleteCustomerNote = async () => {
+    if (!noteCustomerId) return;
+    const { error } = await supabase.from('profiles').update({ admin_note: null }).eq('id', noteCustomerId);
+    if (error) {
+      triggerToast?.(`Failed to delete note: ${error.message}`, 'error');
+      return;
+    }
+    triggerToast?.('Note deleted from customer dashboard.', 'success');
+    setNoteText('');
+    setNoteAmount('');
+    setNoteCustomerId('');
+  };
+
+  // FEATURE 1 (Admin): customers who have at least one fully-frozen, still
+  // uncollected 32-day cycle - anyone with zero uncollected months is
+  // omitted entirely, per spec.
+  const outstandingPayoutCustomers = useMemo(() => {
+    return Object.entries(savedMonths)
+      .map(([customerId, months]) => {
+        const uncollected = months.filter(m => m.status === 'saved' || m.status === 'requested');
+        const customerProfile = profiles.find(p => p.id === customerId);
+        return {
+          customerId,
+          customerName: customerProfile?.name || uncollected[0]?.customer_name || 'Customer',
+          uncollectedMonths: uncollected,
+          totalOutstanding: sumCurrencyValues(uncollected.map(m => m.total_amount))
+        };
+      })
+      .filter(row => row.uncollectedMonths.length > 0)
+      .sort((a, b) => b.totalOutstanding - a.totalOutstanding);
+  }, [savedMonths, profiles]);
+
+  const filteredOutstandingPayoutCustomers = useMemo(() => {
+    const term = outstandingLedgerSearch.trim().toLowerCase();
+    if (!term) return outstandingPayoutCustomers;
+    return outstandingPayoutCustomers.filter(row => row.customerName.toLowerCase().includes(term));
+  }, [outstandingPayoutCustomers, outstandingLedgerSearch]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [depositAmount, setDepositAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Bank Transfer' | 'Mobile Money'>('Cash');
+
+  // Filter and Editing states
+  const [selectedBranchFilter, setSelectedBranchFilter] = useState('');
+  const [selectedLoanStatusFilter, setSelectedLoanStatusFilter] = useState('');
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+  const [viewingCustomerDetails, setViewingCustomerDetails] = useState<Profile | null>(null);
+  // On-demand loading (Part 1 of the sync redesign): payout_history and
+  // loan_history are purely archival tables that no longer load
+  // automatically at login or on a timer - they load once, the first time
+  // something that actually needs them is opened.
+  useEffect(() => {
+    if (viewingCustomerDetails) onEnsurePayoutHistoryLoaded();
+  }, [viewingCustomerDetails, onEnsurePayoutHistoryLoaded]);
+  useEffect(() => {
+    if (payoutsPage === 'archive') onEnsurePayoutHistoryLoaded();
+  }, [payoutsPage, onEnsurePayoutHistoryLoaded]);
+  useEffect(() => {
+    if (loanSubView === 'history') onEnsureLoanHistoryLoaded();
+  }, [loanSubView, onEnsureLoanHistoryLoaded]);
+  const [customerDetailsDateFilter, setCustomerDetailsDateFilter] = useState<'today' | 'week' | 'month' | 'custom'>('month');
+  const [customerDetailsCustomFrom, setCustomerDetailsCustomFrom] = useState('');
+  const [customerDetailsCustomTo, setCustomerDetailsCustomTo] = useState('');
+  const [viewingDayDetail, setViewingDayDetail] = useState<MarkedDay | null>(null);
+  const [editingCustomer, setEditingCustomer] = useState<Profile | null>(null);
+
+  // Fetch credit balance whenever selected customer changes in the post-
+  // contribution form, so staff always see the latest overpayment credit
+  // before recording the next payment.
+  useEffect(() => {
+    if (!selectedCustomerId) { setPreviewCreditBalance(0); return; }
+    supabase.from('customer_credit_balances')
+      .select('credit_amount').eq('customer_id', selectedCustomerId).maybeSingle()
+      .then(({ data }) => setPreviewCreditBalance((data as any)?.credit_amount || 0));
+  }, [selectedCustomerId]);
+
+  // Manual Payout states
+  const [manualPayoutCustomerId, setManualPayoutCustomerId] = useState('');
+  const [manualPayoutMethod, setManualPayoutMethod] = useState<'Transfer' | 'Cash'>('Transfer');
+  const [manualBankName, setManualBankName] = useState('');
+  const [manualAccountNumber, setManualAccountNumber] = useState('');
+  const [manualAccountName, setManualAccountName] = useState('');
+
+  // Today's Contribution Drilldown State
+  const [showTodayDrilldown, setShowTodayDrilldown] = useState(false);
+  const [showCollectionDrilldown, setShowCollectionDrilldown] = useState(false);
+  const [showAnalysisModal, setShowAnalysisModal] = useState(false);
+
+  // Registered Customers drilldown (Overview tab)
+  const [showCustomersDrilldown, setShowCustomersDrilldown] = useState(false);
+  const [customersDrilldownView, setCustomersDrilldownView] = useState<'active' | 'not-contributing' | 'new' | null>(null);
+
+  // Total Payout / Total Expenses drilldown (Reports tab)
+  const [showPayoutDrilldown, setShowPayoutDrilldown] = useState(false);
+  const [payoutDrilldownView, setPayoutDrilldownView] = useState<'on-loan' | 'not-on-loan' | null>(null);
+  const [showExpensesDrilldown, setShowExpensesDrilldown] = useState(false);
+  // Outstanding Customer Balances drilldown (Reports tab): a month-by-month
+  // breakdown of money customers have saved but not yet been paid out for.
+  // Pure display roll-up of contributions data already loaded (grouped by
+  // each saved month's own month_label, summed), no new calculation.
+  const [showOutstandingBalanceDrilldown, setShowOutstandingBalanceDrilldown] = useState(false);
+
+  // Bulk Paystack virtual account generation (for customers who existed
+  // before this feature was added, and so never got one at signup).
+  const [bulkVAProgress, setBulkVAProgress] = useState<{ running: boolean; done: number; total: number; failed: { name: string; reason: string }[] } | null>(null);
+  const customersMissingVA = profiles.filter(p => p.role === 'Customer' && !p.virtual_account_number);
+
+  const handleBulkGenerateVirtualAccounts = async () => {
+    if (customersMissingVA.length === 0) {
+      triggerToast?.('Every customer already has a virtual account.', 'success');
+      return;
+    }
+    if (!window.confirm(`Generate a Paystack virtual account for ${customersMissingVA.length} customer(s) who don't have one yet? This may take a few minutes.`)) {
+      return;
+    }
+    setBulkVAProgress({ running: true, done: 0, total: customersMissingVA.length, failed: [] });
+    const failed: { name: string; reason: string }[] = [];
+    for (let i = 0; i < customersMissingVA.length; i++) {
+      const c = customersMissingVA[i];
+      try {
+        // Paystack requires an email to create a customer. Older accounts
+        // (created before email was collected) don't have one - assign the
+        // same auto-generated fallback used at signup (phone@hiremercy.com)
+        // rather than skipping them.
+        if (!c.email) {
+          const fallbackEmail = `${c.phone.replace(/\D/g, '')}@hiremercy.com`;
+          await supabase.from('profiles').update({ email: fallbackEmail }).eq('id', c.id);
+        }
+        const { data, error } = await supabase.functions.invoke('paystack-create-virtual-account', {
+          body: { customerId: c.id }
+        });
+        if (error || data?.error) {
+          failed.push({ name: c.name, reason: (data?.error as string) || error?.message || 'Unknown error' });
+        }
+      } catch (err: any) {
+        failed.push({ name: c.name, reason: err?.message || 'Request failed' });
+      }
+      setBulkVAProgress({ running: true, done: i + 1, total: customersMissingVA.length, failed: [...failed] });
+      // Small delay between requests so we don't hammer Paystack's API.
+      await new Promise(resolve => setTimeout(resolve, 400));
+    }
+    setBulkVAProgress({ running: false, done: customersMissingVA.length, total: customersMissingVA.length, failed });
+    await onRefreshProfiles();
+    const successCount = customersMissingVA.length - failed.length;
+    triggerToast?.(`${successCount} account(s) created${failed.length ? `, ${failed.length} failed` : ''}.`, failed.length ? 'error' : 'success');
+  };
+
+  const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
+  const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null);
+
+  // Administrative Addition & Edit States
+  const [branchName, setBranchName] = useState('');
+  const [branchAddress, setBranchAddress] = useState('');
+  const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
+
+  const [staffName, setStaffName] = useState('');
+  const [staffPhone, setStaffPhone] = useState('');
+  const [staffEmail, setStaffEmail] = useState('');
+  const [staffBranch, setStaffBranch] = useState('');
+  const [editingStaff, setEditingStaff] = useState<Profile | null>(null);
+  
+  // Custom Staff Creation password control
+  const [staffPassword, setStaffPassword] = useState('');
+  const [showStaffPassword, setShowStaffPassword] = useState(false);
+
+  // Customer registration state inside admin panel
+  const [custName, setCustName] = useState('');
+  const [custPhone, setCustPhone] = useState('');
+  const [custEmail, setCustEmail] = useState('');
+  const [custDailyAmount, setCustDailyAmount] = useState('1000');
+  const [custBranch, setCustBranch] = useState('');
+  const [custPassword, setCustPassword] = useState('');
+  const [showCustPass, setShowCustPass] = useState(false);
+  const [custSavingsType, setCustSavingsType] = useState<'daily' | 'monthly' | 'both'>('daily');
+  const [custTermsAccepted, setCustTermsAccepted] = useState(false);
+  const [showCustTerms, setShowCustTerms] = useState(false);
+
+  // Support details state variables managed by Admin
+  const [supportPhone, setSupportPhone] = useState(supportDetails.support_phone);
+  const [supportWhatsapp, setSupportWhatsapp] = useState(supportDetails.support_whatsapp);
+  const [supportEmail, setSupportEmail] = useState(supportDetails.support_email);
+  const [adminBankName, setAdminBankName] = useState(supportDetails.admin_bank_name || 'Access Bank');
+  const [adminAccountNumber, setAdminAccountNumber] = useState(supportDetails.admin_account_number || '0123456789');
+  const [adminAccountName, setAdminAccountName] = useState(supportDetails.admin_account_name || 'HireMercy Thrift Enterprises');
+  const [advertTitle, setAdvertTitle] = useState(supportDetails.advert_title || 'Cartoon characters safely collecting small daily contributions from customers and returning them back to you in bulk!');
+  const [advertDescription, setAdvertDescription] = useState(supportDetails.advert_description || 'Join the smart daily savings circle with HireMercyAJO.');
+  const [advertImageUrl, setAdvertImageUrl] = useState(supportDetails.advert_image_url || '');
+  const [advertVideoUrl, setAdvertVideoUrl] = useState(supportDetails.advert_video_url || '');
+  const [advertImageUploading, setAdvertImageUploading] = useState(false);
+  const [advertVideoUploading, setAdvertVideoUploading] = useState(false);
+  const [advertImageError, setAdvertImageError] = useState('');
+  const [advertVideoError, setAdvertVideoError] = useState('');
+
+  const handleAdvertFileUpload = async (
+    file: File,
+    type: 'image' | 'video',
+    setUrl: (url: string) => void,
+    setUploading: (v: boolean) => void,
+    setError: (msg: string) => void
+  ) => {
+    const maxBytes = 50 * 1024 * 1024;
+    if (file.size > maxBytes) { setError(`File too large — maximum is 50 MB.`); return; }
+    setUploading(true);
+    setError('');
+    const ext = file.name.split('.').pop() || (type === 'image' ? 'jpg' : 'mp4');
+    const path = `${type}s/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error: uploadError } = await supabase.storage.from('adverts').upload(path, file, { upsert: false, contentType: file.type });
+    if (uploadError) { setUploading(false); setError(uploadError.message); return; }
+    const { data: { publicUrl } } = supabase.storage.from('adverts').getPublicUrl(path);
+    setUrl(publicUrl);
+    setUploading(false);
+  };
+  const [advertEnabled, setAdvertEnabled] = useState(Boolean(supportDetails.advert_enabled));
+  const [themeBackgroundColor, setThemeBackgroundColor] = useState(supportDetails.theme_background_color || '#f0fdf4');
+  const [withdrawalChargeEnabled, setWithdrawalChargeEnabled] = useState(supportDetails.withdrawal_charge_enabled ?? true);
+  const [withdrawalChargeAmount, setWithdrawalChargeAmount] = useState(supportDetails.withdrawal_charge_amount ?? 50);
+  const [withdrawalChargeLabel, setWithdrawalChargeLabel] = useState(supportDetails.withdrawal_charge_label || 'Stamp Duty / Withdrawal Charge');
+  const [opayAlertEmail, setOpayAlertEmail] = useState((supportDetails as any).opay_alert_email || '');
+  const [opayAutomationEnabled, setOpayAutomationEnabled] = useState(Boolean((supportDetails as any).opay_automation_enabled));
+  const [isCheckingOpayNow, setIsCheckingOpayNow] = useState(false);
+  const [newBroadcastText, setNewBroadcastText] = useState('');
+  const [editingBroadcastId, setEditingBroadcastId] = useState<string | null>(null);
+  const [editingBroadcastText, setEditingBroadcastText] = useState('');
+  // Read-only status display, seeded from supportDetails and refreshed
+  // locally after "Check OPay Emails Now" - AdminDashboard doesn't hold the
+  // top-level supportDetails setter, so this stays local rather than
+  // widening the component's prop interface just for a status readout.
+  const [opayStatus, setOpayStatus] = useState({
+    lastCheckAt: (supportDetails as any).opay_last_check_at as string | null,
+    lastCheckStatus: (supportDetails as any).opay_last_check_status as string | null,
+    lastProcessedRef: (supportDetails as any).opay_last_processed_ref as string | null,
+    lastProcessedAt: (supportDetails as any).opay_last_processed_at as string | null,
+  });
+  const [selectedWithdrawalRequest, setSelectedWithdrawalRequest] = useState<WithdrawalRequest | null>(null);
+  const [approvalBankName, setApprovalBankName] = useState('');
+  const [approvalAccountNumber, setApprovalAccountNumber] = useState('');
+  const [approvalAccountName, setApprovalAccountName] = useState('');
+
+  useEffect(() => {
+    setSupportPhone(supportDetails.support_phone);
+    setSupportWhatsapp(supportDetails.support_whatsapp);
+    setSupportEmail(supportDetails.support_email);
+    setAdminBankName(supportDetails.admin_bank_name || 'Access Bank');
+    setAdminAccountNumber(supportDetails.admin_account_number || '0123456789');
+    setAdminAccountName(supportDetails.admin_account_name || 'HireMercy Thrift Enterprises');
+    setAdvertTitle(supportDetails.advert_title || 'Cartoon characters safely collecting small daily contributions from customers and returning them back to you in bulk!');
+    setAdvertDescription(supportDetails.advert_description || 'Join the smart daily savings circle with HireMercyAJO.');
+    setAdvertImageUrl(supportDetails.advert_image_url || '');
+    setAdvertVideoUrl(supportDetails.advert_video_url || '');
+    setAdvertEnabled(Boolean(supportDetails.advert_enabled));
+    setThemeBackgroundColor(supportDetails.theme_background_color || '#f0fdf4');
+    setWithdrawalChargeEnabled(supportDetails.withdrawal_charge_enabled ?? true);
+    setWithdrawalChargeAmount(supportDetails.withdrawal_charge_amount ?? 50);
+    setWithdrawalChargeLabel(supportDetails.withdrawal_charge_label || 'Stamp Duty / Withdrawal Charge');
+    setOpayAlertEmail((supportDetails as any).opay_alert_email || '');
+    setOpayAutomationEnabled(Boolean((supportDetails as any).opay_automation_enabled));
+    setOpayStatus({
+      lastCheckAt: (supportDetails as any).opay_last_check_at || null,
+      lastCheckStatus: (supportDetails as any).opay_last_check_status || null,
+      lastProcessedRef: (supportDetails as any).opay_last_processed_ref || null,
+      lastProcessedAt: (supportDetails as any).opay_last_processed_at || null,
+    });
+  }, [supportDetails]);
+
+  useEffect(() => {
+    if (routeTarget) {
+      setActiveTab(routeTarget);
+      onRouteHandled?.();
+    }
+  }, [routeTarget, onRouteHandled]);
+
+  // (customers is now declared earlier, right before computeMonthMetrics, since
+  // that function references it and was being called before this line ran)
+  const staff = profiles.filter(p => p.role === 'Staff').sort((a, b) => a.name.localeCompare(b.name));
+
+  const filteredCustomers = useMemo(() => {
+    const query = customerSearchQuery.trim().toLowerCase();
+    return customers.filter(c => {
+      if (selectedBranchFilter !== '' && c.branch_id !== selectedBranchFilter) return false;
+      if (selectedLoanStatusFilter !== '' && c.loan_status !== selectedLoanStatusFilter) return false;
+      if (query === '') return true;
+      return (
+        c.name.toLowerCase().includes(query) ||
+        c.phone.toLowerCase().includes(query) ||
+        c.id.toLowerCase().includes(query)
+      );
+    });
+  }, [customers, selectedBranchFilter, selectedLoanStatusFilter, customerSearchQuery]);
+
+  const stats = useMemo(() => {
+    // Current West Africa Time (WAT) Month metrics
+    const watToday = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' }); // YYYY-MM-DD
+    const [curYear, curMonth] = watToday.split('-').map(Number); // WAT Year and Month (1-based index)
+
+    const monthlyTransactions = transactions.filter(t => {
+      if (!t.date || t.status !== 'Successful') return false;
+      const [tYear, tMonth] = t.date.split('-').map(Number);
+      return tYear === curYear && tMonth === curMonth;
+    });
+
+    const monthlyCollection = monthlyTransactions.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+
+    // Calculate WAT Today's Contribution
+    const todayTransactions = transactions.filter(t => {
+      if (!t.date || t.status !== 'Successful') return false;
+      return t.date === watToday;
+    });
+    const todayCollected = todayTransactions.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+
+    // --- Display-only comparison figures (read-only aggregation of the same
+    // transactions data above; does not affect any stored value or calculation) ---
+    const prevMonthDate = new Date(curYear, curMonth - 2, 1); // month is 1-based above, JS Date is 0-based
+    const prevYear = prevMonthDate.getFullYear();
+    const prevMonth = prevMonthDate.getMonth() + 1;
+    const prevMonthCollection = transactions
+      .filter(t => {
+        if (!t.date || t.status !== 'Successful') return false;
+        const [tYear, tMonth] = t.date.split('-').map(Number);
+        return tYear === prevYear && tMonth === prevMonth;
+      })
+      .reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+    const monthlyChangePct = prevMonthCollection > 0
+      ? Math.round(((monthlyCollection - prevMonthCollection) / prevMonthCollection) * 100)
+      : (monthlyCollection > 0 ? 100 : 0);
+
+    const yesterdayDate = new Date(new Date(watToday).getTime() - 24 * 60 * 60 * 1000);
+    const yesterdayKey = yesterdayDate.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+    const yesterdayCollected = transactions
+      .filter(t => t.date === yesterdayKey && t.status === 'Successful')
+      .reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+    const todayChangePct = yesterdayCollected > 0
+      ? Math.round(((todayCollected - yesterdayCollected) / yesterdayCollected) * 100)
+      : (todayCollected > 0 ? 100 : 0);
+
+    return {
+      monthlyCollection,
+      monthlyTransactions,
+      todayCollected,
+      todayTransactions,
+      totalCustomers: customers.length,
+      totalStaff: staff.length,
+      monthlyChangePct,
+      todayChangePct,
+    };
+  }, [transactions, customers, staff]);
+
+  // Group monthly contributions by branch and payment method
+  const monthlyDrilldownData = useMemo(() => {
+    const branchTotals: Record<string, number> = {};
+    const methodTotals: Record<string, number> = { 'Cash': 0, 'Bank Transfer': 0, 'Mobile Money': 0 };
+
+    branches.forEach(b => {
+      branchTotals[b.id] = 0;
+    });
+    branchTotals['unknown'] = 0;
+
+    stats.monthlyTransactions.forEach(t => {
+      const bId = t.branch_id || 'unknown';
+      branchTotals[bId] = (branchTotals[bId] || 0) + Number(t.amount || 0);
+      methodTotals[t.payment_method] = (methodTotals[t.payment_method] || 0) + Number(t.amount || 0);
+    });
+
+    return { branchTotals, methodTotals };
+  }, [stats.monthlyTransactions, branches]);
+
+  // Group today's contributions by branch and payment method
+  const todayDrilldownData = useMemo(() => {
+    const branchTotals: Record<string, number> = {};
+    const methodTotals: Record<string, number> = { 'Cash': 0, 'Bank Transfer': 0, 'Mobile Money': 0 };
+
+    branches.forEach(b => {
+      branchTotals[b.id] = 0;
+    });
+    branchTotals['unknown'] = 0;
+
+    stats.todayTransactions.forEach(t => {
+      const bId = t.branch_id || 'unknown';
+      branchTotals[bId] = (branchTotals[bId] || 0) + Number(t.amount || 0);
+      methodTotals[t.payment_method] = (methodTotals[t.payment_method] || 0) + Number(t.amount || 0);
+    });
+
+    return { branchTotals, methodTotals };
+  }, [stats.todayTransactions, branches]);
+
+  // Record Sheet filters: yet to withdraw vs. paid out
+  const recordSheet = useMemo(() => {
+    const approvedPayoutCustomerIds = payoutRequests.filter(p => p.status === 'Successful').map(p => p.customer_id);
+    
+    const activeSaversYetToWithdraw = customers.filter(c => {
+      const marked = markedDays[c.id] || [];
+      return marked.length > 0 && !approvedPayoutCustomerIds.includes(c.id);
+    });
+
+    const completedPayouts = payoutRequests.filter(p => p.status === 'Successful');
+
+    // Archive completed payouts by real calendar month (the month the payout
+    // was actually settled in), most recent month first - so all of August's
+    // payouts land in one "August 2026" folder, all of July's in "July 2026",
+    // etc., regardless of which 32-day cycle label each individual record
+    // carries. The per-record cycle label (month_paid) still displays inside
+    // each row - only the folder grouping key changed.
+    const groupKey = (p: PayoutRequest) =>
+      new Date(p.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const byMonth = new Map<string, PayoutRequest[]>();
+    completedPayouts.forEach(p => {
+      const key = groupKey(p);
+      if (!byMonth.has(key)) byMonth.set(key, []);
+      byMonth.get(key)!.push(p);
+    });
+    const completedPayoutsByMonth = Array.from(byMonth.entries())
+      .map(([month, records]) => ({
+        month,
+        records,
+        totalPayout: sumCurrencyValues(records.map(r => r.payout_amount))
+      }))
+      .sort((a, b) => {
+        const aDate = a.records[0] ? new Date(a.records[0].created_at).getTime() : 0;
+        const bDate = b.records[0] ? new Date(b.records[0].created_at).getTime() : 0;
+        return bDate - aDate;
+      });
+
+    return {
+      yetToWithdraw: activeSaversYetToWithdraw,
+      completedPayouts,
+      completedPayoutsByMonth
+    };
+  }, [customers, markedDays, payoutRequests]);
+
+  // Outstanding Customer Balances by month: current, unpaid customer money,
+  // grouped by the savings cycle (period_key) it belongs to - NOT a
+  // cumulative/running total. Each month's figure only ever reflects money
+  // still outstanding for that exact month right now.
+  //
+  // Source of truth (no new records, nothing duplicated):
+  //  - `contributions` (savedMonths), status 'saved'/'requested' = money
+  //    currently owed. Summed per period_key, this is a month's live
+  //    outstanding balance. When a payout is approved, the paid contribution
+  //    rows are deleted (see handleApprovePayout/handleTriggerManualPayout) -
+  //    so this sum drops automatically and immediately, with no separate
+  //    adjustment record involved.
+  //  - `cycle_archives` exists specifically to remember which months have
+  //    ever had a cycle paid out (see buildTrackingHistory's "Collected"
+  //    section above, sourced from this same table). A month can therefore
+  //    disappear entirely from `contributions` once fully paid - this is
+  //    what lets a fully-settled month still show up here at ₦0 instead of
+  //    vanishing, satisfying "historical months must remain visible."
+  const outstandingBalanceByMonth = useMemo(() => {
+    const allSavedMonths: SavedMonth[] = Object.values(savedMonths).flat();
+    const uncollected = allSavedMonths.filter(m => m.status === 'saved' || m.status === 'requested');
+
+    const byPeriod = new Map<string, number>();
+    uncollected.forEach(m => {
+      byPeriod.set(m.period_key, (byPeriod.get(m.period_key) || 0) + Number(m.total_amount));
+    });
+
+    // Make sure every period that ever had ANY cycle (paid or not) has an
+    // entry, even if it's currently 0 - pulls from both sources so a month
+    // never silently disappears once fully settled.
+    const knownPeriodKeys = new Set<string>(byPeriod.keys());
+    allSavedMonths.forEach(m => { if (m.period_key) knownPeriodKeys.add(m.period_key); });
+    Object.values(cycleArchives).flat().forEach((row: any) => {
+      const pk = pickField(row, ['period_key', 'month_key', 'period']);
+      if (pk) knownPeriodKeys.add(pk);
+    });
+
+    const rows = Array.from(knownPeriodKeys)
+      .map(periodKey => ({ periodKey, month: periodLabelFromKey(periodKey), total: byPeriod.get(periodKey) || 0 }))
+      .sort((a, b) => b.periodKey.localeCompare(a.periodKey));
+    const grandTotal = rows.reduce((sum, r) => sum + r.total, 0);
+    return { rows, grandTotal };
+  }, [savedMonths, cycleArchives]);
+
+  const handlePost = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCustomerId || !depositAmount) return;
+    onAddTransaction(selectedCustomerId, Number(depositAmount), paymentMethod, 'admin-id');
+    setDepositAmount('');
+  };
+
+  const handleSupportSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    onUpdateSupport(supportPhone, supportWhatsapp, supportEmail, adminBankName, adminAccountNumber, adminAccountName, advertTitle, advertDescription, advertImageUrl, advertEnabled, advertVideoUrl, themeBackgroundColor, withdrawalChargeEnabled, withdrawalChargeAmount, withdrawalChargeLabel, opayAlertEmail, opayAutomationEnabled);
+  };
+
+  // Manual trigger for the opay-email-check Edge Function. Uses the admin's
+  // own session (supabase.functions.invoke sends the current access token
+  // automatically) - the function verifies Admin role itself server-side.
+  // Runs regardless of the automation toggle, for testing. Never touches
+  // the Gmail App Password; that credential lives only in the Edge
+  // Function's own secrets and this call never sees it.
+  const handleCheckOpayNow = async () => {
+    setIsCheckingOpayNow(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('opay-email-check', { body: {} });
+      if (error) {
+        triggerToast?.(`OPay check failed: ${error.message}`, 'error');
+      } else if (data?.skipped && data?.reason === 'no_pending') {
+        // Nothing is waiting for payment confirmation, so the mailbox was deliberately NOT opened.
+        triggerToast?.('No pending bank-transfer deposits are waiting, so the mailbox was not scanned.', 'success');
+      } else if (data?.skipped && data?.reason === 'already_in_progress') {
+        triggerToast?.('A check is already in progress - try again shortly.', 'error');
+      } else if (data?.skipped) {
+        triggerToast?.('Check skipped - OPay automation is currently disabled.', 'error');
+      } else if (data?.ok === false) {
+        triggerToast?.(`OPay check finished with an error: ${data.error}`, 'error');
+      } else {
+        triggerToast?.(`${data?.mailbox_opened ? `Read ${data?.scanned ?? 0} new email(s)` : 'Used stored receipts (mailbox not opened)'}: ${data?.auto_approved ?? 0} auto-confirmed, ${data?.needs_review ?? 0} need review, ${data?.duplicates ?? 0} already processed.`, 'success');
+      }
+    } catch (err: any) {
+      triggerToast?.(`OPay check failed: ${err?.message || err}`, 'error');
+    } finally {
+      setIsCheckingOpayNow(false);
+      // Pull the fresh opay_last_check_* / opay_last_processed_* fields the
+      // function just wrote, for the status readout on this page.
+      const { data: sData } = await supabase.from('system_settings').select('*').eq('id', 1).single();
+      if (sData) {
+        setOpayStatus({
+          lastCheckAt: (sData as any).opay_last_check_at || null,
+          lastCheckStatus: (sData as any).opay_last_check_status || null,
+          lastProcessedRef: (sData as any).opay_last_processed_ref || null,
+          lastProcessedAt: (sData as any).opay_last_processed_at || null,
+        });
+      }
+    }
+  };
+
+  const openWithdrawalApproval = (request: WithdrawalRequest) => {
+    setSelectedWithdrawalRequest(request);
+    setApprovalBankName(request.bank_name);
+    setApprovalAccountNumber(request.account_number);
+    setApprovalAccountName(request.account_name);
+  };
+
+  const handleApproveWithdrawalRequest = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedWithdrawalRequest) return;
+    onApproveWithdrawal(selectedWithdrawalRequest.id, approvalBankName, approvalAccountNumber, approvalAccountName);
+    setSelectedWithdrawalRequest(null);
+  };
+
+  const handleAddBranch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!branchName) return;
+    onCreateBranch(branchName, branchAddress);
+    setBranchName('');
+    setBranchAddress('');
+  };
+
+  const handleAddStaff = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!staffName || !staffPhone || !staffBranch || !staffPassword) return;
+    onCreateStaff(staffName, staffPhone, staffEmail, staffBranch, staffPassword);
+    setStaffName('');
+    setStaffPhone('');
+    setStaffEmail('');
+    setStaffBranch('');
+    setStaffPassword('');
+  };
+
+  const handleAdminRegisterCustomer = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!custName || !custPhone || !custBranch || !custPassword) return;
+    const needsDailyAmount = custSavingsType === 'daily' || custSavingsType === 'both';
+    if (needsDailyAmount && Number(custDailyAmount) < 300) {
+      alert("Daily Contribution must be at least ₦300.");
+      return;
+    }
+    const needsTerms = custSavingsType === 'monthly' || custSavingsType === 'both';
+    if (needsTerms && !custTermsAccepted) {
+      setShowCustTerms(true);
+      return;
+    }
+    onRegisterCustomer({
+      name: custName,
+      phone: custPhone,
+      email: custEmail || `${custPhone}@hiremercy.com`,
+      password: custPassword,
+      daily_amount: Number(custDailyAmount),
+      branch_id: custBranch,
+      savings_type: custSavingsType,
+      monthly_savings_terms_accepted: custTermsAccepted
+    });
+    setCustName(''); setCustPhone(''); setCustEmail('');
+    setCustPassword(''); setCustBranch('');
+    setCustSavingsType('daily'); setCustTermsAccepted(false);
+  };
+
+  const handleSaveEditBranch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingBranch) return;
+    onUpdateBranch(editingBranch.id, editingBranch.name, editingBranch.address || '');
+    setEditingBranch(null);
+  };
+
+  const handleSaveEditStaff = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStaff) return;
+    onUpdateStaff(editingStaff.id, editingStaff.name, editingStaff.phone, editingStaff.email || '', editingStaff.branch_id || '');
+    setEditingStaff(null);
+  };
+
+  const handleSaveEditCustomer = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCustomer) return;
+    if (editingCustomer.daily_amount < 300) {
+      alert("Daily Contribution must be at least ₦300.");
+      return;
+    }
+    onUpdateCustomer(
+      editingCustomer.id,
+      editingCustomer.name,
+      editingCustomer.phone,
+      editingCustomer.email || '',
+      editingCustomer.daily_amount,
+      editingCustomer.branch_id || '',
+      editingCustomer.allow_anytime_change || false
+    );
+    setEditingCustomer(null);
+  };
+
+  const handleTriggerManualPayoutSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualPayoutCustomerId) return;
+    if (manualPayoutMethod === 'Transfer' && (!manualBankName || !manualAccountNumber || !manualAccountName)) return;
+    onTriggerManualPayout(manualPayoutCustomerId, manualPayoutMethod, manualBankName, manualAccountNumber, manualAccountName);
+    setManualPayoutCustomerId('');
+    setManualPayoutMethod('Transfer');
+    setManualBankName('');
+    setManualAccountNumber('');
+    setManualAccountName('');
+  };
+
+  const handleSendResetLink = async (email?: string) => {
+    if (!email) {
+      alert('Email not configured for this user.');
+      return;
+    }
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: window.location.origin,
+      });
+      if (error) throw error;
+      alert(`Instructions successfully dispatched to ${email}`);
+    } catch (err: any) {
+      alert(`Failed to send link: ${err.message}`);
+    }
+  };
+
+  // Preview calculation for the Trigger Manual Payout form/button. Must stay
+  // in sync with handleTriggerManualPayout's actual logic below - if these
+  // two diverge, the submit button can end up disabled even when the
+  // handler itself would succeed (or vice versa). Admin can pay out at any
+  // time: if there are no fully-completed uncollected months, this falls
+  // back to previewing a payout of the customer's current running cycle.
+  // Customer self-service payout requests are untouched by this - they
+  // still only ever draw from fully-completed, frozen months.
+  const manualPayoutCalculation = useMemo(() => {
+    if (!manualPayoutCustomerId) return null;
+    const target = customers.find(c => c.id === manualPayoutCustomerId);
+    if (!target) return null;
+    const uncollectedMonths = (savedMonths[manualPayoutCustomerId] || []).filter(
+      m => m.status === 'saved' || m.status === 'requested'
+    );
+    const runningDays = markedDays[manualPayoutCustomerId] || [];
+    const isPartialPayout = uncollectedMonths.length === 0 && runningDays.length > 0;
+    if (uncollectedMonths.length === 0 && runningDays.length === 0) return null;
+
+    const totalAmount = isPartialPayout
+      ? sumCurrencyValues(runningDays.map(d => d.amount))
+      : sumCurrencyValues(uncollectedMonths.map(m => m.total_amount));
+    // Partial payout (current running cycle, not yet saved) uses the
+    // customer's current daily_amount, since that cycle is actively using
+    // it right now. Completed/saved months use their OWN historical rate,
+    // unaffected by any later daily_amount change.
+    const totalFee = isPartialPayout
+      ? target.daily_amount
+      : sumCurrencyValues(uncollectedMonths.map(monthHistoricalDailyRate));
+    // Manual balance adjustments (e.g. a quick partial withdrawal sent via
+    // the Customer Note box) are folded in here too - a negative adjustment
+    // means money was already sent outside this payout flow, so it reduces
+    // what's still owed. A positive adjustment (a correction/bonus) adds to
+    // it. Same sign convention as everywhere else this total is shown.
+    const adjustmentTotal = sumCurrencyValues((balanceAdjustments[manualPayoutCustomerId] || []).map(a => Number(a.amount)));
+    const payoutAmount = Math.max(0, totalAmount - totalFee + adjustmentTotal);
+    return {
+      uncollectedMonths,
+      totalDays: isPartialPayout ? runningDays.length : uncollectedMonths.reduce((s, m) => s + m.total_days, 0),
+      totalAmount,
+      totalFee,
+      adjustmentTotal,
+      payoutAmount,
+      target,
+      isPartialPayout
+    };
+  }, [manualPayoutCustomerId, savedMonths, customers, balanceAdjustments]);
+
+  const pendingTransactions = useMemo(() => {
+    return transactions.filter(t => t.status === 'Pending');
+  }, [transactions]);
+
+  const successfulTransactions = useMemo(() => {
+    return transactions.filter(t => t.status === 'Successful');
+  }, [transactions]);
+
+  const transactionAnalysis = useMemo(() => {
+    const cashTransactions = successfulTransactions.filter(t => !isTransferMethod(t.payment_method));
+    const transferTransactions = successfulTransactions.filter(t => isTransferMethod(t.payment_method));
+    const cashCustomers = new Set(cashTransactions.map(t => t.customer_id));
+    const transferCustomers = new Set(transferTransactions.map(t => t.customer_id));
+    const allCustomers = new Set([...cashCustomers, ...transferCustomers]);
+
+    return {
+      cashCustomerCount: cashCustomers.size,
+      transferCustomerCount: transferCustomers.size,
+      grandCustomerCount: allCustomers.size,
+      cashTotal: sumCurrencyValues(cashTransactions.map(t => Number(t.amount || 0))),
+      transferTotal: sumCurrencyValues(transferTransactions.map(t => Number(t.amount || 0))),
+      grandTotal: sumCurrencyValues([...cashTransactions, ...transferTransactions].map(t => Number(t.amount || 0))),
+    };
+  }, [successfulTransactions]);
+
+  const groupedTransactions = useMemo(() => {
+    const groups = new Map<string, Transaction[]>();
+    successfulTransactions.forEach(tx => {
+      const key = tx.date || 'Unknown date';
+      const existing = groups.get(key) || [];
+      existing.push(tx);
+      groups.set(key, existing);
+    });
+    return Array.from(groups.entries()).sort(([a], [b]) => new Date(b).getTime() - new Date(a).getTime());
+  }, [successfulTransactions]);
+
+  // FEATURE 2: Per-day-group metrics for the ledger header - itemized
+  // Transfer / Cash / Total breakdown of both count and monetary volume,
+  // computed once per date group rather than re-deriving it inline in JSX.
+  const getDayGroupMetrics = (entries: Transaction[]) => {
+    let transferAmount = 0, transferCount = 0, cashAmount = 0, cashCount = 0;
+    entries.forEach(tx => {
+      const amt = Number(tx.amount || 0);
+      if (isTransferMethod(tx.payment_method)) {
+        transferAmount += amt;
+        transferCount += 1;
+      } else {
+        cashAmount += amt;
+        cashCount += 1;
+      }
+    });
+    return {
+      transferAmount,
+      transferCount,
+      cashAmount,
+      cashCount,
+      totalAmount: transferAmount + cashAmount,
+      totalCount: transferCount + cashCount
+    };
+  };
+
+  const branchBreakdown = useMemo(() => {
+    const branchMetrics = branches.reduce((acc, branch) => {
+      acc[branch.id] = {
+        name: branch.name,
+        transferTotal: 0,
+        cashTotal: 0,
+        transferCount: 0,
+        cashCount: 0,
+      };
+      return acc;
+    }, {} as Record<string, { name: string; transferTotal: number; cashTotal: number; transferCount: number; cashCount: number }>);
+
+    successfulTransactions.forEach(tx => {
+      const branchId = tx.branch_id || 'unknown';
+      if (!branchMetrics[branchId]) {
+        branchMetrics[branchId] = {
+          name: branches.find(b => b.id === branchId)?.name || 'Unassigned',
+          transferTotal: 0,
+          cashTotal: 0,
+          transferCount: 0,
+          cashCount: 0,
+        };
+      }
+      if (isTransferMethod(tx.payment_method)) {
+        branchMetrics[branchId].transferTotal += Number(tx.amount || 0);
+        branchMetrics[branchId].transferCount += 1;
+      } else {
+        branchMetrics[branchId].cashTotal += Number(tx.amount || 0);
+        branchMetrics[branchId].cashCount += 1;
+      }
+    });
+
+    return branchMetrics;
+  }, [branches, successfulTransactions]);
+
+  const openDeleteConfirmation = (tx: Transaction) => setDeleteTarget(tx);
+  const confirmDelete = () => {
+    if (deleteTarget) {
+      onDeleteTransaction(deleteTarget.id);
+      setDeleteTarget(null);
+    }
+  };
+
+  const toggleDateGroup = (dateKey: string) => {
+    setExpandedDates(prev => ({ ...prev, [dateKey]: !prev[dateKey] }));
+  };
+
+  const ADMIN_NAV: { key: AdminTab; label: string; icon: any }[] = [
+    { key: 'overview', label: 'Dashboard', icon: LayoutDashboard },
+    { key: 'reports', label: 'Analysis', icon: BarChart3 },
+    { key: 'payouts', label: 'Payouts', icon: Landmark },
+    { key: 'records', label: 'Records', icon: FileText },
+    { key: 'transactions', label: 'Transactions', icon: ArrowLeftRight },
+    { key: 'cashsheet', label: 'Cash Sheet', icon: Wallet },
+    { key: 'loans', label: 'Loan Management', icon: HandCoins },
+    { key: 'monthly-savings', label: 'Monthly Savings', icon: CalendarRange },
+    { key: 'oja', label: 'Gbagede OJA', icon: Megaphone },
+    { key: 'customers', label: 'Customers', icon: Users },
+    { key: 'branches', label: 'Branches', icon: Building2 },
+    { key: 'staff', label: 'Staff', icon: UserIcon },
+    { key: 'settings', label: 'Settings', icon: Settings },
+  ];
+
+  return (
+    <div className="lg:flex lg:items-start lg:gap-6">
+      {/* Mobile top bar: brand + sidebar toggle (sidebar itself is a drawer on mobile) */}
+      <div className="lg:hidden flex items-center justify-between gap-3 mb-4">
+        <div className="flex items-center gap-2">
+          <span className="icon-circle w-9 h-9"><Shield className="w-5 h-5" /></span>
+          <div>
+            <h2 className="text-sm font-black text-emerald-950 leading-tight">Admin Command Centre</h2>
+            <p className="text-[10px] text-slate-500">Global oversight dashboard</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setSidebarOpen(true)}
+          className="p-2.5 rounded-xl bg-emerald-800 text-white shadow-sm"
+          aria-label="Open navigation menu"
+        >
+          <LayoutDashboard className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* Sidebar - drawer on mobile, sticky column on desktop */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setSidebarOpen(false)} />
+        </div>
+      )}
+      <aside className={`
+        fixed inset-y-0 left-0 z-50 w-72 shrink-0 transform transition-transform duration-300 ease-out
+        lg:relative lg:z-0 lg:w-64 lg:translate-x-0 lg:sticky lg:top-20
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+      `}>
+        <div className="h-full lg:h-auto lg:max-h-[calc(100vh-6rem)] overflow-y-auto bg-gradient-to-b from-emerald-900 to-emerald-950 rounded-none lg:rounded-3xl p-4 flex flex-col gap-1 shadow-xl">
+          <div className="flex items-center justify-between px-1 pb-3 mb-2 border-b border-white/10">
+            <div className="flex items-center gap-2">
+              <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 flex items-center justify-center shrink-0">
+                <PiggyBank className="w-5 h-5 text-emerald-950" />
+              </span>
+              <div>
+                <p className="text-sm font-black text-white leading-tight">HireMercy<span className="text-amber-400">AJO</span></p>
+                <p className="text-[9px] text-emerald-300">Admin Control Panel</p>
+              </div>
+            </div>
+            <button type="button" onClick={() => setSidebarOpen(false)} className="lg:hidden p-1.5 text-emerald-200 hover:text-white">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {ADMIN_NAV.map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => { setActiveTab(key); setSidebarOpen(false); }}
+              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 text-left ${
+                activeTab === key
+                  ? 'bg-white text-emerald-900 shadow-sm'
+                  : 'text-emerald-100 hover:bg-white/10'
+              }`}
+            >
+              <Icon className="w-4.5 h-4.5 shrink-0" />
+              <span className="truncate">{label}</span>
+            </button>
+          ))}
+
+          <div className="mt-4 rounded-2xl bg-gradient-to-br from-emerald-800 to-emerald-950 border border-emerald-700/60 p-4 text-center">
+            <div className="w-12 h-12 mx-auto mb-2 rounded-2xl bg-amber-400/90 flex items-center justify-center shadow-md">
+              <ShieldCheck className="w-6 h-6 text-emerald-950" />
+            </div>
+            <p className="text-xs font-black text-white">Grow Together,<br/>Prosper Forever</p>
+            <p className="text-[10px] text-emerald-300 mt-1.5 leading-relaxed">Empowering communities through consistent savings and trust.</p>
+            <button
+              type="button"
+              onClick={() => { setActiveTab('reports'); setSidebarOpen(false); }}
+              className="mt-3 w-full bg-amber-500 hover:bg-amber-400 text-emerald-950 text-[11px] font-bold py-2 rounded-xl transition-colors flex items-center justify-center gap-1"
+            >
+              View Reports <ArrowUpRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main content column */}
+      <div className="flex-1 min-w-0 space-y-5 sm:space-y-6">
+      <AdminAlertBanner alerts={adminAlerts}
+        onOpenWallet={() => { setActiveTab('settings'); setTimeout(() => document.getElementById('admin-wallet-panel')?.scrollIntoView({ behavior: 'smooth' }), 300); }}
+        onOpenOja={() => setActiveTab('oja')}
+        onOpenShop={() => { setActiveTab('settings'); setTimeout(() => document.getElementById('admin-shop-panel')?.scrollIntoView({ behavior: 'smooth' }), 300); }} />
+      <div className="flex flex-col gap-4 card-green">
+        <div className="hidden lg:flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div>
+            <h2 className="text-lg sm:text-xl font-black text-emerald-950 flex items-center gap-2">
+              <span className="icon-circle w-9 h-9 sm:w-10 sm:h-10"><Shield className="w-5 h-5" /></span>
+              Admin Command Centre
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">Global oversight of savings collections, active balances, and auditing logs</p>
+          </div>
+          <div className="flex flex-wrap gap-2 items-center">
+            <button
+              type="button"
+              onClick={() => setShowAnalysisModal(true)}
+              className="rounded-xl bg-amber-500 px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-emerald-950 shadow-sm transition-all duration-200 hover:bg-amber-400 active:scale-[0.98]"
+            >
+              Analysis
+            </button>
+            <LiveTransactionCounter count={successfulTransactions.filter(tx => tx.date === new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' }) && tx.status === 'Successful').length} label="Today's work" />
+          </div>
+        </div>
+        <div className="flex sm:hidden justify-end">
+          <button
+            type="button"
+            onClick={() => setShowAnalysisModal(true)}
+            className="rounded-xl bg-amber-500 px-4 py-2 text-xs font-bold uppercase tracking-wide text-emerald-950 shadow-sm"
+          >
+            Analysis
+          </button>
+        </div>
+        <div className="lg:hidden flex gap-2 overflow-x-auto -mx-1 px-1 pb-1">
+          {(['overview', 'customers', 'branches', 'staff', 'payouts', 'records', 'transactions', 'cashsheet', 'loans', 'monthly-savings', 'oja', 'settings', 'reports'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`shrink-0 px-4 py-2.5 rounded-xl text-xs font-bold tracking-wide uppercase transition-all duration-200 ${
+                activeTab === tab 
+                  ? 'bg-emerald-700 text-white shadow-md' 
+                  : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+              }`}
+            >
+              {tab === 'cashsheet' ? 'Cash Sheet' : tab === 'loans' ? 'Loan Management' : tab === 'monthly-savings' ? 'Monthly Savings' : tab === 'oja' ? 'Gbagede OJA' : tab}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        {/* Clickable Total Cycle Collection (Monthly Resetting Card) */}
+        <button 
+          onClick={() => setShowCollectionDrilldown(true)}
+          className="stat-card text-left flex flex-col gap-3 focus:outline-none w-full text-slate-800"
+        >
+          <div className="flex items-center gap-3">
+            <span className="icon-circle shrink-0 w-11 h-11"><Landmark className="w-5 h-5" /></span>
+            <div className="min-w-0">
+              <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wide leading-tight">Monthly Cycle<br/>Collection</p>
+            </div>
+          </div>
+          <div>
+            <p className="text-xl sm:text-2xl font-black text-slate-900">₦{stats.monthlyCollection.toLocaleString()}</p>
+            <p className={`text-[11px] font-bold mt-0.5 flex items-center gap-1 ${stats.monthlyChangePct >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+              {stats.monthlyChangePct >= 0 ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowLeftRight className="w-3.5 h-3.5 rotate-90" />}
+              {Math.abs(stats.monthlyChangePct)}% vs last month
+            </p>
+          </div>
+          <MiniSparkline color="#059669" positive={stats.monthlyChangePct >= 0} />
+        </button>
+
+        {/* Today's Contribution Card (Clickable) */}
+        <button 
+          onClick={() => setShowTodayDrilldown(true)}
+          className="stat-card text-left flex flex-col gap-3 focus:outline-none w-full text-slate-800"
+          style={{ background: 'linear-gradient(145deg, #ffffff 0%, var(--emerald-50) 60%, #fffbeb 100%)', borderColor: 'rgba(217, 119, 6, 0.2)' }}
+        >
+          <div className="flex items-center gap-3">
+            <span className="icon-circle-light shrink-0 w-11 h-11" style={{ background: 'var(--emerald-100)' }}><Coins className="w-5 h-5 text-amber-600" /></span>
+            <div className="min-w-0">
+              <p className="text-[10px] text-amber-700 uppercase font-bold tracking-wide flex items-center gap-1.5 leading-tight">
+                Today's<br/>Contribution
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              </p>
+            </div>
+          </div>
+          <div>
+            <p className="text-xl sm:text-2xl font-black text-slate-900">₦{stats.todayCollected.toLocaleString()}</p>
+            <p className={`text-[11px] font-bold mt-0.5 ${stats.todayChangePct >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+              {stats.todayChangePct === 0 ? '— 0% vs yesterday' : `${stats.todayChangePct > 0 ? '↗' : '↘'} ${Math.abs(stats.todayChangePct)}% vs yesterday`}
+            </p>
+          </div>
+          <MiniSparkline color="#d97706" positive={stats.todayChangePct >= 0} />
+        </button>
+
+        <button
+          onClick={() => { setShowCustomersDrilldown(true); setCustomersDrilldownView(null); }}
+          className="relative stat-card text-left flex flex-col gap-3 focus:outline-none w-full text-slate-800"
+        >
+          {newCustomersList.length > 0 && (
+            <span className="absolute -top-2 -right-2 bg-amber-500 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-sm">
+              +{newCustomersList.length} new
+            </span>
+          )}
+          <div className="flex items-center gap-3">
+            <span className="icon-circle shrink-0 w-11 h-11"><Users className="w-5 h-5" /></span>
+            <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wide leading-tight">Registered<br/>Customers</p>
+          </div>
+          <div>
+            <p className="text-xl sm:text-2xl font-black text-slate-900">{stats.totalCustomers}</p>
+            <p className="text-[11px] font-bold text-emerald-600 mt-0.5">{newCustomersList.length} new recently</p>
+          </div>
+          <MiniSparkline color="#059669" positive />
+        </button>
+
+        <div className="stat-card flex flex-col gap-3 w-full text-slate-800">
+          <div className="flex items-center gap-3">
+            <span className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 bg-violet-100 text-violet-700"><ShieldCheck className="w-5 h-5" /></span>
+            <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wide leading-tight">Authorized<br/>Field Agents</p>
+          </div>
+          <div>
+            <p className="text-xl sm:text-2xl font-black text-slate-900">{stats.totalStaff}</p>
+            <p className="text-[11px] font-bold text-violet-600 mt-0.5">Active & verified</p>
+          </div>
+          <MiniSparkline color="#7c3aed" positive />
+        </div>
+
+        {showCustomersDrilldown && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4">
+            <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-5 sm:p-6 border border-emerald-100 shadow-2xl space-y-4 max-h-[88vh] overflow-y-auto">
+              <div className="flex justify-between items-center border-b border-emerald-50 pb-3">
+                <h3 className="text-base sm:text-lg font-black text-emerald-950 uppercase tracking-wide flex items-center gap-2">
+                  <Users className="w-5 h-5 text-emerald-700" />
+                  Customers Breakdown
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => { setShowCustomersDrilldown(false); setCustomersDrilldownView(null); }}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                {/* Active customers */}
+                <div className="rounded-2xl border border-emerald-100 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setCustomersDrilldownView(v => v === 'active' ? null : 'active')}
+                    className="w-full flex items-center justify-between p-3 bg-emerald-50/40 hover:bg-emerald-50 text-left"
+                  >
+                    <span className="font-black text-emerald-900">Active Customers</span>
+                    <span className="font-black text-emerald-800">{activeCustomersList.length} {customersDrilldownView === 'active' ? '▲' : '▼'}</span>
+                  </button>
+                  {customersDrilldownView === 'active' && (
+                    <div className="max-h-56 overflow-y-auto divide-y divide-emerald-50">
+                      {activeCustomersList.length === 0 && <p className="p-3 text-slate-500">No active customers.</p>}
+                      {activeCustomersList.map(c => (
+                        <div key={c.id} className="p-2.5 flex justify-between items-center">
+                          <span className="font-bold text-slate-800">{c.name}</span>
+                          <span className="text-slate-500">{c.phone}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Not contributing this month */}
+                <div className="rounded-2xl border border-amber-100 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setCustomersDrilldownView(v => v === 'not-contributing' ? null : 'not-contributing')}
+                    className="w-full flex items-center justify-between p-3 bg-amber-50/40 hover:bg-amber-50 text-left"
+                  >
+                    <span className="font-black text-amber-900">Not Contributing This Month</span>
+                    <span className="font-black text-amber-800">{notContributingCustomersList.length} {customersDrilldownView === 'not-contributing' ? '▲' : '▼'}</span>
+                  </button>
+                  {customersDrilldownView === 'not-contributing' && (
+                    <div className="max-h-56 overflow-y-auto divide-y divide-amber-50">
+                      {notContributingCustomersList.length === 0 && <p className="p-3 text-slate-500">Everyone active has paid something this month.</p>}
+                      {notContributingCustomersList.map(c => (
+                        <div key={c.id} className="p-2.5 flex justify-between items-center">
+                          <span className="font-bold text-slate-800">{c.name}</span>
+                          <span className="text-slate-500">{c.phone}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* New customers (rolling 10-day window) */}
+                <div className="rounded-2xl border border-emerald-100 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setCustomersDrilldownView(v => v === 'new' ? null : 'new')}
+                    className="w-full flex items-center justify-between p-3 bg-emerald-50/40 hover:bg-emerald-50 text-left"
+                  >
+                    <span className="font-black text-emerald-900">New Customers (last 10 days)</span>
+                    <span className="font-black text-emerald-800">{newCustomersList.length} {customersDrilldownView === 'new' ? '▲' : '▼'}</span>
+                  </button>
+                  {customersDrilldownView === 'new' && (
+                    <div className="max-h-56 overflow-y-auto divide-y divide-emerald-50">
+                      {newCustomersList.length === 0 && <p className="p-3 text-slate-500">No new registrations in the last 10 days.</p>}
+                      {newCustomersList.map(c => (
+                        <div key={c.id} className="p-2.5 flex justify-between items-center">
+                          <span className="font-bold text-slate-800">{c.name}</span>
+                          <span className="text-slate-500">{c.created_at ? new Date(c.created_at).toLocaleDateString() : '—'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs flex items-center gap-4">
+          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl">
+            <Briefcase className="w-8 h-8" />
+          </div>
+          <div>
+            <p className="text-[10px] text-slate-500 uppercase font-black">Authorized Field Agents</p>
+            <p className="text-xl font-black text-slate-900">{stats.totalStaff}</p>
+          </div>
+        </div>
+      </div>
+
+      {showAnalysisModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-3xl border border-emerald-100 bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between border-b border-emerald-50 pb-3">
+              <div>
+                <h3 className="text-lg font-black uppercase tracking-wide text-emerald-950">Transaction analytics</h3>
+                <p className="text-xs text-slate-500">Snapshot of customer reach and cash flow for the current successful set.</p>
+              </div>
+              <button type="button" onClick={() => setShowAnalysisModal(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4">
+                <h4 className="text-[11px] font-black uppercase tracking-wide text-emerald-800">Customer analytics</h4>
+                <div className="mt-3 space-y-2 text-sm text-slate-700">
+                  <div className="flex justify-between"><span>Cash customers</span><span className="font-black">{transactionAnalysis.cashCustomerCount}</span></div>
+                  <div className="flex justify-between"><span>Transfer customers</span><span className="font-black">{transactionAnalysis.transferCustomerCount}</span></div>
+                  <div className="flex justify-between border-t border-emerald-100 pt-2 font-black text-emerald-900"><span>Grand total</span><span>{transactionAnalysis.grandCustomerCount}</span></div>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-emerald-100 bg-amber-50/40 p-4">
+                <h4 className="text-[11px] font-black uppercase tracking-wide text-amber-800">Financial analytics</h4>
+                <div className="mt-3 space-y-2 text-sm text-slate-700">
+                  <div className="flex justify-between"><span>Cash total</span><span className="font-black">{formatCurrency(transactionAnalysis.cashTotal)}</span></div>
+                  <div className="flex justify-between"><span>Transfer total</span><span className="font-black">{formatCurrency(transactionAnalysis.transferTotal)}</span></div>
+                  <div className="flex justify-between border-t border-amber-100 pt-2 font-black text-emerald-900"><span>Grand total</span><span>{formatCurrency(transactionAnalysis.grandTotal)}</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl border border-emerald-100 bg-white p-6 shadow-2xl">
+            <h3 className="text-lg font-black uppercase tracking-wide text-emerald-950">Delete transaction?</h3>
+            <p className="mt-2 text-sm text-slate-600">Are you sure you want to delete this transaction? This action cannot be undone.</p>
+            <div className="mt-4 rounded-2xl bg-amber-50/60 p-3 text-sm text-slate-700">
+              <p className="font-black text-emerald-900">{deleteTarget.customer_name || 'Customer'}</p>
+              <p>₦{Number(deleteTarget.amount || 0).toLocaleString()} • {deleteTarget.payment_method}</p>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button type="button" onClick={() => setDeleteTarget(null)} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-bold text-slate-600">Cancel</button>
+              <button type="button" onClick={confirmDelete} className="rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white">Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Monthly Cycle Collection Drilldown Modal */}
+      {showCollectionDrilldown && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-6 border border-emerald-100 shadow-2xl space-y-6">
+            <div className="flex justify-between items-center border-b border-emerald-50 pb-3">
+              <h3 className="text-lg font-black text-emerald-950 uppercase tracking-wide flex items-center gap-2">
+                <Landmark className="w-6 h-6 text-emerald-700" />
+                Monthly Cycle breakdown
+              </h3>
+              <button 
+                type="button"
+                onClick={() => setShowCollectionDrilldown(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <h4 className="font-extrabold text-emerald-900 mb-2 uppercase tracking-wide">Sum by Branches (Current Month)</h4>
+                <div className="space-y-2">
+                  {branches.map(b => (
+                    <div key={b.id} className="flex justify-between p-2.5 bg-emerald-50/20 rounded-xl">
+                      <span className="font-semibold text-slate-800">{b.name}</span>
+                      <span className="font-bold text-slate-900">₦{(monthlyDrilldownData.branchTotals[b.id] || 0).toLocaleString()}</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between p-2.5 bg-slate-50 rounded-xl">
+                    <span className="font-semibold text-slate-500">Unassigned Branch</span>
+                    <span className="font-bold text-slate-900">₦{(monthlyDrilldownData.branchTotals['unknown'] || 0).toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-extrabold text-emerald-900 mb-2 uppercase tracking-wide">Sum by Payment Channel (Current Month)</h4>
+                <div className="grid grid-cols-3 gap-2">
+                  {Object.keys(monthlyDrilldownData.methodTotals).map(method => (
+                    <div key={method} className="p-3 bg-amber-50/50 border border-amber-100 rounded-xl text-center">
+                      <p className="text-[10px] text-slate-500 font-bold">{method}</p>
+                      <p className="font-black text-slate-900 mt-1">₦{monthlyDrilldownData.methodTotals[method].toLocaleString()}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-emerald-50 pt-4 flex justify-between items-center">
+              <span className="text-xs text-slate-500 font-bold">Total Collection Current Month:</span>
+              <span className="text-lg font-black text-emerald-800">₦{stats.monthlyCollection.toLocaleString()}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Today's Contribution Drilldown Modal */}
+      {showTodayDrilldown && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-6 border border-emerald-100 shadow-2xl space-y-6">
+            <div className="flex justify-between items-center border-b border-emerald-50 pb-3">
+              <h3 className="text-lg font-black text-emerald-950 uppercase tracking-wide flex items-center gap-2">
+                <Coins className="w-6 h-6 text-amber-500" />
+                Today's Breakdown ({new Date().toLocaleDateString()})
+              </h3>
+              <button 
+                type="button"
+                onClick={() => setShowTodayDrilldown(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <h4 className="font-extrabold text-emerald-900 mb-2 uppercase tracking-wide">Today's Contribution Breakdown</h4>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {['Road7 Branch', 'Ife-City Branch'].map(branchName => {
+                    const branchKey = Object.keys(branchBreakdown).find(key => branchBreakdown[key].name === branchName);
+                    const metrics = branchKey ? branchBreakdown[branchKey] : { name: branchName, transferTotal: 0, cashTotal: 0, transferCount: 0, cashCount: 0 };
+                    return (
+                      <div key={branchName} className="rounded-2xl border border-emerald-100 bg-emerald-50/30 p-3">
+                        <p className="font-black text-emerald-900">{metrics.name}</p>
+                        <div className="mt-2 grid gap-2 text-[10px] text-slate-600">
+                          <div className="flex justify-between"><span>Transfer total</span><span className="font-black text-slate-800">₦{metrics.transferTotal.toLocaleString()}</span></div>
+                          <div className="flex justify-between"><span>Cash total</span><span className="font-black text-slate-800">₦{metrics.cashTotal.toLocaleString()}</span></div>
+                          <div className="flex justify-between"><span>Transfer customers</span><span className="font-black text-slate-800">{metrics.transferCount}</span></div>
+                          <div className="flex justify-between"><span>Cash customers</span><span className="font-black text-slate-800">{metrics.cashCount}</span></div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-extrabold text-emerald-900 mb-2 uppercase tracking-wide">Sum by Payment Channel</h4>
+                <div className="grid grid-cols-3 gap-2">
+                  {Object.keys(todayDrilldownData.methodTotals).map(method => (
+                    <div key={method} className="p-3 bg-amber-50/50 border border-amber-100 rounded-xl text-center">
+                      <p className="text-[10px] text-slate-500 font-bold">{method}</p>
+                      <p className="font-black text-slate-900 mt-1">₦{todayDrilldownData.methodTotals[method].toLocaleString()}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-emerald-50 pt-4 flex justify-between items-center">
+              <span className="text-xs text-slate-500 font-bold">Total Collection Today:</span>
+              <span className="text-lg font-black text-emerald-800">₦{stats.todayCollected.toLocaleString()}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'overview' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs lg:col-span-1 h-fit text-slate-800">
+            <h3 className="text-sm font-bold text-emerald-950 mb-1 uppercase tracking-wide">Post Contribution</h3>
+            <p className="text-[11px] text-slate-500 mb-4">Record a customer's daily savings contribution</p>
+            <form onSubmit={handlePost} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1.5">Select Customer *</label>
+                <SearchableCustomerSelect 
+                  customers={customers} 
+                  selectedId={selectedCustomerId} 
+                  onSelect={setSelectedCustomerId} 
+                  placeholder="Search by name or phone number..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1.5">Deposit Amount (₦) *</label>
+                <input 
+                  type="number" 
+                  required
+                  placeholder="e.g. 5,000"
+                  value={depositAmount}
+                  onChange={(e) => setDepositAmount(e.target.value)}
+                  className="input-green text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1.5">Payment Channel *</label>
+                <select 
+                  value={paymentMethod} 
+                  onChange={(e) => setPaymentMethod(e.target.value as any)}
+                  className="input-green bg-white text-sm"
+                >
+                  <option value="Cash">Cash</option>
+                  <option value="Bank Transfer">Bank Transfer</option>
+                  <option value="Mobile Money">Mobile Money</option>
+                </select>
+              </div>
+
+              <button 
+                type="submit" 
+                className="w-full bg-emerald-700 hover:bg-emerald-800 active:scale-[0.98] text-white font-bold py-3.5 rounded-xl transition-all duration-200 text-sm shadow-md flex flex-col items-center gap-0.5"
+              >
+                <span className="flex items-center gap-2"><ArrowUpRight className="w-4 h-4" /> Post Contribution &amp; Auto-Split</span>
+                <span className="text-[10px] font-medium text-emerald-100 normal-case">Post contribution and automatically split to savings, bonus and admin share</span>
+              </button>
+            </form>
+          </div>
+
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs lg:col-span-2 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide">Saver Preview</h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">Select a customer above or click on a name below to preview their 32-day tracking grid</p>
+              </div>
+              {!selectedCustomerId && (
+                <div className="relative shrink-0 w-full sm:w-56">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={saverPreviewSearch}
+                    onChange={(e) => setSaverPreviewSearch(e.target.value)}
+                    placeholder="Search customers..."
+                    className="input-green text-xs pl-8 py-2"
+                  />
+                </div>
+              )}
+            </div>
+            
+            {selectedCustomerId ? (
+              (() => {
+                const cust = customers.find(c => c.id === selectedCustomerId);
+                if (!cust) return <p className="text-xs text-slate-400">Select a customer to view their tracking grid.</p>;
+                return (
+                  <div className="p-6 bg-emerald-50/20 border-2 border-emerald-200 rounded-2xl space-y-4 animate-fade-in text-slate-800 font-bold">
+                    <div className="flex justify-between items-start flex-wrap gap-3">
+                      <div className="space-y-1">
+                        <h4 className="font-bold text-emerald-950 text-base">{cust.name}</h4>
+                        <p className="text-[11px] text-slate-500 font-bold">Contact: {cust.phone}</p>
+                        <p className="text-[11px] text-slate-500 font-bold">Target Plan: ₦{cust.daily_amount.toLocaleString()}/day</p>
+                        <p className="text-[11px] text-slate-500 font-bold">
+                          Balance/Amount: ₦{((markedDays[cust.id] || []).reduce((s, d) => s + d.amount, 0)).toLocaleString()}
+                        </p>
+                        {(() => {
+                          const custAdjustmentTotal = sumCurrencyValues((balanceAdjustments[cust.id] || []).map(a => Number(a.amount)));
+                          const custUncollected = sumCurrencyValues((savedMonths[cust.id] || []).filter(m => m.status === 'saved' || m.status === 'requested').map(m => m.total_amount));
+                          const custActiveCycle = (markedDays[cust.id] || []).reduce((s, d) => s + d.amount, 0);
+                          if (custAdjustmentTotal === 0) return null;
+                          return (
+                            <>
+                              <p className={`text-[11px] font-bold ${custAdjustmentTotal < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                                Adjustments: {custAdjustmentTotal > 0 ? '+' : ''}₦{custAdjustmentTotal.toLocaleString()}
+                              </p>
+                              <p className="text-[11px] text-slate-500 font-bold">
+                                Total Balance (incl. adjustments): ₦{(custActiveCycle + custUncollected + custAdjustmentTotal).toLocaleString()}
+                              </p>
+                            </>
+                          );
+                        })()}
+                        <p className="text-[11px] text-slate-500 font-bold">
+                          Month: {(() => {
+                            const days = markedDays[cust.id] || [];
+                            if (days.length > 0) return periodLabelFromKey((days[0] as any)?.period_key);
+                            const archived = (savedMonths[cust.id] || []).map(m => m.period_key).filter(Boolean).sort().reverse();
+                            if (archived.length > 0) return periodLabelFromKey(nextPeriodKey(archived[0]));
+                            return periodLabelFromKey(getCurrentPeriodKey());
+                          })()}
+                        </p>
+                      </div>
+                      <div className="text-right flex flex-col items-end gap-2">
+                        <span className="text-[10px] bg-amber-500 text-emerald-950 font-black px-2.5 py-0.5 rounded-full uppercase tracking-wide">
+                          {(markedDays[cust.id] || []).length} / 32 Days Marked
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCustomerId('')}
+                          className="text-[10px] text-emerald-700 font-bold hover:underline"
+                        >
+                          ← Back to list
+                        </button>
+                      </div>
+                    </div>
+                    {previewCreditBalance > 0 && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 text-xs">
+                        <p className="font-black text-blue-800">Credit Balance: ₦{previewCreditBalance.toLocaleString()}</p>
+                        <p className="text-blue-600 font-semibold mt-0.5">This customer has ₦{previewCreditBalance.toLocaleString()} credit from a previous overpayment. Applied automatically on the next contribution — they only need to pay ₦{Math.max(0, cust.daily_amount - previewCreditBalance).toLocaleString()} more to mark the next day.</p>
+                      </div>
+                    )}
+                    <Grid32 trackingDays={markedDays[cust.id] || []} dailyAmount={cust.daily_amount} />
+                  </div>
+                );
+              })()
+            ) : (
+              <div>
+                <div className="flex flex-wrap gap-2 max-h-64 overflow-y-auto p-1">
+                  {customers
+                    .filter(c => !saverPreviewSearch.trim() || c.name.toLowerCase().includes(saverPreviewSearch.trim().toLowerCase()) || c.phone.includes(saverPreviewSearch.trim()))
+                    .slice(0, 30)
+                    .map(c => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setSelectedCustomerId(c.id)}
+                      className="px-3.5 py-2 bg-white hover:bg-emerald-50 text-emerald-900 border border-emerald-100 rounded-xl text-xs font-semibold transition-all duration-200 shadow-sm flex items-center gap-1.5"
+                    >
+                      <UserIcon className="w-3 h-3 text-emerald-500" />
+                      {c.name}
+                    </button>
+                  ))}
+                  {customers.length === 0 && (
+                    <p className="text-xs text-slate-400 px-2 py-6">No customers registered yet.</p>
+                  )}
+                </div>
+                <div className="text-center pt-3 mt-2 border-t border-emerald-50">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('customers')}
+                    className="text-xs font-bold text-emerald-700 hover:text-emerald-900 inline-flex items-center gap-1"
+                  >
+                    View All Customers <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'overview' && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+          {[
+            { icon: ShieldCheck, title: 'Secure & Trusted', desc: 'Your data and transactions are 100% secure.' },
+            { icon: Target, title: 'Simple & Smart', desc: 'Easy to use, built for market people.' },
+            { icon: TrendingUp, title: 'Track & Grow', desc: 'Monitor savings, loans, and payouts in real-time.' },
+            { icon: Users, title: 'Community Driven', desc: 'Together we save, together we prosper.' },
+          ].map(({ icon: Icon, title, desc }) => (
+            <div key={title} className="card-green flex items-start gap-3">
+              <span className="icon-circle-light w-9 h-9 shrink-0"><Icon className="w-4 h-4" /></span>
+              <div>
+                <p className="text-xs font-bold text-emerald-950">{title}</p>
+                <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed">{desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {activeTab === 'customers' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs lg:col-span-1 h-fit text-slate-800">
+            <h3 className="text-sm font-bold text-emerald-950 mb-4 uppercase tracking-wide flex items-center gap-1.5">
+              <UserPlus className="w-5 h-5 text-emerald-700" />
+              Register Customer Profile
+            </h3>
+            
+            <form onSubmit={handleAdminRegisterCustomer} className="space-y-4">
+              <div>
+                <label className="block text-xs font-black text-emerald-800 mb-1">Full Name *</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="e.g. John Doe"
+                  value={custName}
+                  onChange={(e) => setCustName(e.target.value)}
+                  className="input-green text-xs"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-black text-emerald-800 mb-1">Phone Line *</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="080XXXXXXXX"
+                  value={custPhone}
+                  onChange={(e) => setCustPhone(e.target.value)}
+                  className="input-green text-xs"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-black text-emerald-800 mb-1">Email Address</label>
+                <input 
+                  type="email" 
+                  placeholder="chinedu@domain.com"
+                  value={custEmail}
+                  onChange={(e) => setCustEmail(e.target.value)}
+                  className="input-green text-xs"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-black text-emerald-800 mb-1">Password *</label>
+                <div className="relative">
+                  <input 
+                    type={showCustPass ? 'text' : 'password'} 
+                    required
+                    placeholder="••••••••"
+                    value={custPassword}
+                    onChange={(e) => setCustPassword(e.target.value)}
+                    className="input-green text-xs pr-8"
+                  />
+                  <button 
+                    type="button" 
+                    onClick={() => setShowCustPass(!showCustPass)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+                  >
+                    {showCustPass ? <EyeOff className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-black text-emerald-800 mb-2">Savings Plan *</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(['daily', 'monthly', 'both'] as const).map(type => (
+                    <button key={type} type="button" onClick={() => { setCustSavingsType(type); setCustTermsAccepted(false); }}
+                      className={`py-2 px-1 rounded-xl text-[10px] font-black uppercase border-2 transition ${custSavingsType === type ? 'bg-emerald-700 border-emerald-700 text-white' : 'bg-white border-emerald-200 text-emerald-800 hover:border-emerald-400'}`}>
+                      {type === 'daily' ? '32-Day' : type === 'monthly' ? 'Monthly' : 'Both'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {(custSavingsType === 'daily' || custSavingsType === 'both') && (
+              <div>
+                <label className="block text-xs font-black text-emerald-800 mb-1">Daily Contribution (₦) *</label>
+                <input type="number" required={(custSavingsType as string) !== 'monthly'} min={300} placeholder="Minimum ₦300" value={custDailyAmount} onChange={(e) => setCustDailyAmount(e.target.value)} className="input-green text-xs font-semibold" />
+                <span className="text-[9px] text-slate-400 block mt-1">Minimum ₦300/day</span>
+              </div>
+              )}
+              {(custSavingsType === 'monthly' || custSavingsType === 'both') && (
+                <div className={`rounded-xl border-2 p-2.5 flex items-start gap-2 cursor-pointer ${custTermsAccepted ? 'border-emerald-500 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}
+                  onClick={() => setShowCustTerms(true)}>
+                  <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 mt-0.5 ${custTermsAccepted ? 'bg-emerald-600 text-white' : 'border-2 border-amber-400'}`}>
+                    {custTermsAccepted && <span className="text-[8px] font-black">✓</span>}
+                  </div>
+                  <p className="text-[10px] font-bold text-slate-700">{custTermsAccepted ? 'Terms accepted ✓' : 'Read & Accept Monthly Savings Terms'}</p>
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-black text-emerald-800 mb-1">Assign Home Branch *</label>
+                <select required value={custBranch} onChange={(e) => setCustBranch(e.target.value)} className="input-green bg-white text-xs">
+                  <option value="">-- Choose Branch --</option>
+                  {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              </div>
+              <button type="submit" className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl text-sm shadow-md uppercase text-xs">
+                Register Customer Account
+              </button>
+            </form>
+
+            {/* Shared Terms Modal for Admin registration */}
+            {showCustTerms && (
+              <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setShowCustTerms(false)}>
+                <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                  <div className="bg-emerald-800 text-white p-5 rounded-t-3xl">
+                    <h3 className="text-base font-black">Monthly Salary Savings Plan</h3>
+                    <p className="text-emerald-200 text-xs mt-0.5">Terms and Conditions</p>
+                  </div>
+                  <div className="overflow-y-auto p-5 space-y-3 text-xs text-slate-700 flex-1">
+                    {[
+                      { t: '1. Plan Duration', b: 'Runs January to December. Plan begins the month of enrollment and covers all 12 months of that year.' },
+                      { t: '2. Minimum Monthly Contribution', b: 'Minimum ₦5,000 per month. Multiple deposits allowed. Month is complete once ₦5,000 is deposited.' },
+                      { t: '3. Company Profit Month', b: 'One month\'s savings (1 of 12) is retained by HireMercyAJO as a service charge for managing and securing the savings.' },
+                      { t: '4. Withdrawal Policy — Customers', b: 'Customers CANNOT self-request withdrawals. Only Admin/Staff can process withdrawals, and only after December of the plan year.' },
+                      { t: '5. Withdrawal Policy — Admin', b: 'Admin or authorized staff may process withdrawals on the customer\'s behalf at any time.' },
+                      { t: '6. No Loan on Monthly Plan', b: 'Loans are not available on the Monthly Salary Savings Plan. Loans are only on the 32-Day Daily plan.' },
+                      { t: '7. Independent Plan', b: 'Monthly and Daily plans run independently when both are selected. Each has its own balance and rules.' },
+                      { t: '8. Agreement', b: 'Accepting these terms confirms full understanding and agreement to all conditions of the HireMercyAJO Monthly Salary Savings Plan.' },
+                    ].map(item => (
+                      <div key={item.t}>
+                        <p className="font-black text-emerald-800 mb-0.5">{item.t}</p>
+                        <p className="text-slate-600 leading-relaxed">{item.b}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="p-4 border-t border-slate-100 flex gap-2">
+                    <button type="button" onClick={() => setShowCustTerms(false)} className="flex-1 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600">Close</button>
+                    <button type="button" onClick={() => { setCustTermsAccepted(true); setShowCustTerms(false); }} className="flex-1 py-2 bg-emerald-700 text-white rounded-xl text-xs font-black uppercase">I Accept</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs lg:col-span-2 h-fit">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 text-slate-800">
+              <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide">Customer Directory</h3>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-black uppercase text-emerald-800">Filter Branch:</span>
+                <select
+                  value={selectedBranchFilter}
+                  onChange={(e) => setSelectedBranchFilter(e.target.value)}
+                  className="px-2 py-1 text-xs border border-emerald-200 rounded-xl bg-white font-bold"
+                >
+                  <option value="">All Branches</option>
+                  {branches.map(b => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+                <span className="text-[10px] font-black uppercase text-emerald-800">Loan Status:</span>
+                <select
+                  value={selectedLoanStatusFilter}
+                  onChange={(e) => setSelectedLoanStatusFilter(e.target.value)}
+                  className="px-2 py-1 text-xs border border-emerald-200 rounded-xl bg-white font-bold"
+                >
+                  <option value="">All</option>
+                  <option value="No Loan">No Loan</option>
+                  <option value="Pending Approval">Pending Approval</option>
+                  <option value="Active Loan">Active Loan</option>
+                  <option value="Loan Cleared">Loan Repaid</option>
+                </select>
+              </div>
+            </div>
+            <div className="relative mb-4">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={customerSearchQuery}
+                onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                placeholder="Search by name, phone, or customer ID..."
+                className="w-full pl-9 pr-3 py-2 text-xs border border-emerald-200 rounded-xl font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-300"
+              />
+            </div>
+            {filteredCustomers.length === 0 ? (
+              <div className="text-center py-10 text-slate-400 text-sm font-bold">No customer found.</div>
+            ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-emerald-50/50 text-emerald-900 font-extrabold border-b border-emerald-200">
+                    <th className="p-3">Customer Name</th>
+                    <th className="p-3">Phone number</th>
+                    <th className="p-3">Daily Target</th>
+                    <th className="p-3">Status</th>
+                    <th className="p-3">Loan Status</th>
+                    <th className="p-3">Marked count</th>
+                    <th className="p-3 text-right">Consolidated contribution</th>
+                    <th className="p-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-emerald-50">
+                  {filteredCustomers.map(c => {
+                    const marked = markedDays[c.id] || [];
+                    const totalContributed = marked.reduce((sum, item) => sum + item.amount, 0);
+                    return (
+                      <tr key={c.id} className="hover:bg-emerald-50/20 transition text-slate-800">
+                        <td className="p-3 font-bold">
+                          <button
+                            type="button"
+                            onClick={() => setViewingCustomerDetails(c)}
+                            className="text-emerald-800 hover:text-emerald-950 hover:underline text-left"
+                          >
+                            {c.name}
+                          </button>
+                        </td>
+                        <td className="p-3 font-semibold text-slate-600">{c.phone}</td>
+                        <td className="p-3 font-bold">₦{c.daily_amount.toLocaleString()}</td>
+                        <td className="p-3">
+                          <button 
+                            type="button"
+                            onClick={() => onToggleCustomerActive(c.id, !c.is_active)}
+                            className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase transition ${
+                              c.is_active ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'bg-red-100 text-red-800 hover:bg-red-200'
+                            }`}
+                            title="Click to toggle active status"
+                          >
+                            {c.is_active ? 'Active' : 'Suspended'}
+                          </button>
+                        </td>
+                        <td className="p-3">
+                          <LoanStatusBadge status={c.loan_status} />
+                        </td>
+                        <td className="p-3">
+                          <span className="bg-amber-100 text-amber-900 font-bold px-2 py-0.5 rounded-full">
+                            {marked.length} / 32
+                          </span>
+                        </td>
+                        <td className="p-3 text-right font-bold text-emerald-800">₦{totalContributed.toLocaleString()}</td>
+                        <td className="p-3 text-right flex justify-end items-center gap-1.5">
+                          <button 
+                            type="button"
+                            onClick={() => handleSendResetLink(c.email)}
+                            className="p-1.5 text-slate-600 hover:bg-slate-50 rounded-xl transition"
+                            title="Send Password Reset Email Link"
+                          >
+                            <Key className="w-4 h-4 text-emerald-700" />
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => onResetPasswordToDefault?.(c.id)}
+                            className="p-1.5 text-amber-700 hover:bg-amber-50 rounded-xl transition"
+                            title="Reset password directly to 123456 (no email needed)"
+                          >
+                            <Lock className="w-4 h-4" />
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => setEditingCustomer(c)}
+                            className="p-1.5 text-emerald-700 hover:bg-emerald-50 rounded-xl transition"
+                            title="Edit Customer Details"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => onDeleteCustomer(c.id)}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-xl transition"
+                            title="Delete Customer Profile"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Editing Customer Dialog Modal */}
+      {viewingCustomerDetails && (
+        <CustomerDetailsModal
+          customer={customers.find(c => c.id === viewingCustomerDetails.id) || viewingCustomerDetails}
+          branches={branches}
+          profiles={profiles}
+          markedDays={markedDays}
+          savedMonths={savedMonths}
+          payoutHistory={payoutHistory}
+          dateFilter={customerDetailsDateFilter}
+          setDateFilter={setCustomerDetailsDateFilter}
+          customFrom={customerDetailsCustomFrom}
+          setCustomFrom={setCustomerDetailsCustomFrom}
+          customTo={customerDetailsCustomTo}
+          setCustomTo={setCustomerDetailsCustomTo}
+          viewingDay={viewingDayDetail}
+          setViewingDay={setViewingDayDetail}
+          onClose={() => { setViewingCustomerDetails(null); setViewingDayDetail(null); }}
+        />
+      )}
+
+      {editingCustomer && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <form onSubmit={handleSaveEditCustomer} className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full p-6 border border-emerald-100 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b border-emerald-50 pb-3">
+              <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide">Edit Customer Profile</h3>
+              <button 
+                type="button"
+                onClick={() => setEditingCustomer(null)}
+                className="text-slate-400 hover:text-slate-600 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs text-slate-800">
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1">Full Name *</label>
+                <input 
+                  type="text" 
+                  required
+                  value={editingCustomer.name}
+                  onChange={(e) => setEditingCustomer({ ...editingCustomer, name: e.target.value })}
+                  className="input-green"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1">Phone Number *</label>
+                <input 
+                  type="text" 
+                  required
+                  value={editingCustomer.phone}
+                  onChange={(e) => setEditingCustomer({ ...editingCustomer, phone: e.target.value })}
+                  className="input-green"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1">Email Address</label>
+                <input 
+                  type="email" 
+                  value={editingCustomer.email || ''}
+                  onChange={(e) => setEditingCustomer({ ...editingCustomer, email: e.target.value })}
+                  className="input-green"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1">Daily Contribution (₦) *</label>
+                <input 
+                  type="number" 
+                  required
+                  min={300}
+                  placeholder="Minimum ₦300"
+                  value={editingCustomer.daily_amount.toString()}
+                  onChange={(e) => setEditingCustomer({ ...editingCustomer, daily_amount: Number(e.target.value) })}
+                  className="input-green font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1">Assign Home Branch *</label>
+                <select 
+                  required
+                  value={editingCustomer.branch_id || ''}
+                  onChange={(e) => setEditingCustomer({ ...editingCustomer, branch_id: e.target.value })}
+                  className="input-green bg-white"
+                >
+                  <option value="">-- Choose Branch --</option>
+                  {branches.map(b => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2 py-2">
+                <input 
+                  type="checkbox"
+                  id="allowAnytime"
+                  checked={editingCustomer.allow_anytime_change || false}
+                  onChange={(e) => setEditingCustomer({ ...editingCustomer, allow_anytime_change: e.target.checked })}
+                  className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-emerald-300"
+                />
+                <label htmlFor="allowAnytime" className="text-xs font-bold text-emerald-900 select-none">
+                  Grant Client Permission to Change Amount Anytime
+                </label>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button type="submit" className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl text-xs shadow-md">
+                Save Changes
+              </button>
+              <button type="button" onClick={() => setEditingCustomer(null)} className="px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-xs border border-slate-300">
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Branch Management (With Editing & Deletion) */}
+      {activeTab === 'branches' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs lg:col-span-1 h-fit text-slate-800">
+            <h3 className="text-sm font-bold text-emerald-950 mb-4 uppercase tracking-wide flex items-center gap-1.5 font-bold">
+              <Building2 className="w-5 h-5 text-emerald-700" />
+              {editingBranch ? 'Edit Branch' : 'Register Branch'}
+            </h3>
+            <form onSubmit={editingBranch ? handleSaveEditBranch : handleAddBranch} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1">Branch Name *</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="e.g. Ikeja Mainland Centre"
+                  value={editingBranch ? editingBranch.name : branchName}
+                  onChange={(e) => editingBranch ? setEditingBranch({ ...editingBranch, name: e.target.value }) : setBranchName(e.target.value)}
+                  className="input-green text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1">Branch Location Address</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. 42 Allen Avenue, Lagos"
+                  value={editingBranch ? (editingBranch.address || '') : branchAddress}
+                  onChange={(e) => editingBranch ? setEditingBranch({ ...editingBranch, address: e.target.value }) : setBranchAddress(e.target.value)}
+                  className="input-green text-sm"
+                />
+              </div>
+              <div className="flex gap-2">
+                <button type="submit" className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl text-xs shadow-md">
+                  {editingBranch ? 'Save Details' : 'Add Branch'}
+                </button>
+                {editingBranch && (
+                  <button type="button" onClick={() => setEditingBranch(null)} className="px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-xs border border-slate-300">
+                    Cancel
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs lg:col-span-2">
+            <h3 className="text-sm font-bold text-emerald-950 mb-4 uppercase tracking-wide">Active Branches</h3>
+            <div className="overflow-x-auto text-slate-800 font-medium">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-emerald-50/50 text-emerald-900 font-extrabold border-b border-emerald-200">
+                    <th className="p-3">Branch Name</th>
+                    <th className="p-3">Location Address</th>
+                    <th className="p-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-emerald-50">
+                  {branches.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="p-4 text-center text-slate-400">No branches registered yet.</td>
+                    </tr>
+                  ) : (
+                    branches.slice().sort((a, b) => a.name.localeCompare(b.name)).map(b => (
+                      <tr key={b.id} className="hover:bg-emerald-50/20 transition">
+                        <td className="p-3 font-bold">{b.name}</td>
+                        <td className="p-3 text-slate-600">{b.address || 'N/A'}</td>
+                        <td className="p-3 text-right flex justify-end gap-1.5">
+                          <button 
+                            type="button"
+                            onClick={() => setEditingBranch(b)}
+                            className="p-1.5 text-emerald-700 hover:bg-emerald-50 rounded-xl transition"
+                            title="Edit Branch"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => onDeleteBranch(b.id)}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-xl transition"
+                            title="Delete Branch"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Staff Management */}
+      {activeTab === 'staff' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs lg:col-span-1 h-fit text-slate-800">
+            <h3 className="text-sm font-bold text-emerald-950 mb-4 uppercase tracking-wide flex items-center gap-1.5 font-bold">
+              <UserPlus className="w-5 h-5 text-emerald-700" />
+              {editingStaff ? 'Edit Staff Member' : 'Onboard Staff'}
+            </h3>
+            <form onSubmit={editingStaff ? handleSaveEditStaff : handleAddStaff} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1">Staff Full Name *</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="e.g. John Bello"
+                  value={editingStaff ? editingStaff.name : staffName}
+                  onChange={(e) => editingStaff ? setEditingStaff({ ...editingStaff, name: e.target.value }) : setStaffName(e.target.value)}
+                  className="input-green text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1">Staff Phone Number *</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="080XXXXXXXX"
+                  value={editingStaff ? editingStaff.phone : staffPhone}
+                  onChange={(e) => editingStaff ? setEditingStaff({ ...editingStaff, phone: e.target.value }) : setStaffPhone(e.target.value)}
+                  className="input-green text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1">Staff Email *</label>
+                <input 
+                  type="email" 
+                  required
+                  placeholder="john@hiremercy.com"
+                  value={editingStaff ? (editingStaff.email || '') : staffEmail}
+                  onChange={(e) => editingStaff ? setEditingStaff({ ...editingStaff, email: e.target.value }) : setStaffEmail(e.target.value)}
+                  className="input-green text-sm"
+                />
+              </div>
+              
+              {!editingStaff && (
+                <div>
+                  <label className="block text-xs font-bold text-emerald-800 mb-1">Staff Login Password *</label>
+                  <div className="relative">
+                    <input 
+                      type={showStaffPassword ? 'text' : 'password'} 
+                      required
+                      placeholder="••••••••"
+                      value={staffPassword}
+                      onChange={(e) => setStaffPassword(e.target.value)}
+                      className="w-full px-4 py-2 border border-emerald-200 rounded-xl text-xs pr-8"
+                    />
+                    <button 
+                      type="button" 
+                      onClick={() => setShowStaffPassword(!showStaffPassword)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+                    >
+                      {showStaffPassword ? <EyeOff className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1 font-bold">Assign Home Branch *</label>
+                <select 
+                  required
+                  value={editingStaff ? (editingStaff.branch_id || '') : staffBranch}
+                  onChange={(e) => editingStaff ? setEditingStaff({ ...editingStaff, branch_id: e.target.value }) : setStaffBranch(e.target.value)}
+                  className="input-green bg-white text-sm"
+                >
+                  <option value="">-- Choose Branch --</option>
+                  {branches.map(b => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex gap-2">
+                <button type="submit" className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl text-xs shadow-md">
+                  {editingStaff ? 'Save Changes' : 'Register Agent'}
+                </button>
+                {editingStaff && (
+                  <button type="button" onClick={() => setEditingStaff(null)} className="px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-xs border border-slate-300">
+                    Cancel
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs lg:col-span-2">
+            <h3 className="text-sm font-bold text-emerald-950 mb-4 uppercase tracking-wide">Field Staff Directory</h3>
+            <div className="overflow-x-auto text-slate-800 font-medium">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-emerald-50/50 text-emerald-900 font-extrabold border-b border-emerald-200">
+                    <th className="p-3">Staff Name</th>
+                    <th className="p-3">Phone Line</th>
+                    <th className="p-3">Email</th>
+                    <th className="p-3">Assigned Branch</th>
+                    <th className="p-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-emerald-50">
+                  {staff.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="p-4 text-center text-slate-400 font-medium">No field agents onboarded yet.</td>
+                    </tr>
+                  ) : (
+                    staff.slice().map(s => (
+                      <tr key={s.id} className="hover:bg-emerald-50/20 transition">
+                        <td className="p-3 font-bold">{s.name}</td>
+                        <td className="p-3 font-semibold">{s.phone}</td>
+                        <td className="p-3 text-slate-500">{s.email || 'N/A'}</td>
+                        <td className="p-3 text-emerald-800 font-bold">
+                          {branches.find(b => b.id === s.branch_id)?.name || 'N/A'}
+                        </td>
+                        <td className="p-3 text-right flex justify-end items-center gap-1.5 font-bold">
+                          <button 
+                            type="button"
+                            onClick={() => handleSendResetLink(s.email)}
+                            className="p-1.5 text-emerald-700 hover:bg-emerald-50 rounded-xl transition"
+                            title="Send Password Reset Email Link"
+                          >
+                            <Key className="w-4 h-4 text-emerald-700" />
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => setEditingStaff(s)}
+                            className="p-1.5 text-emerald-700 hover:bg-emerald-50 rounded-xl transition"
+                            title="Edit Staff Details"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => onDeleteStaff(s.id)}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-xl transition"
+                            title="Delete Staff"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payouts Control with Manual Triggers */}
+      {activeTab === 'payouts' && (
+        <div className="space-y-6 animate-fade-in text-slate-800 font-bold">
+          <SectionPageBar
+            pages={[
+              { key: 'ledger', label: 'Outstanding Ledger', icon: FileText },
+              { key: 'trigger', label: 'Trigger Payout', icon: Coins },
+              { key: 'pending', label: 'Pending Requests', icon: Clock },
+              { key: 'withdrawals', label: 'Withdrawal Logs', icon: FileText },
+              { key: 'archive', label: 'Payout Archive', icon: Landmark },
+            ]}
+            active={payoutsPage}
+            onChange={setPayoutsPage}
+          />
+
+          {payoutsPage === 'ledger' && (
+          <>
+          {/* FEATURE 1 (Admin): Outstanding Payout Ledger */}
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
+            <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide mb-1 font-bold">Outstanding Payout Ledger</h3>
+            <p className="text-xs text-slate-500 mb-4 font-medium">Customers with at least one fully-frozen, uncollected 32-day cycle. Click a name to see exactly which months.</p>
+            <div className="relative mb-4">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                value={outstandingLedgerSearch}
+                onChange={(e) => setOutstandingLedgerSearch(e.target.value)}
+                placeholder="Search by customer name..."
+                className="w-full pl-9 pr-3 py-2.5 border border-emerald-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              />
+            </div>
+            {filteredOutstandingPayoutCustomers.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-emerald-200 p-4 text-center text-slate-400">
+                {outstandingLedgerSearch.trim() ? 'No customers match that search.' : 'No customers currently have an uncollected saved month.'}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filteredOutstandingPayoutCustomers.map(row => {
+                  const isOpen = expandedOutstandingCustomerId === row.customerId;
+                  return (
+                    <div key={row.customerId} className="rounded-2xl border border-slate-100 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedOutstandingCustomerId(isOpen ? null : row.customerId)}
+                        className="w-full flex items-center justify-between gap-3 p-3.5 bg-slate-50/60 hover:bg-slate-100/60 transition text-left"
+                      >
+                        <span className="text-xs font-black text-slate-800">{row.customerName}</span>
+                        <span className="flex items-center gap-2 text-[11px]">
+                          <span className="rounded-full bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-0.5 font-black">
+                            {row.uncollectedMonths.length} uncollected
+                          </span>
+                          <span className="font-black text-emerald-800">₦{row.totalOutstanding.toLocaleString()}</span>
+                          {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        </span>
+                      </button>
+                      {isOpen && (
+                        <div className="divide-y divide-slate-50 bg-white">
+                          {row.uncollectedMonths.map(m => (
+                            <div key={m.id} className="flex items-center justify-between p-3 text-xs">
+                              <span className="font-bold text-slate-700">{m.month_label}</span>
+                              <span className="font-black text-emerald-800">₦{m.total_amount.toLocaleString()}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          </>
+          )}
+
+          {payoutsPage === 'trigger' && (
+          <div className="grid grid-cols-1 gap-6">
+            {/* Trigger manual payout form */}
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs max-w-xl">
+              <h3 className="text-sm font-bold text-emerald-950 mb-2 uppercase tracking-wide flex items-center gap-1.5 font-bold">
+                <Coins className="w-5 h-5 text-emerald-700" />
+                Trigger Manual Payout
+              </h3>
+              <p className="text-[10px] text-slate-400 mb-4">Archives this customer's uncollected saved month(s) to payout history. If none are fully completed yet, pays out their current running cycle instead and clears it.</p>
+
+              <form onSubmit={handleTriggerManualPayoutSubmit} className="space-y-4 text-xs font-semibold">
+                <div>
+                  <label className="block text-xs font-black text-emerald-800 mb-1 font-bold">Select Customer</label>
+                  <SearchableCustomerSelect 
+                    customers={customers} 
+                    selectedId={manualPayoutCustomerId} 
+                    onSelect={setManualPayoutCustomerId} 
+                    placeholder="Search active account..."
+                  />
+                </div>
+
+                {manualPayoutCustomerId && !manualPayoutCalculation && (
+                  <div className="rounded-2xl border border-dashed border-slate-200 p-3 text-[10px] text-slate-400">
+                    This customer has no contributions to pay out right now.
+                  </div>
+                )}
+
+                {manualPayoutCalculation && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-[10px] text-amber-900 space-y-1 font-semibold leading-relaxed">
+                    {manualPayoutCalculation.isPartialPayout ? (
+                      <p>Early Payout - Running Cycle: {manualPayoutCalculation.totalDays} day(s) marked so far</p>
+                    ) : (
+                      <p>Uncollected Months: {manualPayoutCalculation.uncollectedMonths.length} ({manualPayoutCalculation.totalDays} days total)</p>
+                    )}
+                    <p>Saved Accumulation: ₦{manualPayoutCalculation.totalAmount.toLocaleString()}</p>
+                    <p>Company Fee ({manualPayoutCalculation.isPartialPayout ? 1 : manualPayoutCalculation.uncollectedMonths.length} × 1 Day, at each month's own saved rate): - ₦{manualPayoutCalculation.totalFee.toLocaleString()}</p>
+                    {manualPayoutCalculation.adjustmentTotal !== 0 && (
+                      <p className={manualPayoutCalculation.adjustmentTotal < 0 ? 'text-red-700' : 'text-emerald-800'}>
+                        Prior Balance Adjustments: {manualPayoutCalculation.adjustmentTotal > 0 ? '+' : ''}₦{manualPayoutCalculation.adjustmentTotal.toLocaleString()}
+                        {manualPayoutCalculation.adjustmentTotal < 0 ? ' (already sent, deducted here)' : ''}
+                      </p>
+                    )}
+                    <p className="text-emerald-800 border-t border-amber-200 pt-1 font-black">
+                      Expected Payout: ₦{manualPayoutCalculation.payoutAmount.toLocaleString()}
+                    </p>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-black text-emerald-800 mb-1 font-bold">Payout Method</label>
+                  <div className="flex gap-2">
+                    {(['Transfer', 'Cash'] as const).map(m => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setManualPayoutMethod(m)}
+                        className={`flex-1 py-2 rounded-xl text-[11px] font-black uppercase transition ${
+                          manualPayoutMethod === m ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {manualPayoutMethod === 'Transfer' && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-black text-emerald-800 mb-1 font-bold">Bank Name *</label>
+                      <select 
+                        required
+                        value={manualBankName}
+                        onChange={(e) => setManualBankName(e.target.value)}
+                        className="input-green bg-white"
+                      >
+                        <option value="">-- Choose Recipient Bank --</option>
+                        {nigerianBanks.map(b => (
+                          <option key={b} value={b}>{b}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-black text-emerald-800 mb-1 font-bold">Account Number *</label>
+                      <input 
+                        type="text" 
+                        required
+                        placeholder="e.g. 0123456789"
+                        maxLength={10}
+                        value={manualAccountNumber}
+                        onChange={(e) => setManualAccountNumber(e.target.value.replace(/\D/g, ''))}
+                        className="input-green"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-black text-emerald-800 mb-1 font-bold">Account Name *</label>
+                      <input 
+                        type="text" 
+                        required
+                        placeholder="e.g. John Doe"
+                        value={manualAccountName}
+                        onChange={(e) => setManualAccountName(e.target.value)}
+                        className="input-green"
+                      />
+                    </div>
+                  </>
+                )}
+
+                <button 
+                  type="submit"
+                  disabled={!manualPayoutCalculation || manualPayoutCalculation.payoutAmount === 0}
+                  className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl transition shadow-md"
+                >
+                  {manualPayoutMethod === 'Cash' ? 'Pay Out in Cash' : 'Archive & Pay Out Uncollected Months'}
+                </button>
+              </form>
+            </div>
+          </div>
+          )}
+
+          {payoutsPage === 'pending' && (
+          <div className="grid grid-cols-1 gap-6">
+            {/* Pending payout requests - awaiting admin approval */}
+            <div className="bg-white p-6 rounded-3xl border border-amber-200 shadow-sm">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide font-bold">Pending Payout Requests</h3>
+                <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">
+                  {payoutRequests.filter(p => p.status === 'Pending').length} awaiting approval
+                </span>
+              </div>
+              {payoutRequests.filter(p => p.status === 'Pending').length === 0 ? (
+                <p className="text-xs text-slate-400 font-medium p-2">No payout requests are currently pending.</p>
+              ) : (
+                <div className="space-y-2">
+                  {payoutRequests.filter(p => p.status === 'Pending').map(h => (
+                    <div key={h.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 rounded-2xl border border-amber-100 bg-amber-50/40">
+                      <div className="text-xs">
+                        <p className="font-black text-slate-800">{profiles.find(p => p.id === h.customer_id)?.name || h.customer_name || h.customer_id} <span className="text-slate-400 font-semibold">• {h.month_paid || 'Saved month'}</span></p>
+                        <p className="text-slate-500 font-semibold">{h.payout_method === 'Cash' ? 'Cash Payment' : `${h.bank_name} • ${h.account_number} (${h.account_name})`}</p>
+                        {Boolean(h.charge_amount) && (
+                          <p className="text-amber-700 font-semibold">{h.charge_label || 'Charge'}: -₦{Number(h.charge_amount).toLocaleString()} → Net: ₦{Number(h.net_amount ?? h.payout_amount).toLocaleString()}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-black text-emerald-800 text-sm">₦{h.payout_amount.toLocaleString()}</span>
+                        <button 
+                          type="button"
+                          onClick={() => onRejectPayout?.(h.id)}
+                          className="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded-xl transition text-[10px] whitespace-nowrap"
+                        >
+                          Reject
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => onApprovePayout(h.id)}
+                          className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-1 px-3 rounded-xl transition text-[10px] whitespace-nowrap"
+                        >
+                          Approve & Payout
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          )}
+
+          {payoutsPage === 'withdrawals' && (
+          <div className="grid grid-cols-1 gap-6">
+            {/* Customer Payout logs table */}
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
+              <div className="mb-4">
+                <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide font-bold">Customer Withdrawal Logs</h3>
+                <p className="text-xs text-slate-500 font-medium">1-day company fee is deducted automatically when calculating the payout amount.</p>
+              </div>
+              <div className="relative mb-4">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={withdrawalLogsSearch}
+                  onChange={(e) => setWithdrawalLogsSearch(e.target.value)}
+                  placeholder="Search by customer name..."
+                  className="w-full pl-9 pr-3 py-2.5 border border-emerald-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                />
+              </div>
+              <div className="overflow-x-auto text-slate-800 font-semibold">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-emerald-50/50 text-emerald-900 font-extrabold border-b border-emerald-200">
+                      <th className="p-3">Date Requested</th>
+                      <th className="p-3">Customer</th>
+                      <th className="p-3">Bank Details</th>
+                      <th className="p-3">Period</th>
+                      <th className="p-3">Accrued Sum</th>
+                      <th className="p-3 text-emerald-800">Payout (Accrued - 1 Day Fee)</th>
+                      <th className="p-3 text-amber-800">Charge / Net</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-emerald-50">
+                    {(() => {
+                      const q = withdrawalLogsSearch.trim().toLowerCase();
+                      const rows = payoutRequests.slice().sort((a, b) => {
+                        const nameA = profiles.find(p => p.id === a.customer_id)?.name || a.customer_name || '';
+                        const nameB = profiles.find(p => p.id === b.customer_id)?.name || b.customer_name || '';
+                        return nameA.localeCompare(nameB);
+                      }).filter(h => {
+                        if (!q) return true;
+                        const name = profiles.find(p => p.id === h.customer_id)?.name || h.customer_name || '';
+                        return name.toLowerCase().includes(q);
+                      });
+                      if (rows.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={9} className="p-4 text-center text-slate-400 font-medium">
+                              {q ? 'No withdrawal logs match that search.' : 'No previous payout logs.'}
+                            </td>
+                          </tr>
+                        );
+                      }
+                      return rows.map(h => (
+                        <tr key={h.id}>
+                          <td className="p-3 text-slate-500">
+                            {new Date(h.created_at).toLocaleDateString()}
+                            <span className="block text-[9px] text-slate-400">{new Date(h.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          </td>
+                          <td className="p-3 font-bold text-slate-700">
+                            {profiles.find(p => p.id === h.customer_id)?.name || h.customer_name || h.customer_id}
+                          </td>
+                          <td className="p-3 font-medium text-slate-700">
+                            {h.payout_method === 'Cash' ? (
+                              <strong className="block text-slate-700 font-bold">Cash Payment</strong>
+                            ) : (
+                              <>
+                                <strong className="block text-slate-700 font-bold">{h.account_name}</strong>
+                                {h.bank_name} • {h.account_number}
+                              </>
+                            )}
+                          </td>
+                          <td className="p-3 font-semibold text-emerald-800">{h.month_paid || 'N/A'}</td>
+                          <td className="p-3">₦{h.amount.toLocaleString()}</td>
+                          <td className="p-3 font-bold text-emerald-800">₦{h.payout_amount.toLocaleString()}</td>
+                          <td className="p-3 text-amber-800">
+                            {h.charge_amount ? (
+                              <>
+                                -₦{Number(h.charge_amount).toLocaleString()}
+                                <span className="block text-[9px] text-emerald-700 font-bold">Net: ₦{Number(h.net_amount ?? h.payout_amount).toLocaleString()}</span>
+                              </>
+                            ) : (
+                              <span className="text-slate-300">—</span>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            <span className={`px-2.5 py-0.5 rounded-full font-black uppercase text-[9px] ${
+                              h.status === 'Pending' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                            }`}>
+                              {h.status === 'Successful' ? 'Successful' : h.status}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right">
+                            {h.status === 'Pending' && (
+                              <div className="flex justify-end gap-1.5">
+                                <button 
+                                  type="button"
+                                  onClick={() => onRejectPayout?.(h.id)}
+                                  className="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded-xl transition text-[10px] whitespace-nowrap"
+                                >
+                                  Reject
+                                </button>
+                                <button 
+                                  type="button"
+                                  onClick={() => onApprovePayout(h.id)}
+                                  className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-1 px-3 rounded-xl transition text-[10px] whitespace-nowrap"
+                                >
+                                  Approve & Payout
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ));
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          )}
+
+          {payoutsPage === 'archive' && (
+          <div className="grid grid-cols-1 gap-6">
+            {/* Payout History Archive - records moved off the active ledger on approval */}
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
+              <div className="mb-4">
+                <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5 font-bold">
+                  <Landmark className="w-4 h-4 text-emerald-700" />
+                  Payout History Archive
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">Settled saved-month records that have been removed from the active contributions ledger.</p>
+              </div>
+              <div className="relative mb-4">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={payoutArchiveSearch}
+                  onChange={(e) => setPayoutArchiveSearch(e.target.value)}
+                  placeholder="Search by customer name..."
+                  className="w-full pl-9 pr-3 py-2.5 border border-emerald-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                />
+              </div>
+              <div className="overflow-x-auto text-slate-800 font-semibold">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-emerald-50/50 text-emerald-900 font-extrabold border-b border-emerald-200">
+                      <th className="p-3">Approved</th>
+                      <th className="p-3">Customer</th>
+                      <th className="p-3">Month</th>
+                      <th className="p-3">Total Saved</th>
+                      <th className="p-3 text-emerald-800">Payout</th>
+                      <th className="p-3">Bank Details</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-emerald-50">
+                    {(() => {
+                      const q = payoutArchiveSearch.trim().toLowerCase();
+                      const filtered = q
+                        ? payoutHistory.filter(h => (profiles.find(p => p.id === h.customer_id)?.name || h.customer_name || '').toLowerCase().includes(q))
+                        : payoutHistory;
+                      const rows = q ? filtered : filtered.slice(0, 25);
+                      if (rows.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={6} className="p-4 text-center text-slate-400 font-medium">
+                              {q ? 'No archived payouts match that search.' : 'No archived payouts yet.'}
+                            </td>
+                          </tr>
+                        );
+                      }
+                      return rows.map(h => (
+                        <tr key={h.id}>
+                          <td className="p-3 text-slate-500">{new Date(h.approved_at).toLocaleDateString()}</td>
+                          <td className="p-3 font-bold text-slate-700">{profiles.find(p => p.id === h.customer_id)?.name || h.customer_name || h.customer_id}</td>
+                          <td className="p-3 font-semibold text-emerald-800">{h.month_label}</td>
+                          <td className="p-3">₦{h.total_amount.toLocaleString()}</td>
+                          <td className="p-3 font-bold text-emerald-800">₦{h.payout_amount.toLocaleString()}</td>
+                          <td className="p-3 font-medium text-slate-700">{h.payout_method === 'Cash' ? 'Cash Payment' : `${h.bank_name} • ${h.account_number}`}</td>
+                        </tr>
+                      ));
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          )}
+        </div>
+      )}
+
+      {/* Cash Balance Sheet */}
+      {activeTab === 'cashsheet' && (
+        <div className="space-y-6 animate-fade-in text-slate-800 font-bold">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setCashSheetView('entry')}
+              className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition ${cashSheetView === 'entry' ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-800'}`}
+            >
+              New Entry
+            </button>
+            <button
+              type="button"
+              onClick={() => setCashSheetView('archive')}
+              className={`px-4 py-2 rounded-xl text-xs font-black uppercase transition ${cashSheetView === 'archive' ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-800'}`}
+            >
+              Records Dashboard ({cashRecords.length})
+            </button>
+          </div>
+
+          {cashSheetView === 'entry' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Denomination Calculator */}
+              <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide font-bold">Denomination Calculator</h3>
+                  <input
+                    type="date"
+                    value={cashSheetDate}
+                    onChange={e => setCashSheetDate(e.target.value)}
+                    className="border border-emerald-200 rounded-xl px-3 py-1.5 text-xs font-bold"
+                  />
+                </div>
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-emerald-50 text-emerald-900 font-black">
+                      <th className="p-2 text-left rounded-l-xl">CASH</th>
+                      <th className="p-2 text-left">PIECES</th>
+                      <th className="p-2 text-right rounded-r-xl">TOTAL</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-emerald-50">
+                    {denomComputed.map(row => (
+                      <tr key={row.denom}>
+                        <td className="p-2 font-black text-slate-700">₦{row.denom.toLocaleString()}</td>
+                        <td className="p-2">
+                          <input
+                            type="number"
+                            min="0"
+                            value={row.pieces || ''}
+                            onChange={e => updateDenomPieces(row.denom, e.target.value)}
+                            className="w-20 border border-slate-200 rounded-xl px-2 py-1 text-xs font-bold"
+                            placeholder="0"
+                          />
+                        </td>
+                        <td className="p-2 text-right font-bold text-emerald-800">₦{row.total.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                    <tr className="bg-emerald-950">
+                      <td className="p-2.5 font-black text-white uppercase tracking-wide text-xs rounded-l-xl" colSpan={2}>Grand Total</td>
+                      <td className="p-2.5 text-right font-black text-white text-sm rounded-r-xl">₦{grandCashTotal.toLocaleString()}</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                {/* Grand Total section - reads directly from denomComputed/
+                    grandCashTotal, which already recompute on every keystroke
+                    via updateDenomPieces, so this stays in sync automatically
+                    with no additional wiring. Uses bg-emerald-900 (a real
+                    Tailwind shade) rather than bg-emerald-950 used in the
+                    table row above, since that class isn't a standard shade
+                    and may not render depending on the Tailwind config. */}
+                <div className="bg-emerald-900 text-white rounded-2xl p-4">
+                  <p className="text-[10px] uppercase font-black tracking-wider text-emerald-200 mb-1.5">Grand Total</p>
+                  {grandCashTotal === 0 ? (
+                    <p className="text-2xl sm:text-3xl font-black">₦0</p>
+                  ) : (
+                    <>
+                      <div className="text-[11px] font-bold text-emerald-100 space-y-0.5 mb-1.5">
+                        {denomComputed.filter(r => r.pieces > 0).map(r => (
+                          <p key={r.denom}>₦{r.denom.toLocaleString()} × {r.pieces} = ₦{r.total.toLocaleString()}</p>
+                        ))}
+                      </div>
+                      <p className="text-2xl sm:text-3xl font-black">= ₦{grandCashTotal.toLocaleString()}</p>
+                    </>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSaveDenominationRecord}
+                  className="w-full bg-amber-500 hover:bg-amber-600 text-emerald-950 font-black py-2.5 rounded-xl text-xs transition shadow-md"
+                >
+                  Save Denomination Record
+                </button>
+              </div>
+
+              {/* Reconciliation Summary */}
+              <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs space-y-4">
+                <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide font-bold">Reconciliation Summary</h3>
+
+                <div className="space-y-3 text-xs">
+                  <div className="flex items-center justify-between bg-slate-50 rounded-xl p-3">
+                    <span className="font-bold text-slate-600">TRF (auto, for {cashSheetDate})</span>
+                    <span className="font-black text-emerald-800">₦{trfAmountForDate.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl p-3">
+                    <span className="font-bold text-amber-800">CASH + TRF</span>
+                    <span className="font-black text-amber-900">₦{cashPlusTrf.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center justify-between bg-slate-50 rounded-xl p-3">
+                    <span className="font-bold text-slate-600">Today's Contribution (auto, for {cashSheetDate})</span>
+                    <span className="font-black text-slate-800">₦{todaysContributionForDate.toLocaleString()}</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Total Expenses</label>
+                    <input
+                      type="number"
+                      value={totalExpensesInput}
+                      onChange={e => setTotalExpensesInput(e.target.value)}
+                      placeholder="0"
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between bg-emerald-50 rounded-xl p-3">
+                    <span className="font-bold text-emerald-700">Summary Balance (Cash+TRF+Expenses)</span>
+                    <span className="font-black text-emerald-900">₦{summaryBalance.toLocaleString()}</span>
+                  </div>
+
+                  <div className={`flex items-center justify-between rounded-xl p-3 border ${
+                    accountCheck === 0 ? 'bg-emerald-50 border-emerald-300' :
+                    accountCheck < 0 ? 'bg-red-50 border-red-300' : 'bg-orange-50 border-orange-300'
+                  }`}>
+                    <span className={`font-black ${
+                      accountCheck === 0 ? 'text-emerald-700' : accountCheck < 0 ? 'text-red-700' : 'text-orange-700'
+                    }`}>
+                      {accountCheck === 0 ? '🟢 ACCOUNT BALANCED' : 'Account Check'}
+                    </span>
+                    {accountCheck !== 0 && (
+                      <span className={`font-black ${accountCheck < 0 ? 'text-red-800' : 'text-orange-800'}`}>
+                        {accountCheck < 0 ? '-' : '+'}₦{Math.abs(accountCheck).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Archive Folder</label>
+                    <input
+                      type="text"
+                      value={cashFolderName}
+                      onChange={e => setCashFolderName(e.target.value)}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSubmitCashRecord}
+                  className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3 rounded-xl transition shadow-md"
+                >
+                  Submit Record
+                </button>
+              </div>
+            </div>
+          )}
+
+          {cashSheetView === 'archive' && (
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
+              <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide mb-4 font-bold">Records Dashboard</h3>
+              {cashFolders.length === 0 ? (
+                <div className="text-center py-12 border border-dashed border-emerald-200 rounded-2xl text-slate-400 text-xs">No cash records archived yet.</div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {cashFolders.map(([folderName, records]) => (
+                    <div key={folderName} className="border border-emerald-100 rounded-2xl p-4 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        {editingFolderId === records[0].id ? (
+                          <div className="flex items-center gap-1 flex-1">
+                            <input
+                              type="text"
+                              value={editingFolderName}
+                              onChange={e => setEditingFolderName(e.target.value)}
+                              className="flex-1 border border-emerald-200 rounded-xl px-2 py-1 text-xs font-bold"
+                              autoFocus
+                            />
+                            <button type="button" onClick={() => handleRenameFolder(records[0].id, editingFolderName)} className="text-emerald-700"><CheckCircle2 className="w-4 h-4" /></button>
+                          </div>
+                        ) : (
+                          <>
+                            <span className="text-xs font-black text-emerald-900 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> {folderName}</span>
+                            <button
+                              type="button"
+                              onClick={() => { setEditingFolderId(records[0].id); setEditingFolderName(folderName); }}
+                              className="text-slate-400 hover:text-emerald-700"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500 font-semibold">{records.length} entr{records.length === 1 ? 'y' : 'ies'}</p>
+                      <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                        {records.map(r => (
+                          <div key={r.id} className="flex items-center justify-between text-[11px] bg-slate-50 rounded-xl p-2">
+                            <span className="font-semibold text-slate-600 flex items-center gap-1.5">
+                              {r.record_date}
+                              {r.record_type === 'denomination' && (
+                                <span className="text-[9px] font-black uppercase bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">Denomination</span>
+                              )}
+                            </span>
+                            <span className="font-black text-emerald-800">₦{r.grand_cash_total.toLocaleString()}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Record Sheet */}
+      {activeTab === 'records' && (
+        <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs animate-fade-in space-y-6">
+          <div>
+            <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5 font-bold">
+              <FileText className="w-5 h-5 text-emerald-700" />
+              Settlement Records Sheet
+            </h3>
+            <p className="text-xs text-slate-500 font-medium">View active contributors who are yet to withdraw and completed cycles.</p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="rounded-2xl border border-slate-100 overflow-hidden h-fit">
+              <button
+                type="button"
+                onClick={() => setActiveSaversOpen(v => !v)}
+                className="w-full flex items-center justify-between gap-3 p-3.5 bg-amber-50 hover:bg-amber-100/70 transition text-left"
+              >
+                <h4 className="font-extrabold text-amber-800 text-xs uppercase flex items-center gap-1 font-bold">
+                  <Clock className="w-4 h-4" />
+                  Active Savers (Yet to Withdraw this Cycle)
+                </h4>
+                <span className="flex items-center gap-2 text-[11px] shrink-0">
+                  <span className="rounded-full bg-amber-100 text-amber-800 border border-amber-200 px-2.5 py-0.5 font-black">
+                    {recordSheet.yetToWithdraw.length}
+                  </span>
+                  {activeSaversOpen ? <ChevronDown className="h-4 w-4 text-amber-800" /> : <ChevronRight className="h-4 w-4 text-amber-800" />}
+                </span>
+              </button>
+              {activeSaversOpen && (
+                <div className="p-3.5 bg-white space-y-3">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <input
+                      type="text"
+                      value={activeSaversSearch}
+                      onChange={(e) => setActiveSaversSearch(e.target.value)}
+                      placeholder="Search by customer name..."
+                      className="w-full pl-9 pr-3 py-2.5 border border-emerald-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                    />
+                  </div>
+                  <div className="overflow-x-auto border border-emerald-100 rounded-2xl">
+                    <table className="w-full text-left text-[11px] border-collapse">
+                      <thead>
+                        <tr className="bg-amber-50 text-amber-900 font-extrabold border-b border-amber-200">
+                          <th className="p-3">Customer</th>
+                          <th className="p-3">Pace</th>
+                          <th className="p-3">Days Marked</th>
+                          <th className="p-3 text-right">Active Balance</th>
+                          <th className="p-3 text-right">Uncollected Saved</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-emerald-50 bg-white text-slate-800 font-semibold">
+                        {(() => {
+                          const q = activeSaversSearch.trim().toLowerCase();
+                          const filtered = q ? recordSheet.yetToWithdraw.filter(c => c.name.toLowerCase().includes(q)) : recordSheet.yetToWithdraw;
+                          if (filtered.length === 0) {
+                            return (
+                              <tr>
+                                <td colSpan={5} className="p-3 text-center text-slate-400 font-medium">
+                                  {q ? 'No active savers match that search.' : 'No active savers yet.'}
+                                </td>
+                              </tr>
+                            );
+                          }
+                          return filtered.map(c => {
+                            const markedCount = (markedDays[c.id] || []).length;
+                            const balance = markedCount * c.daily_amount;
+                            const uncollectedTotal = sumCurrencyValues(
+                              (savedMonths[c.id] || [])
+                                .filter(m => m.status === 'saved' || m.status === 'requested')
+                                .map(m => m.total_amount)
+                            );
+                            const adjustmentTotal = sumCurrencyValues((balanceAdjustments[c.id] || []).map(a => Number(a.amount)));
+                            const uncollectedWithAdjustments = uncollectedTotal + adjustmentTotal;
+                            return (
+                              <tr key={c.id}>
+                                <td className="p-3 font-bold">{c.name}</td>
+                                <td className="p-3">₦{c.daily_amount.toLocaleString()}/day</td>
+                                <td className="p-3">{markedCount} / 32</td>
+                                <td className="p-3 text-right font-bold text-emerald-800">₦{balance.toLocaleString()}</td>
+                                <td className="p-3 text-right font-bold text-slate-700">
+                                  {uncollectedWithAdjustments !== 0 ? `₦${uncollectedWithAdjustments.toLocaleString()}` : '—'}
+                                  {adjustmentTotal !== 0 && (
+                                    <span className={`block text-[9px] font-bold ${adjustmentTotal < 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+                                      (adj. {adjustmentTotal > 0 ? '+' : ''}₦{adjustmentTotal.toLocaleString()})
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          });
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <h4 className="font-extrabold text-emerald-900 text-xs uppercase mb-3 flex items-center gap-1 font-bold">
+                <CheckCircle2 className="w-4 h-4" />
+                Settled Savers (Paid Out Logs)
+              </h4>
+              <div className="relative mb-3">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={settledSaversSearch}
+                  onChange={(e) => setSettledSaversSearch(e.target.value)}
+                  placeholder="Search by customer name..."
+                  className="w-full pl-9 pr-3 py-2.5 border border-emerald-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                />
+              </div>
+              {(() => {
+                const q = settledSaversSearch.trim().toLowerCase();
+                const groups = q
+                  ? recordSheet.completedPayoutsByMonth
+                      .map(group => ({ ...group, records: group.records.filter(r => (r.customer_name || '').toLowerCase().includes(q)) }))
+                      .filter(group => group.records.length > 0)
+                  : recordSheet.completedPayoutsByMonth;
+
+                if (groups.length === 0) {
+                  return (
+                    <div className="rounded-2xl border border-dashed border-emerald-200 p-4 text-center text-slate-400 text-xs">
+                      {q ? 'No settled savers match that search.' : 'No previous payouts completed.'}
+                    </div>
+                  );
+                }
+                return (
+                  <div className="space-y-2">
+                    {groups.map(group => {
+                      const isOpen = q ? true : expandedSettlementMonth === group.month;
+                      return (
+                        <div key={group.month} className="rounded-2xl border border-slate-100 overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedSettlementMonth(isOpen && !q ? null : group.month)}
+                            className="w-full flex items-center justify-between gap-3 p-3.5 bg-emerald-50/60 hover:bg-emerald-100/60 transition text-left"
+                          >
+                            <span className="text-xs font-black text-emerald-900">{group.month}</span>
+                            <span className="flex items-center gap-2 text-[11px]">
+                              <span className="rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 font-black">
+                                {group.records.length} settled
+                              </span>
+                              <span className="font-black text-emerald-800">₦{group.totalPayout.toLocaleString()}</span>
+                              {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                            </span>
+                          </button>
+                          {isOpen && (
+                            <div className="overflow-x-auto bg-white">
+                              <table className="w-full text-left text-[11px] border-collapse">
+                                <thead>
+                                  <tr className="bg-emerald-50 text-emerald-900 font-extrabold border-b border-emerald-200">
+                                    <th className="p-3">Customer</th>
+                                    <th className="p-3">Cleared Period</th>
+                                    <th className="p-3">Cleared Sum</th>
+                                    <th className="p-3 font-semibold text-emerald-800">Payout Issued</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-emerald-50 text-slate-800">
+                                  {group.records.map(p => (
+                                    <tr key={p.id}>
+                                      <td className="p-3 font-bold">{p.customer_name}</td>
+                                      <td className="p-3 font-extrabold text-amber-800 text-[10px]">{p.month_paid || 'N/A'}</td>
+                                      <td className="p-3 font-medium">₦{p.amount.toLocaleString()}</td>
+                                      <td className="p-3 font-bold text-emerald-800">₦{p.payout_amount.toLocaleString()}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+
+          {/* Monthly Financial Summary, folder-by-month (live current month + archive) */}
+          <div>
+            <h4 className="font-extrabold text-emerald-900 text-xs uppercase mb-3 flex items-center gap-1 font-bold">
+              <LayoutDashboard className="w-4 h-4" />
+              Monthly Financial Summary
+            </h4>
+            <div className="space-y-2">
+              {(() => {
+                const liveEntry = {
+                  key: currentPeriodKey,
+                  label: periodLabelFromKey(currentPeriodKey),
+                  isLive: true,
+                  total_contributions: liveMonth.contributions,
+                  total_profit: liveMonth.profit,
+                  total_expenses: liveMonth.expenses,
+                  total_payout: liveMonth.payout,
+                  remaining_balance: liveMonth.remaining,
+                  date_archived: null as string | null,
+                };
+                const archivedEntries = monthlySummaries.map(s => ({
+                  key: s.id,
+                  label: s.month_label,
+                  isLive: false,
+                  total_contributions: Number(s.total_contributions),
+                  total_profit: Number(s.total_profit),
+                  total_expenses: Number(s.total_expenses),
+                  total_payout: Number(s.total_payout),
+                  remaining_balance: Number(s.remaining_balance),
+                  date_archived: s.date_archived as string,
+                }));
+                const allMonths = [liveEntry, ...archivedEntries];
+                return allMonths.map(entry => {
+                  const isOpen = expandedFinancialMonth === entry.key;
+                  return (
+                    <div key={entry.key} className="rounded-2xl border border-slate-100 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedFinancialMonth(isOpen ? null : entry.key)}
+                        className="w-full flex items-center justify-between p-4 bg-slate-50/60 hover:bg-slate-100/60 transition"
+                      >
+                        <span className="text-xs font-black text-slate-800 flex items-center gap-2">
+                          {entry.label}
+                          {entry.isLive && (
+                            <span className="rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 text-[9px] font-black uppercase">Live</span>
+                          )}
+                        </span>
+                        {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                      </button>
+                      {isOpen && (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 bg-white text-sm">
+                          <div><span className="text-slate-600 block font-bold text-[10px] uppercase">Total Collected</span><span className="font-black text-emerald-900 text-base">₦{entry.total_contributions.toLocaleString()}</span></div>
+                          <div><span className="text-slate-600 block font-bold text-[10px] uppercase">Total Profit</span><span className="font-black text-emerald-900 text-base">₦{entry.total_profit.toLocaleString()}</span></div>
+                          <div><span className="text-slate-600 block font-bold text-[10px] uppercase">Total Expenses</span><span className="font-black text-slate-900 text-base">₦{entry.total_expenses.toLocaleString()}</span></div>
+                          <div><span className="text-slate-600 block font-bold text-[10px] uppercase">Total Paid Out</span><span className="font-black text-slate-900 text-base">₦{entry.total_payout.toLocaleString()}</span></div>
+                          <div><span className="text-slate-600 block font-bold text-[10px] uppercase">Remaining Balance</span><span className="font-black text-amber-800 text-base">₦{entry.remaining_balance.toLocaleString()}</span></div>
+                          <div><span className="text-slate-600 block font-bold text-[10px] uppercase">{entry.isLive ? 'Status' : 'Date Archived'}</span><span className="font-black text-slate-900 text-base">{entry.isLive ? 'Still accumulating' : new Date(entry.date_archived!).toLocaleDateString()}</span></div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'transactions' && (
+        <div className="space-y-6">
+          {/* Pending Deposits Queue */}
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs animate-fade-in text-slate-800">
+            <h3 className="text-md font-black text-amber-800 mb-2 uppercase tracking-wide flex items-center gap-1.5 font-bold font-bold">
+              <Clock className="w-5 h-5 text-amber-800" />
+              Pending Contributions Approval Queue ({pendingTransactions.length})
+            </h3>
+            <p className="text-xs text-slate-500 mb-4 font-medium">Customers submitted these manual deposits. Click Approve to split metrics and mark their tracking cards.</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-amber-50/50 text-amber-900 font-extrabold border-b border-amber-200">
+                    <th className="p-3">Submission Date</th>
+                    <th className="p-3">Customer Name</th>
+                    <th className="p-3">Channel</th>
+                    <th className="p-3">Submitted Amount</th>
+                    <th className="p-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-amber-100 bg-amber-50/10 font-medium">
+                  {pendingTransactions.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="p-4 text-center text-slate-400 font-medium">No pending submissions awaiting approval.</td>
+                    </tr>
+                  ) : (
+                    pendingTransactions.map(tx => (
+                      <tr key={tx.id} className="hover:bg-amber-50/30 transition text-slate-800">
+                        <td className="p-3 text-slate-500">{tx.date}</td>
+                        <td className="p-3 font-bold">
+                          {profiles.find(p => p.id === tx.customer_id)?.name || tx.customer_name || 'System User'}
+                        </td>
+                        <td className="p-3 font-medium text-slate-600">{tx.payment_method}</td>
+                        <td className="p-3 font-black text-emerald-800">₦{tx.amount.toLocaleString()}</td>
+                        <td className="p-3 text-right flex justify-end gap-1.5">
+                          <button 
+                            type="button"
+                            onClick={() => onApproveTransaction(tx.id)}
+                            className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-1 px-3 rounded-xl transition text-[10px] uppercase font-bold"
+                          >
+                            Approve & Confirm
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => onDeleteTransaction(tx.id)}
+                            className="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded-xl transition text-[10px] uppercase font-bold"
+                          >
+                            Decline
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Ledger of completed transactions */}
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs animate-fade-in text-slate-800">
+            <h3 className="text-sm font-bold text-emerald-950 mb-2 uppercase tracking-wide font-bold">Completed Transaction Ledger</h3>
+            <p className="text-xs text-slate-500 mb-4 font-medium">Deleting a confirmed log reverses split allocations, unmarking days directly on tracking grids.</p>
+            <div className="space-y-3">
+              {successfulTransactions.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-emerald-200 p-4 text-center text-slate-400">No completed contributions posted yet.</div>
+              ) : (
+                groupedTransactions.map(([dateKey, entries]) => {
+                  const isExpanded = expandedDates[dateKey] ?? true;
+                  const dayMetrics = getDayGroupMetrics(entries);
+                  return (
+                    <div key={dateKey} className="overflow-hidden rounded-2xl border border-emerald-100">
+                      <button
+                        type="button"
+                        onClick={() => toggleDateGroup(dateKey)}
+                        className="flex w-full items-center justify-between gap-3 bg-emerald-50/60 px-4 py-3 text-left text-sm font-black text-emerald-900"
+                      >
+                        <span className="whitespace-nowrap">{formatTransactionDateLabel(dateKey)}</span>
+                        <span className="flex flex-1 items-center justify-end gap-2 overflow-x-auto text-[10px] font-bold text-emerald-800 sm:text-[11px]">
+                          <span className="whitespace-nowrap rounded-full bg-white/70 px-2 py-0.5">
+                            Transfer: ₦{dayMetrics.transferAmount.toLocaleString()} (tx: {dayMetrics.transferCount})
+                          </span>
+                          <span className="whitespace-nowrap rounded-full bg-white/70 px-2 py-0.5">
+                            Cash: ₦{dayMetrics.cashAmount.toLocaleString()} (tx: {dayMetrics.cashCount})
+                          </span>
+                          <span className="whitespace-nowrap rounded-full bg-emerald-900 px-2 py-0.5 text-white">
+                            Total: ₦{dayMetrics.totalAmount.toLocaleString()} (tx: {dayMetrics.totalCount})
+                          </span>
+                          {isExpanded ? <ChevronDown className="h-4 w-4 flex-shrink-0" /> : <ChevronRight className="h-4 w-4 flex-shrink-0" />}
+                        </span>
+                      </button>
+                      {isExpanded && (
+                        <div className="overflow-x-auto bg-white">
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead>
+                              <tr className="bg-emerald-50/50 text-emerald-900 font-extrabold border-b border-emerald-200">
+                                <th className="p-3">Customer</th>
+                                <th className="p-3">Payment Method</th>
+                                <th className="p-3">Posted Amount</th>
+                                <th className="p-3">Auto-split metrics</th>
+                                <th className="p-3 text-right">Reverse</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-emerald-50">
+                              {entries.map(tx => (
+                                <tr key={tx.id} className="hover:bg-emerald-50/20 transition">
+                                  <td className="p-3 font-bold text-slate-800">
+                                    {profiles.find(p => p.id === tx.customer_id)?.name || tx.customer_name || 'System User'}
+                                  </td>
+                                  <td className="p-3 font-medium text-slate-600">{tx.payment_method}</td>
+                                  <td className="p-3 font-bold text-emerald-800">₦{Number(tx.amount || 0).toLocaleString()}</td>
+                                  <td className="p-3">
+                                    <span className="bg-amber-100 text-amber-950 font-black px-2.5 py-0.5 rounded">
+                                      Days {tx.start_day} - {tx.end_day} ({tx.days_covered} days marked)
+                                    </span>
+                                  </td>
+                                  <td className="p-3 text-right">
+                                    <button 
+                                      type="button"
+                                      onClick={() => openDeleteConfirmation(tx)}
+                                      className="p-1.5 text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200"
+                                      title="Delete and reverse auto-split"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Loan Management tab */}
+      {activeTab === 'loans' && (() => {
+        const pendingRequests = loanRequests.filter(r => r.status === 'Pending Approval');
+        const activeLoans = loans.filter(l => l.status === 'Active Loan');
+        const completedLoans = loans.filter(l => l.status === 'Loan Cleared');
+        const lookupCustomer = (id: string) => profiles.find(p => p.id === id);
+        const lookupBranch = (customerId: string) => branches.find(b => b.id === lookupCustomer(customerId)?.branch_id)?.name || '—';
+
+        const filteredHistory = loanHistory.filter((h: any) => {
+          if (loanHistoryStatusFilter !== '' && h.event_type !== loanHistoryStatusFilter) return false;
+          if (loanHistoryBranchFilter !== '' && lookupCustomer(h.customer_id)?.branch_id !== loanHistoryBranchFilter) return false;
+          if (loanHistoryMonthFilter !== '') {
+            const d = new Date(h.created_at);
+            const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            if (ym !== loanHistoryMonthFilter) return false;
+          }
+          return true;
+        });
+
+        const assignTarget = assignLoanCustomerId ? lookupCustomer(assignLoanCustomerId) : null;
+        const assignEligibility = assignTarget ? computeLoanEligibility(assignTarget.daily_amount) : null;
+        const assignMarked = assignTarget ? (markedDays[assignTarget.id] || []) : [];
+        const assignSavingsTotal = assignMarked.reduce((s, d) => s + d.amount, 0);
+        const assignBlocked = assignTarget && (assignTarget.loan_status === 'Active Loan' || assignTarget.loan_status === 'Pending Approval');
+        const assignAmountNum = Number(assignLoanAmount || 0);
+        const assignRepayment = assignEligibility ? sumCurrencyValues([assignAmountNum + assignEligibility.serviceCharge]) : 0;
+
+        return (
+          <div className="space-y-6 animate-fade-in">
+            <div className="flex flex-wrap justify-between items-center gap-3">
+              <div className="flex gap-2">
+                {(['pending', 'active', 'completed', 'history'] as const).map(v => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setLoanSubView(v)}
+                    className={`px-3 py-1.5 rounded-xl text-[11px] font-black uppercase transition ${loanSubView === v ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'}`}
+                  >
+                    {v === 'pending' ? `Pending Requests (${pendingRequests.length})` : v === 'active' ? `Active Loans (${activeLoans.length})` : v === 'completed' ? `Completed Loans (${completedLoans.length})` : 'Loan History'}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => { setShowAssignLoanModal(true); setAssignLoanCustomerId(''); setAssignLoanAmount(''); setAssignLoanRemarks(''); setAssignLoanDate(new Date().toISOString().slice(0, 10)); }}
+                className="bg-amber-500 hover:bg-amber-600 text-emerald-950 font-black px-4 py-2 rounded-xl text-xs uppercase"
+              >
+                Assign Loan
+              </button>
+            </div>
+
+            {loanSubView === 'pending' && (
+              <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs overflow-x-auto">
+                {pendingRequests.length === 0 ? (
+                  <p className="text-xs text-slate-400 py-6 text-center">No pending loan requests.</p>
+                ) : (
+                  <table className="w-full text-left text-xs">
+                    <thead><tr className="text-slate-500 font-bold border-b border-slate-100 text-[10px] uppercase tracking-wide"><th className="p-2">Customer</th><th className="p-2">Phone</th><th className="p-2">Branch</th><th className="p-2">Daily</th><th className="p-2">Loan Amount</th><th className="p-2">Repayment</th><th className="p-2">Requested</th><th className="p-2 text-right">Actions</th></tr></thead>
+                    <tbody className="divide-y">
+                      {pendingRequests.map(r => {
+                        const c = lookupCustomer(r.customer_id);
+                        return (
+                          <tr key={r.id}>
+                            <td className="p-2 font-bold">{c?.name || '—'}</td>
+                            <td className="p-2">{c?.phone || '—'}</td>
+                            <td className="p-2">{lookupBranch(r.customer_id)}</td>
+                            <td className="p-2">₦{r.daily_amount_snapshot.toLocaleString()}</td>
+                            <td className="p-2 font-bold">₦{r.loan_amount.toLocaleString()}</td>
+                            <td className="p-2">₦{r.repayment_amount.toLocaleString()}</td>
+                            <td className="p-2">{new Date(r.requested_at).toLocaleDateString()}</td>
+                            <td className="p-2 text-right space-x-1.5 whitespace-nowrap">
+                              <button type="button" onClick={() => onApproveLoanRequest(r.id)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1 rounded-xl text-[10px] uppercase">Approve</button>
+                              <button type="button" onClick={() => { setRejectingRequestId(r.id); setRejectionReason(''); }} className="bg-red-100 hover:bg-red-200 text-red-800 font-bold px-2.5 py-1 rounded-xl text-[10px] uppercase">Reject</button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+
+            {loanSubView === 'active' && (
+              <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs overflow-x-auto">
+                {activeLoans.length === 0 ? (
+                  <p className="text-xs text-slate-400 py-6 text-center">No active loans.</p>
+                ) : (
+                  <table className="w-full text-left text-xs">
+                    <thead><tr className="text-slate-500 font-bold border-b border-slate-100 text-[10px] uppercase tracking-wide"><th className="p-2">Customer</th><th className="p-2">Loan</th><th className="p-2">Repayment</th><th className="p-2">Paid</th><th className="p-2">Remaining</th><th className="p-2">Days</th><th className="p-2">Start</th><th className="p-2">Remaining Days</th></tr></thead>
+                    <tbody className="divide-y">
+                      {activeLoans.map(l => (
+                        <tr key={l.id}>
+                          <td className="p-2 font-bold">{lookupCustomer(l.customer_id)?.name || '—'}</td>
+                          <td className="p-2">₦{l.loan_amount.toLocaleString()}</td>
+                          <td className="p-2">₦{l.repayment_amount.toLocaleString()}</td>
+                          <td className="p-2">₦{l.amount_repaid.toLocaleString()}</td>
+                          <td className="p-2 font-bold text-red-600">₦{l.amount_remaining.toLocaleString()}</td>
+                          <td className="p-2">{l.days_repaid}/{l.total_days}</td>
+                          <td className="p-2">{l.date_issued ? new Date(l.date_issued).toLocaleDateString() : '—'}</td>
+                          <td className="p-2">{Math.max(0, l.total_days - l.days_repaid)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+
+            {loanSubView === 'completed' && (
+              <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs overflow-x-auto">
+                {completedLoans.length === 0 ? (
+                  <p className="text-xs text-slate-400 py-6 text-center">No completed loans yet.</p>
+                ) : (
+                  <table className="w-full text-left text-xs">
+                    <thead><tr className="text-slate-500 font-bold border-b border-slate-100 text-[10px] uppercase tracking-wide"><th className="p-2">Customer</th><th className="p-2">Loan Amount</th><th className="p-2">Approved</th><th className="p-2">Completed</th><th className="p-2">Service Charge</th><th className="p-2">Total Repaid</th></tr></thead>
+                    <tbody className="divide-y">
+                      {completedLoans.map(l => (
+                        <tr key={l.id}>
+                          <td className="p-2 font-bold">{lookupCustomer(l.customer_id)?.name || '—'}</td>
+                          <td className="p-2">₦{l.loan_amount.toLocaleString()}</td>
+                          <td className="p-2">{l.date_issued ? new Date(l.date_issued).toLocaleDateString() : '—'}</td>
+                          <td className="p-2">{l.completed_at ? new Date(l.completed_at).toLocaleDateString() : '—'}</td>
+                          <td className="p-2">₦{l.service_charge.toLocaleString()}</td>
+                          <td className="p-2 font-bold text-emerald-700">₦{l.amount_repaid.toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+
+            {loanSubView === 'history' && (
+              <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <input type="month" value={loanHistoryMonthFilter} onChange={e => setLoanHistoryMonthFilter(e.target.value)} className="border rounded-xl px-2 py-1 text-xs" />
+                  <select value={loanHistoryBranchFilter} onChange={e => setLoanHistoryBranchFilter(e.target.value)} className="border rounded-xl px-2 py-1 text-xs font-bold">
+                    <option value="">All Branches</option>
+                    {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                  <select value={loanHistoryStatusFilter} onChange={e => setLoanHistoryStatusFilter(e.target.value)} className="border rounded-xl px-2 py-1 text-xs font-bold">
+                    <option value="">All Events</option>
+                    <option value="Requested">Requested</option>
+                    <option value="Approved">Approved</option>
+                    <option value="Rejected">Rejected</option>
+                    <option value="Assigned">Assigned</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                </div>
+                <div className="overflow-x-auto max-h-96 overflow-y-auto">
+                  {filteredHistory.length === 0 ? (
+                    <p className="text-xs text-slate-400 py-6 text-center">No loan history matches these filters.</p>
+                  ) : (
+                    <table className="w-full text-left text-xs">
+                      <thead><tr className="text-slate-500 font-bold border-b border-slate-100 text-[10px] uppercase tracking-wide"><th className="p-2">Date</th><th className="p-2">Customer</th><th className="p-2">Event</th><th className="p-2">Loan Amount</th><th className="p-2">Repayment</th></tr></thead>
+                      <tbody className="divide-y">
+                        {filteredHistory.map((h: any) => (
+                          <tr key={h.id}>
+                            <td className="p-2">{new Date(h.created_at).toLocaleDateString()}</td>
+                            <td className="p-2 font-bold">{lookupCustomer(h.customer_id)?.name || '—'}</td>
+                            <td className="p-2">{h.event_type}</td>
+                            <td className="p-2">{h.loan_amount != null ? `₦${Number(h.loan_amount).toLocaleString()}` : '—'}</td>
+                            <td className="p-2">{h.repayment_amount != null ? `₦${Number(h.repayment_amount).toLocaleString()}` : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {rejectingRequestId && (
+              <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setRejectingRequestId(null)}>
+                <div className="bg-white rounded-2xl p-5 max-w-sm w-full" onClick={e => e.stopPropagation()}>
+                  <h4 className="text-sm font-black text-emerald-950 mb-3">Reject Loan Request</h4>
+                  <textarea value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} placeholder="Reason (optional)" className="w-full border rounded-xl px-3 py-2 text-xs mb-3" rows={3} />
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setRejectingRequestId(null)} className="flex-1 bg-slate-100 text-slate-700 font-bold py-2 rounded-xl text-xs">Cancel</button>
+                    <button type="button" onClick={() => { onRejectLoanRequest(rejectingRequestId, rejectionReason); setRejectingRequestId(null); }} className="flex-1 bg-red-600 text-white font-bold py-2 rounded-xl text-xs">Confirm Reject</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {showAssignLoanModal && (
+              <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setShowAssignLoanModal(false)}>
+                <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+                  <h3 className="text-sm font-bold text-emerald-950 mb-3">Assign Loan</h3>
+                  <SearchableCustomerSelect
+                    customers={profiles.filter(p => p.role === 'Customer')}
+                    selectedId={assignLoanCustomerId}
+                    onSelect={setAssignLoanCustomerId}
+                  />
+                  {assignTarget && assignEligibility && (
+                    <div className="mt-3 space-y-1.5 text-xs font-semibold bg-emerald-50/50 rounded-2xl p-3">
+                      <p><span className="text-slate-500">Branch:</span> {lookupBranch(assignTarget.id)}</p>
+                      <p><span className="text-slate-500">Daily Contribution:</span> ₦{assignTarget.daily_amount.toLocaleString()}</p>
+                      <p><span className="text-slate-500">32-Day Savings Value:</span> ₦{assignSavingsTotal.toLocaleString()}</p>
+                      <p><span className="text-slate-500">Maximum Loan Eligible:</span> ₦{assignEligibility.maxLoan.toLocaleString()}</p>
+                      <p><span className="text-slate-500">Current Loan Status:</span> {assignTarget.loan_status}</p>
+                      <p><span className="text-slate-500">Customer Status:</span> {assignTarget.is_active ? 'Active' : 'Inactive'}</p>
+                      {assignBlocked && (
+                        <p className="text-red-600 font-bold">This customer already has an active or pending loan.</p>
+                      )}
+                    </div>
+                  )}
+                  {assignTarget && !assignBlocked && (
+                    <div className="mt-3 space-y-2">
+                      <label className="text-[10px] font-black uppercase text-slate-500">Approved Loan Amount</label>
+                      <input type="number" value={assignLoanAmount} onChange={e => setAssignLoanAmount(e.target.value)} max={assignEligibility?.maxLoan} placeholder={`Up to ₦${assignEligibility?.maxLoan.toLocaleString()}`} className="w-full border rounded-xl px-3 py-2 text-xs" />
+                      <label className="text-[10px] font-black uppercase text-slate-500">Disbursement Date</label>
+                      <input type="date" value={assignLoanDate} onChange={e => setAssignLoanDate(e.target.value)} className="w-full border rounded-xl px-3 py-2 text-xs" />
+                      <label className="text-[10px] font-black uppercase text-slate-500">Remarks</label>
+                      <textarea value={assignLoanRemarks} onChange={e => setAssignLoanRemarks(e.target.value)} className="w-full border rounded-xl px-3 py-2 text-xs" rows={2} />
+                      {assignAmountNum > 0 && (
+                        <p className="text-xs font-black text-emerald-800">Repayment Amount: ₦{assignRepayment.toLocaleString()}</p>
+                      )}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    disabled={!assignTarget || !!assignBlocked || assignAmountNum <= 0 || (assignEligibility ? assignAmountNum > assignEligibility.maxLoan : true)}
+                    onClick={() => { onAssignLoan(assignLoanCustomerId, assignAmountNum, assignLoanRemarks, assignLoanDate); setShowAssignLoanModal(false); }}
+                    className="w-full mt-4 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black py-2.5 rounded-xl text-xs uppercase"
+                  >
+                    Assign Loan
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Gbagede OJA marketplace management */}
+      {activeTab === 'oja' && (
+        <AdminOjaPanel toast={(m, t) => triggerToast?.(m, t)} />
+      )}
+
+      {/* Monthly Savings Management tab */}
+      {activeTab === 'monthly-savings' && (
+        <MonthlySavingsAdminTab
+          monthlySavingsPlans={monthlySavingsPlans}
+          monthlySavingsMonths={monthlySavingsMonths}
+          profiles={profiles}
+          branches={branches}
+          customers={customers}
+          msSelectedCustomer={msSelectedCustomer}
+          setMsSelectedCustomer={setMsSelectedCustomer}
+          msSelectedYear={msSelectedYear}
+          setMsSelectedYear={setMsSelectedYear}
+          msDepositMonth={msDepositMonth}
+          setMsDepositMonth={setMsDepositMonth}
+          msDepositAmount={msDepositAmount}
+          setMsDepositAmount={setMsDepositAmount}
+          msDepositMethod={msDepositMethod}
+          setMsDepositMethod={setMsDepositMethod}
+          msShowDepositModal={msShowDepositModal}
+          setMsShowDepositModal={setMsShowDepositModal}
+          onEnrollMonthlySavings={onEnrollMonthlySavings}
+          onRecordMonthlyDeposit={onRecordMonthlyDeposit}
+        />
+      )}
+
+
+      {/* Corporate Profit & Earnings Reporting tab */}
+      {activeTab === 'reports' && (
+        <div className="space-y-6 animate-fade-in">
+          {/* Monthly Financial Summary Dashboard */}
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs space-y-4">
+            <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5 font-bold">
+              <LayoutDashboard className="w-5 h-5 text-emerald-700" />
+              Monthly Financial Summary — {periodLabelFromKey(currentPeriodKey)}
+            </h3>
+            <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+              {[
+                { label: 'Total Contributions', value: liveMonth.contributions, color: 'emerald' },
+                { label: 'Total Profit', value: liveMonth.profit, color: 'emerald' },
+                { label: 'Total Expenses', value: liveMonth.expenses, color: 'slate' },
+                { label: 'Total Payout', value: liveMonth.payout, color: 'slate' },
+                { label: 'Remaining Balance', value: liveMonth.remaining, color: 'amber' },
+                { label: 'Outstanding Customer Balances', value: outstandingBalanceByMonth.grandTotal, color: 'blue' },
+              ].map(card => {
+                const isPayout = card.label === 'Total Payout';
+                const isExpenses = card.label === 'Total Expenses';
+                const isOutstanding = card.label === 'Outstanding Customer Balances';
+                const clickable = isPayout || isExpenses || isOutstanding;
+                const Tag = clickable ? 'button' : 'div';
+                return (
+                  <Tag
+                    key={card.label}
+                    {...(clickable ? {
+                      type: 'button',
+                      onClick: () => {
+                        if (isPayout) { setShowPayoutDrilldown(true); setPayoutDrilldownView(null); }
+                        if (isExpenses) { setShowExpensesDrilldown(true); }
+                        if (isOutstanding) { setShowOutstandingBalanceDrilldown(true); }
+                      },
+                    } : {})}
+                    className={`bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-4 text-left w-full ${clickable ? 'hover:border-emerald-400 transition-all duration-200 focus:outline-none' : ''}`}
+                  >
+                    <p className="text-[11px] font-black uppercase tracking-wide text-emerald-800">{card.label}</p>
+                    <p className="text-xl sm:text-2xl font-black text-emerald-950 mt-1">₦{card.value.toLocaleString()}</p>
+                    {clickable && <p className="text-[9px] text-emerald-700 font-bold underline mt-0.5">Click for details</p>}
+                  </Tag>
+                );
+              })}
+            </div>
+          </div>
+
+          {showOutstandingBalanceDrilldown && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4">
+              <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-6 border border-emerald-100 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto">
+                <div className="flex justify-between items-center border-b border-emerald-50 pb-3">
+                  <h3 className="text-lg font-black text-emerald-950 uppercase tracking-wide">Outstanding Customer Balances</h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowOutstandingBalanceDrilldown(false)}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <p className="text-xs text-slate-500 -mt-2">Money customers have saved but haven't been paid out for yet, broken down by which month's savings cycle it came from.</p>
+
+                <div className="rounded-2xl bg-blue-50 border border-blue-200 p-4 text-center">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-blue-700">Total Outstanding, All Months</p>
+                  <p className="text-2xl font-black text-blue-900 mt-1">₦{outstandingBalanceByMonth.grandTotal.toLocaleString()}</p>
+                </div>
+
+                {outstandingBalanceByMonth.rows.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-slate-400 text-xs">No outstanding customer balances right now.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {outstandingBalanceByMonth.rows.map(row => (
+                      <div key={row.periodKey} className="flex items-center justify-between rounded-2xl border border-slate-100 p-3.5 bg-slate-50/60">
+                        <span className="text-xs font-black text-slate-800">{row.month}</span>
+                        <span className="text-sm font-black text-blue-800">₦{row.total.toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {nextMonth.contributions > 0 && (
+            <div className="bg-amber-50 p-5 sm:p-6 rounded-3xl border-2 border-amber-200 shadow-xs space-y-4">
+              <h3 className="text-sm font-bold text-amber-900 uppercase tracking-wide flex items-center gap-1.5">
+                <LayoutDashboard className="w-5 h-5 text-amber-700" />
+                {periodLabelFromKey(nextMonthPeriodKey)} — In Progress (Next Month)
+              </h3>
+              <p className="text-[11px] text-amber-700 -mt-2">
+                Some customers have already started this cycle (e.g. after an early payout). Kept separate from {periodLabelFromKey(currentPeriodKey)}'s totals above until the calendar actually reaches {periodLabelFromKey(nextMonthPeriodKey)}.
+              </p>
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="bg-white border-2 border-amber-200 rounded-2xl p-4">
+                  <p className="text-[11px] font-black uppercase tracking-wide text-amber-800">Contributions</p>
+                  <p className="text-xl sm:text-2xl font-black text-amber-950 mt-1">₦{nextMonth.contributions.toLocaleString()}</p>
+                </div>
+                <div className="bg-white border-2 border-amber-200 rounded-2xl p-4">
+                  <p className="text-[11px] font-black uppercase tracking-wide text-amber-800">Profit</p>
+                  <p className="text-xl sm:text-2xl font-black text-amber-950 mt-1">₦{nextMonth.profit.toLocaleString()}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showPayoutDrilldown && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-6 border border-emerald-100 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto">
+                <div className="flex justify-between items-center border-b border-emerald-50 pb-3">
+                  <h3 className="text-lg font-black text-emerald-950 uppercase tracking-wide">
+                    Total Payout Breakdown — {periodLabelFromKey(currentPeriodKey)}
+                  </h3>
+                  <button type="button" onClick={() => { setShowPayoutDrilldown(false); setPayoutDrilldownView(null); }} className="p-1 text-slate-400 hover:text-slate-600 font-bold">✕</button>
+                </div>
+
+                <p className="text-xs text-slate-600">
+                  <span className="font-black text-slate-900">{paidCustomerIdsThisMonth.length}</span> customer(s) paid out this month.
+                </p>
+
+                <div className="space-y-3 text-xs">
+                  <div className="rounded-2xl border border-emerald-100 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setPayoutDrilldownView(v => v === 'on-loan' ? null : 'on-loan')}
+                      className="w-full flex items-center justify-between p-3 bg-emerald-50/40 hover:bg-emerald-50 text-left"
+                    >
+                      <span className="font-black text-emerald-900">On Loan</span>
+                      <span className="font-black text-emerald-800">{paidOnLoanIds.length} {payoutDrilldownView === 'on-loan' ? '▲' : '▼'}</span>
+                    </button>
+                    {payoutDrilldownView === 'on-loan' && (
+                      <div className="max-h-56 overflow-y-auto divide-y divide-emerald-50">
+                        {paidOnLoanIds.length === 0 && <p className="p-3 text-slate-500">None of the customers paid out this month are currently on a loan.</p>}
+                        {paidOnLoanIds.map(id => (
+                          <div key={id} className="p-2.5 flex justify-between items-center">
+                            <span className="font-bold text-slate-800">{paidCustomerLabel(id)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-100 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setPayoutDrilldownView(v => v === 'not-on-loan' ? null : 'not-on-loan')}
+                      className="w-full flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 text-left"
+                    >
+                      <span className="font-black text-slate-800">Not on Loan</span>
+                      <span className="font-black text-slate-700">{paidNotOnLoanIds.length} {payoutDrilldownView === 'not-on-loan' ? '▲' : '▼'}</span>
+                    </button>
+                    {payoutDrilldownView === 'not-on-loan' && (
+                      <div className="max-h-56 overflow-y-auto divide-y divide-slate-100">
+                        {paidNotOnLoanIds.length === 0 && <p className="p-3 text-slate-500">None.</p>}
+                        {paidNotOnLoanIds.map(id => (
+                          <div key={id} className="p-2.5 flex justify-between items-center">
+                            <span className="font-bold text-slate-800">{paidCustomerLabel(id)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showExpensesDrilldown && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-6 border border-emerald-100 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto">
+                <div className="flex justify-between items-center border-b border-emerald-50 pb-3">
+                  <h3 className="text-lg font-black text-emerald-950 uppercase tracking-wide">
+                    Total Expenses — {periodLabelFromKey(currentPeriodKey)}
+                  </h3>
+                  <button type="button" onClick={() => setShowExpensesDrilldown(false)} className="p-1 text-slate-400 hover:text-slate-600 font-bold">✕</button>
+                </div>
+
+                <div className="divide-y divide-slate-100 text-xs">
+                  {currentMonthExpenseRecords.length === 0 && currentMonthManualExpenses.length === 0 && <p className="p-3 text-slate-500">No expense entries recorded this month.</p>}
+                  {currentMonthExpenseRecords.map(r => (
+                    <div key={r.id} className="py-2.5">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-slate-800">{r.folder_name || r.record_date}</span>
+                        <span className="font-black text-slate-900">₦{Number(r.total_expenses).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-[10px] text-slate-500 mt-0.5">
+                        <span>{r.record_date}</span>
+                        {r.notes && <span className="italic">{r.notes}</span>}
+                      </div>
+                    </div>
+                  ))}
+                  {currentMonthManualExpenses.map(e => (
+                    <div key={e.id} className="py-2.5">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-slate-800">{e.description || 'Notepad entry'}</span>
+                        <span className="font-black text-slate-900">₦{Number(e.amount).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-[10px] text-slate-500 mt-0.5">
+                        <span>{e.expense_date}</span>
+                        <span className="italic text-emerald-600">from Quick Notepad</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="border-t border-emerald-50 pt-3 flex justify-between items-center">
+                  <span className="text-xs text-slate-500 font-bold">Total:</span>
+                  <span className="text-lg font-black text-slate-900">₦{liveMonth.expenses.toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Loan Reports */}
+          {(() => {
+            const totalLoansIssued = loans.length;
+            const pendingLoanRequests = loanRequests.filter(r => r.status === 'Pending Approval').length;
+            const activeLoansCount = loans.filter(l => l.status === 'Active Loan').length;
+            const completedLoansCount = loans.filter(l => l.status === 'Loan Cleared').length;
+            const outstandingLoanBalance = sumCurrencyValues(loans.filter(l => l.status === 'Active Loan').map(l => l.amount_remaining));
+            const totalLoanRepayments = sumCurrencyValues(loans.map(l => l.amount_repaid));
+
+            const now = new Date();
+            const monthlyLoans = loans.filter(l => {
+              if (!l.date_issued) return false;
+              const d = new Date(l.date_issued);
+              return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+            });
+            const monthlyLoanAmount = sumCurrencyValues(monthlyLoans.map(l => l.loan_amount));
+
+            const branchSummary = branches.map(b => {
+              const branchCustomerIds = profiles.filter(p => p.branch_id === b.id).map(p => p.id);
+              const branchLoans = loans.filter(l => branchCustomerIds.includes(l.customer_id));
+              return { name: b.name, count: branchLoans.length, total: sumCurrencyValues(branchLoans.map(l => l.loan_amount)) };
+            }).filter(b => b.count > 0);
+
+            return (
+              <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs space-y-4">
+                <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5 font-bold">
+                  <LayoutDashboard className="w-5 h-5 text-emerald-700" />
+                  Loan Reports
+                </h3>
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                  {[
+                    { label: 'Total Loans Issued', value: totalLoansIssued, isCurrency: false },
+                    { label: 'Pending Loan Requests', value: pendingLoanRequests, isCurrency: false },
+                    { label: 'Active Loans', value: activeLoansCount, isCurrency: false },
+                    { label: 'Completed Loans', value: completedLoansCount, isCurrency: false },
+                    { label: 'Outstanding Loan Balance', value: outstandingLoanBalance, isCurrency: true },
+                    { label: 'Total Loan Repayments', value: totalLoanRepayments, isCurrency: true },
+                  ].map(card => (
+                    <div key={card.label} className="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-4">
+                      <p className="text-[11px] font-black uppercase tracking-wide text-emerald-800">{card.label}</p>
+                      <p className="text-xl sm:text-2xl font-black text-emerald-950 mt-1">{card.isCurrency ? `₦${card.value.toLocaleString()}` : card.value}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="grid sm:grid-cols-2 gap-4 pt-2">
+                  <div>
+                    <p className="text-[11px] font-black uppercase text-slate-500 mb-1.5">Monthly Loan Summary — {now.toLocaleString('default', { month: 'long', year: 'numeric' })}</p>
+                    <p className="text-xs font-semibold">{monthlyLoans.length} loan(s) issued, ₦{monthlyLoanAmount.toLocaleString()} total</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-black uppercase text-slate-500 mb-1.5">Branch Loan Summary</p>
+                    {branchSummary.length === 0 ? (
+                      <p className="text-xs text-slate-400">No loan activity by branch yet.</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {branchSummary.map(b => (
+                          <p key={b.name} className="text-xs font-semibold">{b.name}: {b.count} loan(s), ₦{b.total.toLocaleString()}</p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Part 5: Monthly Payout Card */}
+          <div className="bg-emerald-950 text-white p-6 rounded-3xl shadow-sm">
+            <p className="text-[10px] uppercase font-black tracking-wider text-emerald-200">Monthly Payout (Contributions − Profit)</p>
+            <p className="text-3xl font-black mt-1 text-[#166534]">₦{monthlyPayoutCard.toLocaleString()}</p>
+            <p className="text-[11px] text-emerald-300 mt-1.5">Resets automatically at the start of each new month.</p>
+          </div>
+
+          {/* Monthly Archive */}
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
+            <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide mb-1 font-bold">Monthly Archive</h3>
+            <p className="text-xs text-slate-500 mb-4 font-medium">Previous months archive automatically once they end. The current month always stays live above.</p>
+            {monthlySummaries.length === 0 ? (
+              <div className="text-center py-8 border border-dashed border-emerald-200 rounded-2xl text-slate-400 text-xs">No archived months yet.</div>
+            ) : (
+              <div className="space-y-2">
+                {monthlySummaries.map(s => {
+                  const isOpen = expandedArchiveMonth === s.id;
+                  return (
+                    <div key={s.id} className="border border-slate-100 rounded-2xl overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedArchiveMonth(isOpen ? null : s.id)}
+                        className="w-full flex items-center justify-between p-4 bg-slate-50/60 hover:bg-slate-100/60 transition"
+                      >
+                        <span className="text-xs font-black text-slate-800">{s.month_label}</span>
+                        {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                      </button>
+                      {isOpen && (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 bg-white text-sm">
+                          <div><span className="text-slate-600 block font-bold text-[10px] uppercase">Total Collected</span><span className="font-black text-emerald-900 text-base">₦{Number(s.total_contributions).toLocaleString()}</span></div>
+                          <div><span className="text-slate-600 block font-bold text-[10px] uppercase">Total Profit</span><span className="font-black text-emerald-900 text-base">₦{Number(s.total_profit).toLocaleString()}</span></div>
+                          <div><span className="text-slate-600 block font-bold text-[10px] uppercase">Total Expenses</span><span className="font-black text-slate-900 text-base">₦{Number(s.total_expenses).toLocaleString()}</span></div>
+                          <div><span className="text-slate-600 block font-bold text-[10px] uppercase">Total Paid Out</span><span className="font-black text-slate-900 text-base">₦{Number(s.total_payout).toLocaleString()}</span></div>
+                          <div><span className="text-slate-600 block font-bold text-[10px] uppercase">Remaining Balance</span><span className="font-black text-amber-800 text-base">₦{Number(s.remaining_balance).toLocaleString()}</span></div>
+                          <div><span className="text-slate-600 block font-bold text-[10px] uppercase">Date Archived</span><span className="font-black text-slate-900 text-base">{new Date(s.date_archived).toLocaleDateString()}</span></div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+        <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs animate-fade-in space-y-6">
+          <div>
+            <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5 font-bold">
+              <FileText className="w-5 h-5 text-emerald-700" />
+              Monthly Revenue & Profit Report
+            </h3>
+            <p className="text-xs text-slate-500 font-medium">This calculates company profit generated monthly based on active customers (where 1 day's contribution is removed as company profit per active customer).</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-emerald-50/40 p-6 rounded-2xl border border-emerald-100 text-center flex flex-col justify-center space-y-2">
+              <p className="text-[11px] text-slate-500 font-bold uppercase tracking-wide font-bold">Monthly Profit (1-Day Fee Per Paid Customer)</p>
+              <p className="text-4xl font-black text-emerald-800 font-bold">
+                ₦{customers.filter(c => c.is_active && stats.monthlyTransactions.some(tx => tx.customer_id === c.id && tx.status === 'Successful')).reduce((sum, c) => sum + c.daily_amount, 0).toLocaleString()}
+              </p>
+              <p className="text-[10px] text-slate-400 font-semibold text-slate-500">
+                Sum of daily contribution amounts for {customers.filter(c => c.is_active && stats.monthlyTransactions.some(tx => tx.customer_id === c.id && tx.status === 'Successful')).length} customers who paid this month.
+              </p>
+            </div>
+
+            <div className="bg-white p-6 border border-emerald-100 rounded-2xl space-y-4">
+              <h4 className="font-extrabold text-xs uppercase text-slate-700 border-b pb-2 font-bold">Paid Customers List & Profit Contributions</h4>
+              <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+                {customers.filter(c => c.is_active && stats.monthlyTransactions.some(tx => tx.customer_id === c.id && tx.status === 'Successful')).map(c => (
+                  <div key={c.id} className="flex justify-between text-xs p-2.5 bg-slate-50 rounded-xl font-semibold">
+                    <span className="font-semibold text-slate-800">{c.name}</span>
+                    <span className="font-bold text-emerald-800">₦{c.daily_amount.toLocaleString()}</span>
+                  </div>
+                ))}
+                {customers.filter(c => c.is_active && stats.monthlyTransactions.some(tx => tx.customer_id === c.id && tx.status === 'Successful')).length === 0 && (
+                  <p className="text-xs text-slate-400 text-center py-4 font-medium">No paid customers recorded in this month yet.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+        </div>
+      )}
+
+      {activeTab === 'settings' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in text-slate-800">
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
+            <h3 className="text-sm font-bold text-emerald-950 mb-1 uppercase tracking-wide flex items-center gap-1.5 font-bold">
+              <Settings className="w-5 h-5 text-emerald-700" />
+              Support Settings Control Panel
+            </h3>
+            <p className="text-xs text-slate-500 mb-4 font-medium">Edit the support shortcuts and banking details displayed to customers.</p>
+            
+            <form onSubmit={handleSupportSave} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1 font-bold">Support Phone Line</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="+234 803 461 2345"
+                  value={supportPhone}
+                  onChange={(e) => setSupportPhone(e.target.value)}
+                  className="input-green text-sm focus:ring-2 focus:ring-emerald-500 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1 font-bold">WhatsApp Direct Line</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="+234 803 461 2345"
+                  value={supportWhatsapp}
+                  onChange={(e) => setSupportWhatsapp(e.target.value)}
+                  className="input-green text-sm focus:ring-2 focus:ring-emerald-500 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1 font-bold">Support Email Address</label>
+                <input 
+                  type="email" 
+                  required
+                  placeholder="support@hiremercy.com"
+                  value={supportEmail}
+                  onChange={(e) => setSupportEmail(e.target.value)}
+                  className="input-green text-sm focus:ring-2 focus:ring-emerald-500 font-medium"
+                />
+              </div>
+
+              <div className="border-t border-emerald-100 pt-4 space-y-4">
+                <h4 className="text-xs font-black text-emerald-950 uppercase tracking-wide">Advertisement Banner Control</h4>
+                <label className="flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-xs font-bold text-emerald-900">
+                  <span>Show advertisement banner to customers</span>
+                  <input
+                    type="checkbox"
+                    checked={advertEnabled}
+                    onChange={(e) => setAdvertEnabled(e.target.checked)}
+                    className="h-4 w-4 rounded border-emerald-300 text-emerald-700 focus:ring-emerald-500"
+                  />
+                </label>
+                <div>
+                  <label className="block text-xs font-bold text-emerald-800 mb-1">Advertisement Title</label>
+                  <input
+                    type="text"
+                    placeholder="Daily contributions made simple"
+                    value={advertTitle}
+                    onChange={(e) => setAdvertTitle(e.target.value)}
+                    className="input-green text-sm font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-emerald-800 mb-1">Advertisement Description</label>
+                  <textarea
+                    rows={3}
+                    placeholder="Describe the banner message"
+                    value={advertDescription}
+                    onChange={(e) => setAdvertDescription(e.target.value)}
+                    className="input-green text-sm font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-emerald-800 mb-1">Advertisement Image</label>
+                  <p className="text-[10px] text-slate-400 mb-2">Upload from your device (JPEG, PNG, WebP, GIF — max 50 MB), or paste a URL below.</p>
+                  <label className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-xl p-4 cursor-pointer transition ${advertImageUploading ? 'border-emerald-300 bg-emerald-50' : 'border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50/50'}`}>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+                      className="hidden"
+                      disabled={advertImageUploading}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleAdvertFileUpload(file, 'image', setAdvertImageUrl, setAdvertImageUploading, setAdvertImageError);
+                        e.target.value = '';
+                      }}
+                    />
+                    {advertImageUploading ? (
+                      <span className="text-xs text-emerald-700 font-bold animate-pulse">Uploading image...</span>
+                    ) : advertImageUrl ? (
+                      <div className="w-full space-y-2">
+                        <img src={advertImageUrl} alt="Preview" className="w-full h-28 object-cover rounded-xl" />
+                        <span className="text-[10px] text-emerald-700 font-bold block text-center">Tap to replace</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                          <FileText className="w-5 h-5 text-emerald-600" />
+                        </div>
+                        <span className="text-xs font-bold text-emerald-700">Tap to choose image</span>
+                        <span className="text-[10px] text-slate-400">or drag and drop here</span>
+                      </>
+                    )}
+                  </label>
+                  {advertImageError && <p className="text-[10px] text-red-600 mt-1">{advertImageError}</p>}
+                  <input
+                    type="url"
+                    placeholder="Or paste image URL here"
+                    value={advertImageUrl}
+                    onChange={(e) => setAdvertImageUrl(e.target.value)}
+                    className="w-full mt-2 px-3 py-2 border border-emerald-200 rounded-xl text-xs font-medium"
+                  />
+                  {advertImageUrl && (
+                    <button type="button" onClick={() => setAdvertImageUrl('')}
+                      className="mt-1 text-[10px] text-red-500 hover:text-red-700 font-bold">
+                      Remove image
+                    </button>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-emerald-800 mb-1">Advertisement Video <span className="font-normal text-slate-400">(plays instead of image when set)</span></label>
+                  <p className="text-[10px] text-slate-400 mb-2">Upload from your device (MP4, WebM, MOV — max 50 MB), or paste a URL below.</p>
+                  <label className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-xl p-4 cursor-pointer transition ${advertVideoUploading ? 'border-emerald-300 bg-emerald-50' : 'border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50/50'}`}>
+                    <input
+                      type="file"
+                      accept="video/mp4,video/webm,video/quicktime"
+                      className="hidden"
+                      disabled={advertVideoUploading}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleAdvertFileUpload(file, 'video', setAdvertVideoUrl, setAdvertVideoUploading, setAdvertVideoError);
+                        e.target.value = '';
+                      }}
+                    />
+                    {advertVideoUploading ? (
+                      <span className="text-xs text-emerald-700 font-bold animate-pulse">Uploading video...</span>
+                    ) : advertVideoUrl ? (
+                      <div className="w-full space-y-2">
+                        <video src={advertVideoUrl} className="w-full h-28 object-cover rounded-xl" muted controls />
+                        <span className="text-[10px] text-emerald-700 font-bold block text-center">Tap to replace</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                          <FileText className="w-5 h-5 text-emerald-600" />
+                        </div>
+                        <span className="text-xs font-bold text-emerald-700">Tap to choose video</span>
+                        <span className="text-[10px] text-slate-400">or drag and drop here</span>
+                      </>
+                    )}
+                  </label>
+                  {advertVideoError && <p className="text-[10px] text-red-600 mt-1">{advertVideoError}</p>}
+                  <input
+                    type="url"
+                    placeholder="Or paste video URL here"
+                    value={advertVideoUrl}
+                    onChange={(e) => setAdvertVideoUrl(e.target.value)}
+                    className="w-full mt-2 px-3 py-2 border border-emerald-200 rounded-xl text-xs font-medium"
+                  />
+                  {advertVideoUrl && (
+                    <button type="button" onClick={() => setAdvertVideoUrl('')}
+                      className="mt-1 text-[10px] text-red-500 hover:text-red-700 font-bold">
+                      Remove video
+                    </button>
+                  )}
+                </div>
+                <h4 className="text-xs font-black text-emerald-950 uppercase tracking-wide">App Theme</h4>
+                <div>
+                  <label className="block text-xs font-bold text-emerald-800 mb-1">Background Color</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={themeBackgroundColor}
+                      onChange={(e) => setThemeBackgroundColor(e.target.value)}
+                      className="h-10 w-16 rounded-xl border border-emerald-200 cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={themeBackgroundColor}
+                      onChange={(e) => setThemeBackgroundColor(e.target.value)}
+                      className="flex-1 px-3 py-2 border border-emerald-200 rounded-xl text-sm font-medium"
+                    />
+                  </div>
+                </div>
+                <h4 className="text-xs font-black text-emerald-950 uppercase tracking-wide">Company Bank Account Settings (For Deposits)</h4>
+                <div>
+                  <label className="block text-xs font-bold text-emerald-800 mb-1">Bank Name</label>
+                  <select
+                    value={adminBankName}
+                    onChange={(e) => setAdminBankName(e.target.value)}
+                    className="input-green bg-white text-xs font-medium"
+                  >
+                    {nigerianBanks.map(b => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-emerald-800 mb-1">Account Number</label>
+                  <input 
+                    type="text" 
+                    required
+                    placeholder="10-digit number"
+                    maxLength={10}
+                    value={adminAccountNumber}
+                    onChange={(e) => setAdminAccountNumber(e.target.value.replace(/\D/g, ''))}
+                    className="input-green text-sm font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-emerald-800 mb-1">Account Name</label>
+                  <input 
+                    type="text" 
+                    required
+                    placeholder="e.g. HireMercy Ajo Enterprise"
+                    value={adminAccountName}
+                    onChange={(e) => setAdminAccountName(e.target.value)}
+                    className="input-green text-sm font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-emerald-50">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-black text-emerald-950 uppercase tracking-wide flex items-center gap-1.5">
+                    <Landmark className="w-4 h-4 text-emerald-700" />
+                    Withdrawal Charge
+                  </h4>
+                  <label className="inline-flex items-center gap-1.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={withdrawalChargeEnabled}
+                      onChange={(e) => setWithdrawalChargeEnabled(e.target.checked)}
+                      className="w-4 h-4 accent-emerald-700"
+                    />
+                    <span className="text-[10px] font-bold text-slate-600">{withdrawalChargeEnabled ? 'Enabled' : 'Disabled'}</span>
+                  </label>
+                </div>
+                <p className="text-[11px] text-slate-500 font-medium mb-3">
+                  Applied to new withdrawal requests only - past requests keep the charge that was in effect when they were submitted.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-emerald-800 mb-1">Charge Amount (₦)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="1"
+                      disabled={!withdrawalChargeEnabled}
+                      value={withdrawalChargeAmount}
+                      onChange={(e) => setWithdrawalChargeAmount(Math.max(0, Number(e.target.value) || 0))}
+                      className="input-green text-sm font-medium disabled:opacity-50 disabled:bg-slate-50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-emerald-800 mb-1">Charge Label</label>
+                    <input
+                      type="text"
+                      disabled={!withdrawalChargeEnabled}
+                      placeholder="e.g. Stamp Duty / Withdrawal Charge"
+                      value={withdrawalChargeLabel}
+                      onChange={(e) => setWithdrawalChargeLabel(e.target.value)}
+                      className="input-green text-sm font-medium disabled:opacity-50 disabled:bg-slate-50"
+                    />
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-500 font-medium mt-2">
+                  Current: {withdrawalChargeEnabled ? <strong className="text-emerald-800">₦{Number(withdrawalChargeAmount || 0).toLocaleString()} - {withdrawalChargeLabel || 'Withdrawal Charge'}</strong> : <strong className="text-slate-400">No charge applied</strong>}
+                </p>
+              </div>
+
+              <div className="pt-2 border-t border-emerald-50">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-black text-emerald-950 uppercase tracking-wide flex items-center gap-1.5">
+                    <Landmark className="w-4 h-4 text-emerald-700" />
+                    OPay Email Automation
+                  </h4>
+                  <label className="inline-flex items-center gap-1.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={opayAutomationEnabled}
+                      onChange={(e) => setOpayAutomationEnabled(e.target.checked)}
+                      className="w-4 h-4 accent-emerald-700"
+                    />
+                    <span className="text-[10px] font-bold text-slate-600">{opayAutomationEnabled ? 'Enabled' : 'Disabled'}</span>
+                  </label>
+                </div>
+                <p className="text-[11px] text-slate-500 font-medium mb-2">
+                  When a customer submits a bank-transfer deposit, the OPay credit-alert email is checked for it and the deposit is confirmed automatically if the amount matches exactly and at least two names match the sender (any order). Nothing is checked while no deposits are pending. Anything uncertain stays Pending for your review. The mailbox password is never stored here - it's configured separately and directly in Supabase as a secret.
+                </p>
+                <label className="block text-xs font-bold text-emerald-800 mb-1">OPay Alert Email</label>
+                <input
+                  type="email"
+                  placeholder="opay-alerts@example.com"
+                  value={opayAlertEmail}
+                  onChange={(e) => setOpayAlertEmail(e.target.value)}
+                  className="input-green text-sm font-medium"
+                />
+                <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-600 font-semibold bg-emerald-50/60 border border-emerald-100 rounded-xl p-3">
+                  <p>Last check: <strong className="text-slate-800">{opayStatus.lastCheckAt ? new Date(opayStatus.lastCheckAt).toLocaleString() : 'Never run yet'}</strong></p>
+                  <p className="truncate" title={opayStatus.lastCheckStatus || ''}>Status: <strong className="text-slate-800">{opayStatus.lastCheckStatus || '—'}</strong></p>
+                  <p>Last processed ref: <strong className="text-slate-800">{opayStatus.lastProcessedRef || '—'}</strong></p>
+                  <p>Last processed at: <strong className="text-slate-800">{opayStatus.lastProcessedAt ? new Date(opayStatus.lastProcessedAt).toLocaleString() : '—'}</strong></p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCheckOpayNow}
+                  disabled={isCheckingOpayNow}
+                  className="mt-3 w-full inline-flex items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-white hover:bg-emerald-50 disabled:opacity-60 text-emerald-800 text-sm font-bold py-2 transition-colors"
+                >
+                  {isCheckingOpayNow ? 'Checking...' : 'Check OPay Emails Now'}
+                </button>
+                <p className="text-[10px] text-slate-400 font-semibold mt-1">
+                  Runs for testing even while automation is disabled above. When enabled, checks happen only after a customer submits a deposit (with a few spaced-out retries for delayed emails) - there is no timed mailbox polling.
+                </p>
+              </div>
+
+              <button 
+                type="submit" 
+                className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl transition-all duration-200 text-sm shadow-md"
+              >
+                Save Settings & Bank Details
+              </button>
+            </form>
+          </div>
+
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs flex flex-col justify-between">
+            <div>
+              <h3 className="text-sm font-bold text-emerald-950 mb-1 uppercase tracking-wide flex items-center gap-1.5 font-bold font-bold">
+                <HelpCircle className="w-5 h-5 text-emerald-700" />
+                Live Preview
+              </h3>
+              <p className="text-xs text-slate-500 mb-6 font-medium">This is how your clients see their support widget.</p>
+              
+              <div className="p-4 bg-emerald-50/30 rounded-2xl border border-emerald-100 space-y-3 mb-6 text-slate-800 font-semibold font-bold">
+                <div className="flex items-center gap-2.5 text-xs font-bold">
+                  <Phone className="w-4 h-4 text-emerald-600" />
+                  <span>Call: <strong className="text-slate-900 font-bold">{supportPhone}</strong></span>
+                </div>
+                <div className="flex items-center gap-2.5 text-xs font-bold">
+                  <MessageSquare className="w-4 h-4 text-emerald-600" />
+                  <span>WhatsApp: <strong className="text-slate-900 font-bold">{supportWhatsapp}</strong></span>
+                </div>
+                <div className="flex items-center gap-2.5 text-xs font-bold">
+                  <Mail className="w-4 h-4 text-emerald-600" />
+                  <span>Email: <strong className="text-slate-900 font-bold">{supportEmail}</strong></span>
+                </div>
+              </div>
+
+              <h4 className="text-xs font-black text-emerald-950 uppercase tracking-wide mb-2 font-bold font-bold">Customer Deposit Banking coordinates preview:</h4>
+              <div className="p-4 bg-amber-50/30 border border-amber-200 rounded-2xl space-y-1.5 text-xs text-slate-800 font-bold">
+                <p>Bank: <strong className="text-slate-900 font-bold">{adminBankName}</strong></p>
+                <p>Account Number: <strong className="text-slate-900 font-bold">{adminAccountNumber}</strong></p>
+                <p>Account Name: <strong className="text-slate-900 font-bold">{adminAccountName}</strong></p>
+              </div>
+            </div>
+
+            <div className="text-[11px] text-amber-700 bg-amber-50 p-3 rounded-xl border border-amber-200 mt-4 leading-relaxed font-semibold">
+              ⚠️ Note: Ensure numbers are written in full international format (e.g. starting with +234) for WhatsApp redirect actions to work.
+            </div>
+          </div>
+
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
+            <h3 className="text-sm font-bold text-emerald-950 mb-1 uppercase tracking-wide flex items-center gap-1.5">
+              <Megaphone className="w-5 h-5 text-emerald-700" />
+              Broadcast Messages
+            </h3>
+            <p className="text-xs text-slate-500 mb-4 font-medium">
+              Publishing a new message here replaces what customers currently see. Older messages stay listed below as history and can be reactivated at any time.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-2 mb-5">
+              <textarea
+                value={newBroadcastText}
+                onChange={(e) => setNewBroadcastText(e.target.value)}
+                placeholder="e.g. HireMercyAJO offices will be closed on Monday for the public holiday."
+                rows={2}
+                className="input-green text-sm font-medium flex-1 resize-none"
+              />
+              <button
+                type="button"
+                onClick={() => { onCreateBroadcast(newBroadcastText); setNewBroadcastText(''); }}
+                disabled={!newBroadcastText.trim()}
+                className="shrink-0 sm:self-end inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white text-sm font-bold px-4 py-2.5 transition-colors"
+              >
+                Publish
+              </button>
+            </div>
+
+            {broadcastMessages.length === 0 ? (
+              <p className="text-xs text-slate-400 font-semibold text-center py-4">No broadcast messages yet.</p>
+            ) : (
+              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                {broadcastMessages.map(b => (
+                  <div key={b.id} className={`p-3 rounded-2xl border text-xs ${b.is_active ? 'bg-emerald-50/60 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
+                    {editingBroadcastId === b.id ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={editingBroadcastText}
+                          onChange={(e) => setEditingBroadcastText(e.target.value)}
+                          rows={2}
+                          className="input-green text-sm font-medium w-full resize-none"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => { onUpdateBroadcast(b.id, editingBroadcastText); setEditingBroadcastId(null); }}
+                            disabled={!editingBroadcastText.trim()}
+                            className="text-[11px] font-bold text-white bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 rounded-lg px-3 py-1.5"
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingBroadcastId(null)}
+                            className="text-[11px] font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg px-3 py-1.5"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-start justify-between gap-2">
+                          <p className={`font-semibold whitespace-pre-wrap break-words ${b.is_active ? 'text-emerald-900' : 'text-slate-500'}`}>{b.message}</p>
+                          <span className={`shrink-0 px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${b.is_active ? 'bg-emerald-600 text-white' : 'bg-slate-300 text-slate-700'}`}>
+                            {b.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-semibold mt-1">
+                          {new Date(b.created_at).toLocaleString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                        </p>
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            type="button"
+                            onClick={() => { setEditingBroadcastId(b.id); setEditingBroadcastText(b.message); }}
+                            className="text-[11px] font-bold text-emerald-700 hover:underline"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onToggleBroadcastActive(b.id, !b.is_active)}
+                            className="text-[11px] font-bold text-amber-700 hover:underline"
+                          >
+                            {b.is_active ? 'Deactivate' : 'Activate'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { if (window.confirm('Delete this broadcast message permanently?')) onDeleteBroadcast(b.id); }}
+                            className="text-[11px] font-bold text-red-600 hover:underline"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
+            <h3 className="text-sm font-bold text-emerald-950 mb-1 uppercase tracking-wide flex items-center gap-1.5">
+              <Landmark className="w-5 h-5 text-emerald-700" />
+              Paystack Virtual Accounts
+            </h3>
+            <p className="text-xs text-slate-500 mb-4 font-medium">
+              New customers get a personal savings account automatically at signup. Use this to generate one for customers who already existed before that feature was added.
+            </p>
+
+            <div className="p-4 bg-amber-50/50 border border-amber-200 rounded-2xl mb-4">
+              <p className="text-xs font-bold text-amber-900">
+                {customersMissingVA.length === 0
+                  ? 'All customers already have a virtual account.'
+                  : `${customersMissingVA.length} customer(s) don't have one yet.`}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleBulkGenerateVirtualAccounts}
+              disabled={bulkVAProgress?.running || customersMissingVA.length === 0}
+              className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold py-2.5 rounded-xl transition-all duration-200 text-sm shadow-md"
+            >
+              {bulkVAProgress?.running
+                ? `Generating... ${bulkVAProgress.done}/${bulkVAProgress.total}`
+                : `Generate Missing Accounts (${customersMissingVA.length})`}
+            </button>
+
+            {bulkVAProgress && (
+              <div className="mt-4 space-y-2">
+                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-600 transition-all duration-300"
+                    style={{ width: `${(bulkVAProgress.done / bulkVAProgress.total) * 100}%` }}
+                  />
+                </div>
+                {!bulkVAProgress.running && (
+                  <p className="text-xs font-bold text-slate-600">
+                    Done: {bulkVAProgress.done - bulkVAProgress.failed.length} succeeded, {bulkVAProgress.failed.length} failed.
+                  </p>
+                )}
+                {bulkVAProgress.failed.length > 0 && (
+                  <div className="max-h-40 overflow-y-auto border border-red-100 bg-red-50 rounded-xl p-3 space-y-1">
+                    {bulkVAProgress.failed.map((f, idx) => (
+                      <p key={idx} className="text-[10px] text-red-700"><strong>{f.name}:</strong> {f.reason}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Quick Notepad - mini spreadsheet scratchpad */}
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
+            <h3 className="text-sm font-bold text-emerald-950 mb-1 uppercase tracking-wide flex items-center gap-1.5 font-bold">
+              <FileText className="w-5 h-5 text-emerald-700" />
+              Quick Notepad
+            </h3>
+            <p className="text-xs text-slate-500 mb-4 font-medium">Jot down ad-hoc items like daily expenses. Saves automatically.</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="bg-emerald-50 text-emerald-900 font-black">
+                    <th className="p-2 text-left rounded-l-xl">Description</th>
+                    <th className="p-2 text-left">Amount</th>
+                    <th className="p-2 text-left rounded-r-xl">Date</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-emerald-50">
+                  {notepadRows.map((row, idx) => (
+                    <tr key={idx}>
+                      <td className="p-1">
+                        <input
+                          type="text"
+                          value={row.description}
+                          onChange={e => updateNotepadCell(idx, 'description', e.target.value)}
+                          className="w-full border border-slate-200 rounded-xl px-2 py-1.5 text-xs"
+                          placeholder="e.g. Transport"
+                        />
+                      </td>
+                      <td className="p-1">
+                        <input
+                          type="text"
+                          value={row.amount}
+                          onChange={e => updateNotepadCell(idx, 'amount', e.target.value)}
+                          className="w-full border border-slate-200 rounded-xl px-2 py-1.5 text-xs"
+                          placeholder="₦0"
+                        />
+                      </td>
+                      <td className="p-1">
+                        <input
+                          type="date"
+                          value={row.date}
+                          onChange={e => updateNotepadCell(idx, 'date', e.target.value)}
+                          className="w-full border border-slate-200 rounded-xl px-2 py-1.5 text-xs"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <button
+              type="button"
+              onClick={addNotepadRow}
+              className="mt-3 text-xs font-bold text-emerald-700 hover:text-emerald-900 flex items-center gap-1"
+            >
+              <Plus className="w-3.5 h-3.5" /> Add row
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveNotepadToExpenses}
+              className="mt-3 ml-4 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 px-4 py-2 rounded-xl inline-flex items-center gap-1.5"
+            >
+              <Save className="w-3.5 h-3.5" /> Save to Expenses
+            </button>
+          </div>
+
+          {/* Admin-to-Customer Messaging */}
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
+            <h3 className="text-sm font-bold text-emerald-950 mb-1 uppercase tracking-wide flex items-center gap-1.5 font-bold">
+              <MessageSquare className="w-5 h-5 text-emerald-700" />
+              Customer Note
+            </h3>
+            <p className="text-xs text-slate-500 mb-4 font-medium">Appears directly below the balance card on the selected customer's dashboard. Only the latest note shows - editing replaces it, deleting removes it immediately. Adding an amount adjusts their balance across every board immediately (e.g. -10000 for a quick partial withdrawal).</p>
+            <div className="space-y-3">
+              <SearchableCustomerSelect
+                customers={profiles.filter(p => p.role === 'Customer')}
+                selectedId={noteCustomerId}
+                onSelect={handleSelectNoteCustomer}
+                placeholder="Select customer..."
+              />
+              <textarea
+                rows={3}
+                value={noteText}
+                onChange={e => setNoteText(e.target.value)}
+                placeholder="e.g. Your payout has been scheduled for Friday."
+                className="input-green text-sm font-medium"
+              />
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">Amount (optional)</label>
+                <input
+                  type="number"
+                  value={noteAmount}
+                  onChange={e => setNoteAmount(e.target.value)}
+                  placeholder="e.g. -10000 for a partial withdrawal"
+                  className="input-green text-sm font-semibold"
+                />
+                {noteCustomerId && (
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Current balance adjustment total for this customer: ₦{sumCurrencyValues((balanceAdjustments[noteCustomerId] || []).map(a => Number(a.amount))).toLocaleString()}
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleSendCustomerNote}
+                  disabled={!noteCustomerId || noteSubmitting}
+                  className="flex-1 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 text-white font-bold py-2.5 rounded-xl transition text-sm"
+                >
+                  {noteSubmitting ? 'Sending...' : (profiles.find(p => p.id === noteCustomerId)?.admin_note ? 'Save Edit' : 'Send Note')}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteCustomerNote}
+                  disabled={!noteCustomerId || noteSubmitting || !profiles.find(p => p.id === noteCustomerId)?.admin_note}
+                  className="px-4 bg-red-50 hover:bg-red-100 disabled:opacity-30 text-red-700 font-bold py-2.5 rounded-xl transition text-sm flex items-center gap-1.5"
+                  title="Delete note"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+              {noteCustomerId && (balanceAdjustments[noteCustomerId] || []).length > 0 && (
+                <div className="pt-2 border-t border-slate-100">
+                  <p className="text-[10px] font-black uppercase text-slate-500 mb-1.5">Recent Adjustments</p>
+                  <div className="max-h-32 overflow-y-auto space-y-1">
+                    {(balanceAdjustments[noteCustomerId] || []).slice(0, 8).map(a => (
+                      <div key={a.id} className="flex justify-between items-center text-[10px]">
+                        <span className="text-slate-500">{new Date(a.created_at).toLocaleDateString()} {a.note ? `- ${a.note}` : ''}</span>
+                        <span className={`font-black ${Number(a.amount) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                          {Number(a.amount) > 0 ? '+' : ''}₦{Number(a.amount).toLocaleString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="md:col-span-2">
+            <AdminReferralPanel profiles={profiles} triggerToast={triggerToast} />
+          </div>
+          <div className="md:col-span-2">
+            <div id="admin-wallet-panel"><AdminWalletPanel toast={(m, t) => triggerToast?.(m, t)} startTab={adminAlerts && adminAlerts.pending_deposits > 0 ? 'deposits' : 'orders'} /></div>
+          </div>
+          <div className="md:col-span-2">
+            <PromotionsPanel toast={(m, t) => triggerToast?.(m, t)} />
+          </div>
+          <div className="md:col-span-2">
+            <StreakAdminPanel toast={(m, t) => triggerToast?.(m, t)} />
+          </div>
+          <div className="md:col-span-2">
+            <RewardsAdminPanel toast={(m, t) => triggerToast?.(m, t)} />
+          </div>
+          <div className="md:col-span-2" id="admin-shop-panel">
+            <ShopAdminPanel toast={(m, t) => triggerToast?.(m, t)} />
+          </div>
+          <div className="md:col-span-2">
+            <BonusAdminPanel toast={(m, t) => triggerToast?.(m, t)} />
+          </div>
+          <div className="md:col-span-2">
+            <PopupsAdminPanel toast={(m, t) => triggerToast?.(m, t)} />
+          </div>
+          <div className="md:col-span-2">
+            <GamesAdminPanel toast={(m, t) => triggerToast?.(m, t)} />
+          </div>
+        </div>
+      )}
+      </div>
+    </div>
+  );
+}
+
+// =========================================================================
+// 3. STAFF DASHBOARD COMPONENT
+// =========================================================================
+
+function StaffDashboard({ 
+  profiles, transactions, markedDays, staffProfile, supportDetails, onAddTransaction, onRegisterCustomer, branches
+}: { 
+  profiles: Profile[], transactions: Transaction[], markedDays: Record<string, MarkedDay[]>, staffProfile: Profile, supportDetails: SupportSettings, branches: Branch[], onAddTransaction: (cId: string, amt: number, method: any, sId: string) => void, onRegisterCustomer: (data: any) => void
+}) {
+  const [activeTab, setActiveTab] = useState<'collect' | 'onboard'>('collect');
+  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [depositAmount, setDepositAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Bank Transfer' | 'Mobile Money'>('Cash');
+
+  // Onboard customer states
+  const [cName, setCName] = useState('');
+  const [cPhone, setCPhone] = useState('');
+  const [cEmail, setCEmail] = useState('');
+  const [cDailyAmount, setCDailyAmount] = useState('1000');
+
+  const customers = profiles.filter(p => p.role === 'Customer' && p.branch_id === staffProfile.branch_id && p.is_active).sort((a, b) => a.name.localeCompare(b.name));
+
+  const handlePost = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCustomerId || !depositAmount) return;
+    onAddTransaction(selectedCustomerId, Number(depositAmount), paymentMethod, staffProfile.id);
+    setDepositAmount('');
+  };
+
+  const handleStaffCustomerOnboard = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cName || !cPhone) return;
+    if (Number(cDailyAmount) < 300) {
+      alert("Daily Contribution must be a minimum of ₦300.");
+      return;
+    }
+    onRegisterCustomer({
+      name: cName,
+      phone: cPhone,
+      email: cEmail || `${cPhone}@hiremercy.com`, // Fallback email
+      password: 'customer123',
+      daily_amount: Number(cDailyAmount),
+      branch_id: staffProfile.branch_id // Auto-assigns to the Staff's own branch
+    });
+    setCName('');
+    setCPhone('');
+    setCEmail('');
+    setCDailyAmount('1000');
+  };
+
+  return (
+    <div className="space-y-5 sm:space-y-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 card-green">
+        <div>
+          <h2 className="text-lg sm:text-xl font-black text-emerald-800 flex items-center gap-2">
+            <span className="icon-circle w-9 h-9 sm:w-10 sm:h-10"><Briefcase className="w-5 h-5" /></span>
+            Field Agent Desk
+          </h2>
+          <p className="text-xs text-slate-500 mt-1">Collect daily targets or onboard branch customers locally</p>
+        </div>
+        <div className="flex gap-2 w-full md:w-auto">
+          <button 
+            type="button"
+            onClick={() => setActiveTab('collect')}
+            className={`flex-1 md:flex-none px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wide transition-all duration-200 ${
+              activeTab === 'collect' ? 'bg-emerald-700 text-white shadow-sm' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+            }`}
+          >
+            Collect Deposit
+          </button>
+          <button 
+            type="button"
+            onClick={() => setActiveTab('onboard')}
+            className={`flex-1 md:flex-none px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wide transition-all duration-200 ${
+              activeTab === 'onboard' ? 'bg-emerald-700 text-white shadow-sm' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+            }`}
+          >
+            Onboard Customer
+          </button>
+        </div>
+      </div>
+
+      {activeTab === 'collect' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-6">
+          <div className="card-green lg:col-span-1 h-fit text-slate-800">
+            <h3 className="text-sm font-bold text-emerald-950 mb-4 uppercase tracking-wide">Collect Deposit</h3>
+            <form onSubmit={handlePost} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1.5">Select Branch Customer *</label>
+                <SearchableCustomerSelect 
+                  customers={customers} 
+                  selectedId={selectedCustomerId} 
+                  onSelect={setSelectedCustomerId} 
+                  placeholder="Type name or phone to choose account..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1.5">Deposit Amount (₦)</label>
+                <input 
+                  type="number" 
+                  required
+                  placeholder="e.g. 5000"
+                  value={depositAmount}
+                  onChange={(e) => setDepositAmount(e.target.value)}
+                  className="input-green text-sm font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1.5">Payment Method</label>
+                <select 
+                  value={paymentMethod} 
+                  onChange={(e) => setPaymentMethod(e.target.value as any)}
+                  className="input-green bg-white text-sm"
+                >
+                  <option value="Cash">Cash</option>
+                  <option value="Bank Transfer">Bank Transfer</option>
+                  <option value="Mobile Money">Mobile Money</option>
+                </select>
+              </div>
+
+              <button 
+                type="submit" 
+                className="w-full bg-emerald-700 hover:bg-emerald-800 active:scale-[0.98] text-white font-bold py-3 rounded-xl transition-all duration-200 text-xs uppercase tracking-wide shadow-md"
+              >
+                Post Contribution
+              </button>
+            </form>
+          </div>
+
+          <div className="card-green lg:col-span-2 space-y-4">
+            <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide">Branch Directory Progress</h3>
+            
+            {/* Conditional Rendering: Only show 32-day tracking table once selected */}
+            {selectedCustomerId ? (
+              (() => {
+                const cust = customers.find(c => c.id === selectedCustomerId);
+                if (!cust) return null;
+                return (
+                  <div className="p-4 sm:p-5 bg-emerald-50/40 border border-emerald-100 rounded-2xl space-y-3 fade-in text-slate-800">
+                    <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                      <div>
+                        <h4 className="font-bold text-emerald-950">{cust.name}</h4>
+                        <p className="text-[11px] text-slate-500 font-medium mt-0.5">Contact: {cust.phone} · Pace: ₦{cust.daily_amount.toLocaleString()}/day</p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] bg-amber-500 text-emerald-950 font-bold px-2.5 py-1 rounded-full uppercase tracking-wide">
+                          {(markedDays[cust.id] || []).length} / 32 Days Marked
+                        </span>
+                      </div>
+                    </div>
+                    <Grid32 trackingDays={markedDays[cust.id] || []} dailyAmount={cust.daily_amount} />
+                  </div>
+                );
+              })()
+            ) : (
+              <div className="text-center py-12 bg-emerald-50/40 border border-dashed border-emerald-200 rounded-2xl">
+                <p className="text-xs text-slate-400 px-4">Please search and choose a customer account to view their contribution tracking table.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* Staff Onboarding Customer directly from Staff Dashboard */
+        <div className="card-green max-w-md mx-auto fade-in text-slate-800">
+          <h3 className="text-sm font-bold text-emerald-950 mb-1 uppercase tracking-wide flex items-center gap-2">
+            <span className="icon-circle-light w-8 h-8"><UserPlus className="w-4 h-4" /></span>
+            Onboard Branch Customer
+          </h3>
+          <p className="text-[11px] text-slate-500 mb-4 mt-2">Customer will be automatically assigned to your branch: <strong className="text-emerald-800">{branches.find(b => b.id === staffProfile.branch_id)?.name || 'Home Branch'}</strong>.</p>
+
+          <form onSubmit={handleStaffCustomerOnboard} className="space-y-4 text-xs font-medium">
+            <div>
+              <label className="block text-xs font-bold text-emerald-800 mb-1.5">Full Name *</label>
+              <input type="text" name="name" required value={cName} onChange={(e) => setCName(e.target.value)} className="input-green" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-emerald-800 mb-1.5">Phone Line *</label>
+              <input type="text" name="phone" required placeholder="080XXXXXXXX" value={cPhone} onChange={(e) => setCPhone(e.target.value)} className="input-green" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-emerald-800 mb-1.5">Email Address</label>
+              <input type="email" name="email" placeholder="name@domain.com (optional)" value={cEmail} onChange={(e) => setCEmail(e.target.value)} className="input-green" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-emerald-800 mb-1.5">Daily Target (₦) *</label>
+              <input 
+                type="number" 
+                name="daily_amount" 
+                required 
+                min={300}
+                placeholder="Minimum ₦300"
+                value={cDailyAmount} 
+                onChange={(e) => setCDailyAmount(e.target.value)} 
+                className="input-green font-bold" 
+              />
+              <span className="text-[10px] text-slate-400 block mt-1.5">Acceptable limit: Minimum ₦300/day</span>
+            </div>
+            <button type="submit" className="w-full bg-emerald-700 hover:bg-emerald-800 active:scale-[0.98] text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wide shadow-md transition-all duration-200">
+              Onboard Customer
+            </button>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =========================================================================
+// BANK TRANSFER PANEL (Deposit / Add Money)
+//
+// Shows the company receiving account (from the existing admin settings -
+// supportDetails.admin_*) and lets the customer pick their bank. The app is
+// opened ONLY where a launch method has been verified (see BANK_APPS).
+// Everything else falls back to: copy the account number + manual steps.
+//
+// SAFETY: nothing in this block touches Supabase, transactions or payment
+// status. Opening a bank app is NOT payment confirmation. Contributions are
+// still recorded as Pending through the existing "Complete Transaction" form
+// and only an admin can approve them.
+// =========================================================================
+
+interface BankAppConfig {
+  id: string;
+  label: string;
+  initials: string;
+  tint: string;
+  /** Names as they appear in the `nigerianBanks` dropdown. */
+  aliases: string[];
+  /** Google Play package id (used only for the "Find app" fallback link). */
+  playStoreId: string;
+  /**
+   * ONLY set when a launch method is verified. Banks without it are never
+   * given a guessed URL scheme - they use the copy + manual fallback.
+   * queryParams values are encoded individually when the URL is built, so a
+   * value that is itself a URI (e.g. "otravel://home/entrance") never gets
+   * concatenated in raw - an unencoded "://" inside a query value is
+   * invalid URI syntax and silently breaks Android's intent resolution.
+   */
+  androidLaunch?: { scheme: string; host: string; path?: string; queryParams?: Record<string, string>; packageName: string };
+}
+
+// Adding a bank is a data-only change: append an entry. Leave `androidLaunch`
+// out unless the bank's app manifest / official docs confirm an entry point.
+const BANK_APPS: BankAppConfig[] = [
+  {
+    // Verified from OPay 8.17.2.494 (team.opay.pay) AndroidManifest.xml:
+    // SchemeDispatchActivity is exported and registers otravel://schemedispatcher.
+    // The "?action=otravel://<route>" form is the one the app itself uses.
+    // otravel://transfer_to_bank/entrance was found as a literal string in
+    // the app's own dex, alongside otravel://transfer/entrance?transfer_tab=
+    // bank&transfer_from= - both point at the bank-transfer screen directly
+    // rather than just the home screen. No evidence was found of a query
+    // parameter this scheme honors for pre-filling an amount or recipient
+    // account, so none is sent - inventing one would violate "don't assume
+    // deep-link support without evidence."
+    id: 'opay', label: 'OPay', initials: 'OP', tint: 'bg-emerald-100 text-emerald-800',
+    aliases: ['OPay'], playStoreId: 'team.opay.pay',
+    androidLaunch: { scheme: 'otravel', host: 'schemedispatcher', queryParams: { action: 'otravel://transfer_to_bank/entrance' }, packageName: 'team.opay.pay' },
+  },
+  {
+    // Verified from PalmPay 7.14.0 (com.transsnet.palmpay) AndroidManifest.xml:
+    // SplashActivity (launcher) is exported and registers
+    // palmpay://com.transsnet.palmpay.splash.
+    id: 'palmpay', label: 'PalmPay', initials: 'PP', tint: 'bg-violet-100 text-violet-800',
+    aliases: ['PalmPay'], playStoreId: 'com.transsnet.palmpay',
+    androidLaunch: { scheme: 'palmpay', host: 'com.transsnet.palmpay.splash', packageName: 'com.transsnet.palmpay' },
+  },
+  {
+    // Verified from the Moniepoint consumer app (com.moniepoint.personal)
+    // AndroidManifest.xml: MainActivity is exported with autoVerify="true"
+    // and registers moniepoint://moniepoint.sng.link.
+    id: 'moniepoint', label: 'Moniepoint', initials: 'MP', tint: 'bg-indigo-100 text-indigo-800',
+    aliases: ['Moniepoint'], playStoreId: 'com.moniepoint.personal',
+    androidLaunch: { scheme: 'moniepoint', host: 'moniepoint.sng.link', packageName: 'com.moniepoint.personal' },
+  },
+  // No public deep link is documented for the banks below - each manifest was
+  // inspected (Access More, FCMB, GTWorld) and none registers a custom URL
+  // scheme or verified App Link, so no launch data is invented for them.
+  // They use the copy + manual fallback.
+  { id: 'access', label: 'Access Bank', initials: 'AB', tint: 'bg-orange-100 text-orange-800', aliases: ['Access Bank'], playStoreId: 'com.accessbank.nextgen' },
+  { id: 'firstbank', label: 'FirstBank', initials: 'FB', tint: 'bg-sky-100 text-sky-900', aliases: ['First Bank of Nigeria'], playStoreId: 'com.firstbank.firstmobile' },
+  { id: 'gtbank', label: 'GTBank', initials: 'GT', tint: 'bg-amber-100 text-amber-900', aliases: ['Guaranty Trust Bank (GTBank)'], playStoreId: 'com.gtbank.gtworldv1' },
+  { id: 'fcmb', label: 'FCMB', initials: 'FC', tint: 'bg-rose-100 text-rose-900', aliases: ['First City Monument Bank (FCMB)'], playStoreId: 'com.appzonegroup.fcmb' },
+];
+
+const isAndroidDevice = (): boolean =>
+  typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '');
+
+const findBankAppByName = (name: string): BankAppConfig | undefined =>
+  BANK_APPS.find(b => b.label === name || b.aliases.includes(name));
+
+/** True only when a verified launch method exists AND the device can use it. */
+const canLaunchBankApp = (bank: BankAppConfig): boolean =>
+  Boolean(bank.androidLaunch) && isAndroidDevice();
+
+// Chrome / Samsung Internet / Firefox on Android understand intent:// URLs.
+// `package=` pins the target to the bank's own app, so a look-alike app that
+// registers the same scheme can never receive it. No browser_fallback_url is
+// used: if the app is missing the page simply stays put and we show our own
+// fallback message instead of being thrown to another site.
+//
+// Each query value is encoded with encodeURIComponent individually (never
+// string-concatenated raw) - a value that is itself a URI, like OPay's
+// "otravel://transfer_to_bank/entrance", contains an unencoded "://" if
+// concatenated directly, which is invalid inside a URI's query component
+// and makes Android's Intent.parseUri throw, so the "intent://" navigation
+// silently does nothing. This was the actual bug behind the button doing
+// nothing for OPay; PalmPay and Moniepoint have no query value and were
+// never affected.
+const buildAndroidIntentUrl = (l: NonNullable<BankAppConfig['androidLaunch']>): string => {
+  const qs = l.queryParams
+    ? '?' + Object.entries(l.queryParams).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')
+    : '';
+  return `intent://${l.host}${l.path || ''}${qs}#Intent;scheme=${l.scheme};package=${l.packageName};end`;
+};
+
+type BankLaunchResult = 'opened' | 'fallback';
+
+/**
+ * Tries to open the bank's app. Resolves 'opened' when the page is sent to the
+ * background (the app took over) or 'fallback' if nothing happened within 2s
+ * (app not installed, unsupported browser, desktop, in-app browser...).
+ * Never throws, never touches transactions.
+ */
+const launchBankApp = (bank: BankAppConfig): Promise<BankLaunchResult> =>
+  new Promise(resolve => {
+    if (!bank.androidLaunch || !isAndroidDevice()) { resolve('fallback'); return; }
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onVisibility = () => { if (document.visibilityState === 'hidden') finish('opened'); };
+    const onPageHide = () => finish('opened');
+    function finish(result: BankLaunchResult) {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', onPageHide);
+      resolve(result);
+    }
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', onPageHide);
+    timer = setTimeout(() => finish('fallback'), 2000);
+    try {
+      window.location.href = buildAndroidIntentUrl(bank.androidLaunch);
+    } catch {
+      finish('fallback');
+    }
+  });
+
+const copyTextToClipboard = async (text: string): Promise<boolean> => {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // fall through to the legacy path
+  }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+};
+
+const formatAccountNumber = (n: string): string =>
+  /^\d{10}$/.test(n) ? `${n.slice(0, 3)} ${n.slice(3, 6)} ${n.slice(6)}` : n;
+
+function BankTransferPanel({ bankName, accountNumber, accountName }: {
+  bankName?: string, accountNumber?: string, accountName?: string
+}) {
+  const acct = (accountNumber || '').replace(/\s+/g, '');
+  // Treat "not set" and the old placeholder default as unconfigured so a
+  // customer is never invited to transfer to a dummy number.
+  const isConfigured = acct.length > 0 && acct !== '0123456789';
+
+  const [notice, setNotice] = useState<{ tone: 'success' | 'info' | 'warn'; text: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [fallbackBank, setFallbackBank] = useState<BankAppConfig | null>(null);
+  const [launchingId, setLaunchingId] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+    };
+  }, []);
+
+  const shareText =
+    `HireMercyAJO Bank Transfer Details\n\nBank: ${bankName || ''}\nAccount Name: ${accountName || ''}\nAccount Number: ${acct}`;
+
+  const flashCopied = () => {
+    setCopied(true);
+    if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+    copiedTimerRef.current = setTimeout(() => { if (mountedRef.current) setCopied(false); }, 2500);
+  };
+
+  const handleCopy = async () => {
+    const ok = await copyTextToClipboard(acct);
+    if (!mountedRef.current) return;
+    if (ok) {
+      flashCopied();
+      setNotice({ tone: 'success', text: 'Account number copied.' });
+    } else {
+      setNotice({ tone: 'warn', text: "Couldn't copy automatically. Please press and hold the account number to copy it." });
+    }
+  };
+
+  const handleShare = async () => {
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      try {
+        await navigator.share({ title: 'HireMercyAJO Bank Transfer Details', text: shareText });
+        return;
+      } catch (err: any) {
+        if (err && err.name === 'AbortError') return; // customer closed the share sheet
+      }
+    }
+    const ok = await copyTextToClipboard(shareText);
+    if (!mountedRef.current) return;
+    setNotice(ok
+      ? { tone: 'success', text: "Sharing isn't available on this device, so the full transfer details were copied instead." }
+      : { tone: 'warn', text: "Sharing isn't available on this device. Please copy the account number instead." });
+  };
+
+  const handleBankTap = async (bank: BankAppConfig) => {
+    if (launchingId) return;
+    setNotice(null);
+    setFallbackBank(null);
+    // Start the copy inside the tap (needs the user gesture); don't wait for it
+    // before launching, so the app-open request stays within the same gesture.
+    const copyPromise = copyTextToClipboard(acct);
+
+    if (!canLaunchBankApp(bank)) {
+      const didCopy = await copyPromise;
+      if (!mountedRef.current) return;
+      if (didCopy) flashCopied();
+      setFallbackBank(bank);
+      setNotice(didCopy ? { tone: 'success', text: 'Account number copied.' } : null);
+      return;
+    }
+
+    setLaunchingId(bank.id);
+    setNotice({ tone: 'info', text: `Opening ${bank.label}...` });
+    const result = await launchBankApp(bank);
+    const didCopy = await copyPromise;
+    if (!mountedRef.current) return;
+    setLaunchingId(null);
+    if (didCopy) flashCopied();
+    if (result === 'opened') {
+      setNotice({
+        tone: 'info',
+        text: `${didCopy ? 'Account number copied. ' : ''}Finish your transfer in ${bank.label}, then come back here, enter the amount and tap "Complete Transaction" so we can verify it. Opening your bank app does not confirm a payment.`,
+      });
+    } else {
+      setNotice(didCopy ? { tone: 'success', text: 'Account number copied.' } : null);
+      setFallbackBank(bank);
+    }
+  };
+
+  const noticeStyle = {
+    success: 'bg-emerald-50 border-emerald-200 text-emerald-900',
+    info: 'bg-sky-50 border-sky-200 text-sky-900',
+    warn: 'bg-amber-50 border-amber-200 text-amber-900',
+  } as const;
+
+  return (
+    <div className="space-y-4">
+      <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5">
+        <Landmark className="w-5 h-5 text-emerald-700" />
+        HireMercyAJO Bank Transfer
+      </h3>
+
+      {!isConfigured ? (
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-xs font-semibold text-amber-900 leading-relaxed">
+          The company receiving account has not been set up yet. Please contact support before making a transfer.
+        </div>
+      ) : (
+        <>
+          <div className="p-5 bg-emerald-50/60 border border-emerald-200 rounded-3xl space-y-3 shadow-inner">
+            <div>
+              <span className="text-[10px] text-slate-400 block uppercase font-bold">Account Number</span>
+              <strong className="text-slate-900 text-2xl tracking-widest block py-0.5 font-extrabold">{formatAccountNumber(acct)}</strong>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <span className="text-[10px] text-slate-400 block uppercase font-bold">Bank</span>
+                <strong className="text-slate-900 text-sm font-bold">{bankName || 'Not set'}</strong>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 block uppercase font-bold">Account Name</span>
+                <strong className="text-slate-900 text-sm font-bold">{accountName || 'Not set'}</strong>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-white text-emerald-800 hover:bg-emerald-50 text-sm font-bold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+              >
+                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                {copied ? 'Copied' : 'Copy Number'}
+              </button>
+              <button
+                type="button"
+                onClick={handleShare}
+                className="min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+              >
+                <Share2 className="w-4 h-4" />
+                Share Details
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div>
+              <p className="text-sm font-bold text-emerald-950">Transfer directly from your bank app</p>
+              <p className="text-xs text-slate-500 font-medium">Select your bank to open the app and make your transfer.</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {BANK_APPS.map(bank => {
+                const direct = canLaunchBankApp(bank);
+                const isBusy = launchingId === bank.id;
+                return (
+                  <button
+                    key={bank.id}
+                    type="button"
+                    onClick={() => handleBankTap(bank)}
+                    disabled={Boolean(launchingId)}
+                    aria-label={`Transfer from ${bank.label}${direct ? ' - opens the app' : ' - copies the account number'}`}
+                    className="min-h-[88px] flex flex-col items-center justify-center gap-1 p-2 rounded-2xl border border-emerald-100 bg-white hover:bg-emerald-50 active:scale-[0.98] disabled:opacity-60 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                  >
+                    <span className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-extrabold ${bank.tint}`}>{bank.initials}</span>
+                    <span className="text-xs font-bold text-slate-800 text-center leading-tight">{bank.label}</span>
+                    <span className={`text-[10px] font-semibold ${direct ? 'text-emerald-700' : 'text-slate-400'}`}>
+                      {isBusy ? 'Opening...' : direct ? 'Opens app' : 'Copies details'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[10px] text-slate-400 font-semibold leading-relaxed">
+              Not every bank lets us open its app for you. If yours isn't listed, open your bank app yourself and use the account details above.
+            </p>
+          </div>
+
+          <div aria-live="polite">
+            {notice && (
+              <div className={`p-3 rounded-2xl border text-xs font-semibold leading-relaxed ${noticeStyle[notice.tone]}`}>
+                {notice.text}
+              </div>
+            )}
+            {fallbackBank && (
+              <div className="mt-2 p-4 rounded-2xl border border-amber-200 bg-amber-50 text-xs text-amber-900 font-semibold leading-relaxed space-y-3">
+                <p>
+                  Your {fallbackBank.label} app could not be opened automatically. Please open your bank app and use the account details above.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCopy}
+                    className="min-h-[44px] inline-flex items-center justify-center gap-1.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                  >
+                    <Copy className="w-4 h-4" />
+                    Copy Account Number
+                  </button>
+                  {isAndroidDevice() && (
+                    <a
+                      href={`https://play.google.com/store/apps/details?id=${fallbackBank.playStoreId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="min-h-[44px] inline-flex items-center justify-center gap-1.5 px-4 rounded-xl border border-amber-300 bg-white text-amber-900 hover:bg-amber-100 text-sm font-bold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      Find {fallbackBank.label} on Google Play
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// =========================================================================
+// 4. CUSTOMER DASHBOARD COMPONENT
+// =========================================================================
+
+// =========================================================================
+// REFERRAL SYSTEM (additive) - customer section + admin panel
+// All writes happen server-side (DB triggers / admin RPCs). The UI only
+// reads and calls RPCs; nothing here can alter balances or referral data.
+// =========================================================================
+const REFERRAL_BASE_URL = 'https://hire-mercyajo.netlify.app';
+const buildReferralLink = (code: string) => `${REFERRAL_BASE_URL}/register?ref=${encodeURIComponent(code)}`;
+const REFERRAL_CODE_PATTERN = /^HM-[A-Z0-9]{6}$/;
+
+// Reads ?ref= from the current URL (null when absent or malformed).
+const readReferralCodeFromUrl = (): string | null => {
+  try {
+    const raw = new URLSearchParams(window.location.search).get('ref');
+    const code = (raw || '').trim().toUpperCase();
+    return REFERRAL_CODE_PATTERN.test(code) ? code : null;
+  } catch {
+    return null;
+  }
+};
+
+const referralCopyToClipboard = async (text: string): Promise<boolean> => {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch { /* fall through to legacy path */ }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+};
+
+interface MyReferralDashboard {
+  referral_code: string;
+  total_referred: number;
+  successful_referrals: number;
+  total_earnings: number;
+  pending_rewards: number;
+  welcome_bonus_amount: number;
+  welcome_bonus_status: string | null;
+  welcome_bonus_withdrawable: boolean;
+  points: number;
+  // Optional: not returned by get_my_referral_dashboard today. When a later,
+  // approved database change adds them, the interface picks them up automatically.
+  reward_percentage?: number | null;
+  max_reward_cap?: number | null;
+  rewards_enabled?: boolean | null;
+  history: {
+    referred_name: string;
+    joined_at: string;
+    qualified: boolean;
+    first_contribution_amount: number | null;
+    reward_amount: number | null;
+    reward_status: 'pending' | 'earned' | 'paid' | 'reversed' | null;
+  }[];
+}
+
+type ReferralHistoryFilter = 'all' | 'qualified' | 'pending';
+
+// Bottom-sheet with the copyable link and one-tap share targets. Presentational
+// only: it opens plain share URLs and never reads or writes referral data.
+function ReferralShareSheet({ open, onClose, link, code, onCopy, onNativeShare, copied }: {
+  open: boolean;
+  onClose: () => void;
+  link: string;
+  code: string;
+  onCopy: () => void;
+  onNativeShare: () => void;
+  copied: boolean;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  const message = `Save daily with HireMercyAJO. Use my referral code ${code} to join:`;
+  const enc = encodeURIComponent;
+  const openUrl = (url: string) => { window.open(url, '_blank', 'noopener,noreferrer'); };
+
+  const targets: { key: string; label: string; bg: string; glyph: React.ReactNode; run: () => void }[] = [
+    { key: 'wa', label: 'WhatsApp', bg: 'bg-[#25D366]', glyph: <MessageCircle className="w-6 h-6" />,
+      run: () => openUrl(`https://wa.me/?text=${enc(`${message} ${link}`)}`) },
+    { key: 'fb', label: 'Facebook', bg: 'bg-[#1877F2]', glyph: <span className="text-2xl font-black leading-none">f</span>,
+      run: () => openUrl(`https://www.facebook.com/sharer/sharer.php?u=${enc(link)}`) },
+    { key: 'x', label: 'X', bg: 'bg-black', glyph: <span className="text-xl font-black leading-none">X</span>,
+      run: () => openUrl(`https://twitter.com/intent/tweet?text=${enc(message)}&url=${enc(link)}`) },
+    { key: 'tg', label: 'Telegram', bg: 'bg-[#229ED9]', glyph: <Send className="w-5 h-5" />,
+      run: () => openUrl(`https://t.me/share/url?url=${enc(link)}&text=${enc(message)}`) },
+    { key: 'sms', label: 'SMS', bg: 'bg-emerald-600', glyph: <MessageSquare className="w-5 h-5" />,
+      run: () => { window.location.href = `sms:?&body=${enc(`${message} ${link}`)}`; } },
+    { key: 'more', label: 'More', bg: 'bg-slate-100 !text-slate-700', glyph: <MoreHorizontal className="w-6 h-6" />,
+      run: onNativeShare }
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" role="dialog" aria-modal="true" aria-label="Share your referral link">
+      <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-black/50 cursor-default" />
+      <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-xl max-h-[90vh] overflow-y-auto pb-[env(safe-area-inset-bottom)]">
+        <div className="bg-gradient-to-br from-emerald-800 to-emerald-600 text-white px-5 pt-5 pb-4 rounded-t-3xl sm:rounded-t-3xl flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-base font-extrabold">Share Referral Link</h3>
+            <p className="text-xs text-emerald-100 font-medium mt-0.5">Invite your friends and family to join HireMercyAJO</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close"
+            className="shrink-0 w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center transition">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-5">
+          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-3">
+            <div className="flex items-start gap-2">
+              <Link2 className="w-4 h-4 text-emerald-700 mt-0.5 shrink-0" />
+              <p className="text-[12px] font-semibold text-slate-700 break-all select-all">{link}</p>
+            </div>
+            <button type="button" onClick={onCopy}
+              className="mt-3 w-full flex items-center justify-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl transition text-sm">
+              {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />} {copied ? 'Copied' : 'Copy Link'}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-3 gap-y-4 gap-x-2">
+            {targets.map(t => (
+              <button key={t.key} type="button" onClick={t.run} className="flex flex-col items-center gap-1.5 group">
+                <span className={`w-12 h-12 rounded-full flex items-center justify-center text-white shadow-sm transition group-active:scale-95 ${t.bg}`}>
+                  {t.glyph}
+                </span>
+                <span className="text-[11px] font-bold text-slate-600">{t.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReferralCustomerSection({ customer }: { customer: Profile }) {
+  const [data, setData] = useState<MyReferralDashboard | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [hint, setHint] = useState<string | null>(null);
+  const [copied, setCopied] = useState<'code' | 'link' | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [filter, setFilter] = useState<ReferralHistoryFilter>('all');
+  const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      setLoading(true);
+      const { data: res, error } = await supabase.rpc('get_my_referral_dashboard');
+      if (!alive) return;
+      if (error || !res) {
+        setFailed(true);
+      } else {
+        setFailed(false);
+        setData(res as MyReferralDashboard);
+      }
+      setLoading(false);
+    })();
+    return () => { alive = false; };
+  }, [customer.id, reloadKey]);
+
+  useEffect(() => () => {
+    if (hintTimer.current) clearTimeout(hintTimer.current);
+    if (copiedTimer.current) clearTimeout(copiedTimer.current);
+  }, []);
+
+  const flash = (msg: string) => {
+    setHint(msg);
+    if (hintTimer.current) clearTimeout(hintTimer.current);
+    hintTimer.current = setTimeout(() => setHint(null), 2500);
+  };
+  const markCopied = (what: 'code' | 'link') => {
+    setCopied(what);
+    if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    copiedTimer.current = setTimeout(() => setCopied(null), 2000);
+  };
+
+  const code = data?.referral_code || customer.referral_code || '';
+  const link = code ? buildReferralLink(code) : '';
+
+  const handleCopyLink = async () => {
+    if (!link) return;
+    if (await referralCopyToClipboard(link)) { markCopied('link'); flash('Referral link copied!'); }
+    else flash('Could not copy - please copy the link manually.');
+  };
+
+  const handleCopyCode = async () => {
+    if (!code) return;
+    if (await referralCopyToClipboard(code)) { markCopied('code'); flash('Referral code copied!'); }
+    else flash('Could not copy - please copy the code manually.');
+  };
+
+  const handleNativeShare = async () => {
+    if (!link) return;
+    const shareData = {
+      title: 'Join HireMercyAJO',
+      text: `Save daily with HireMercyAJO. Use my referral code ${code} to join:`,
+      url: link
+    };
+    if (typeof navigator !== 'undefined' && typeof (navigator as any).share === 'function') {
+      try {
+        await (navigator as any).share(shareData);
+        return;
+      } catch (err: any) {
+        if (err && err.name === 'AbortError') return; // user closed the share sheet
+      }
+    }
+    if (await referralCopyToClipboard(link)) { markCopied('link'); flash('Sharing is not available here - link copied instead.'); }
+    else flash('Please copy the link manually.');
+  };
+
+  const naira = (n: number | null | undefined) => `₦${Number(n || 0).toLocaleString()}`;
+  const fmtDate = (iso: string) => {
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+
+  // Everything below is derived from the real dashboard payload.
+  const history = data?.history ?? [];
+  const qualifiedRows = history.filter(h => h.qualified && h.reward_status !== 'reversed');
+  const pendingRows = history.filter(h => !h.qualified);
+  const visibleRows = filter === 'qualified' ? qualifiedRows : filter === 'pending' ? pendingRows : history;
+
+  const pct = data?.reward_percentage != null && Number(data.reward_percentage) > 0 ? Number(data.reward_percentage) : null;
+  const cap = data?.max_reward_cap != null && Number(data.max_reward_cap) > 0 ? Number(data.max_reward_cap) : null;
+  const rewardsOff = data?.rewards_enabled === false;
+
+  const chip = (h: MyReferralDashboard['history'][number]) => {
+    if (!h.qualified) return { text: 'Pending', cls: 'bg-sky-50 text-sky-700' };
+    switch (h.reward_status) {
+      case 'paid': return { text: 'Paid', cls: 'bg-emerald-100 text-emerald-800' };
+      case 'earned': return { text: 'Qualified', cls: 'bg-emerald-100 text-emerald-800' };
+      case 'pending': return { text: 'Reward pending', cls: 'bg-amber-100 text-amber-800' };
+      case 'reversed': return { text: 'Reversed', cls: 'bg-red-100 text-red-700' };
+      default: return { text: 'Qualified', cls: 'bg-emerald-100 text-emerald-800' };
+    }
+  };
+
+  const steps = [
+    'Share your referral link with friends and family.',
+    'They register using your link or code.',
+    'They make their first approved contribution.',
+    pct ? `You earn ${pct}% of that contribution as your reward${cap ? ` (up to ${naira(cap)})` : ''}.` : 'You earn a referral reward.'
+  ];
+
+  return (
+    <div className="space-y-4 animate-fade-in max-w-2xl mx-auto text-slate-800 pb-4">
+      {/* Hero */}
+      <div className="relative overflow-hidden rounded-3xl p-5 text-white bg-gradient-to-br from-emerald-900 via-emerald-800 to-emerald-600 shadow-md">
+        <div className="absolute -right-8 -top-10 w-40 h-40 rounded-full bg-amber-300/20 blur-2xl pointer-events-none" />
+        <div className="absolute -left-10 -bottom-12 w-36 h-36 rounded-full bg-emerald-300/10 blur-2xl pointer-events-none" />
+        <div className="relative flex items-center gap-3">
+          <span className="shrink-0 w-12 h-12 rounded-2xl bg-white/15 border border-white/20 flex items-center justify-center">
+            <Gift className="w-6 h-6 text-amber-300" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-lg font-extrabold leading-tight">Refer &amp; Earn</h3>
+            <p className="text-xs text-emerald-100 font-medium mt-0.5">Invite friends and family to join HireMercyAJO.</p>
+          </div>
+          <div className="shrink-0 -my-4 -mr-1"><Mascot pose="point" size={88} /></div>
+        </div>
+      </div>
+
+      {loading && !data && (
+        <div className="space-y-3" aria-busy="true">
+          <div className="grid grid-cols-3 gap-3">
+            {[0, 1, 2].map(i => <div key={i} className="skeleton-green h-20" />)}
+          </div>
+          <div className="skeleton-green h-40" />
+        </div>
+      )}
+
+      {!loading && failed && !code && (
+        <div className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-2xl p-4 font-medium flex items-center justify-between gap-3">
+          <span>Referral details are not available right now.</span>
+          <button type="button" onClick={() => setReloadKey(k => k + 1)}
+            className="shrink-0 px-3 py-1.5 rounded-lg bg-white border border-amber-200 font-bold text-amber-800">Try again</button>
+        </div>
+      )}
+
+      {data && (
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-white rounded-2xl border border-emerald-100 shadow-xs p-3 text-center">
+            <p className="text-2xl font-black text-emerald-900 leading-none">{data.total_referred}</p>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 mt-1.5">Total Referrals</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-emerald-100 shadow-xs p-3 text-center">
+            <p className="text-2xl font-black text-emerald-900 leading-none">{data.successful_referrals}</p>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 mt-1.5">Qualified</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-amber-200 shadow-xs p-3 text-center">
+            <p className="text-lg sm:text-2xl font-black text-emerald-900 leading-none break-words">{naira(data.total_earnings)}</p>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 mt-1.5">Earned</p>
+            {Number(data.pending_rewards) > 0 && (
+              <p className="text-[10px] font-bold text-amber-700 mt-0.5">+{naira(data.pending_rewards)} pending</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {code && (
+        <div className="bg-white rounded-3xl border border-emerald-100 shadow-xs p-4 sm:p-5 space-y-3">
+          <p className="text-[11px] font-black uppercase tracking-wide text-emerald-800">Your Referral Code</p>
+          <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 rounded-2xl p-2 pl-4">
+            <p className="flex-1 min-w-0 text-xl font-black text-emerald-900 tracking-widest select-all truncate">{code}</p>
+            <button type="button" onClick={handleCopyCode}
+              className="shrink-0 flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-3.5 py-2.5 rounded-xl transition text-xs">
+              {copied === 'code' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />} {copied === 'code' ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button type="button" onClick={() => setShareOpen(true)}
+              className="flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-700 to-emerald-600 hover:from-emerald-800 hover:to-emerald-700 text-white font-bold py-3 rounded-xl transition text-sm shadow-sm active:scale-[0.98]">
+              <Share2 className="w-4 h-4" /> Share My Referral Link
+            </button>
+            <button type="button" onClick={handleCopyLink}
+              className="flex items-center justify-center gap-2 bg-white border border-emerald-200 hover:bg-emerald-50 text-emerald-800 font-bold py-3 rounded-xl transition text-sm active:scale-[0.98]">
+              {copied === 'link' ? <Check className="w-4 h-4" /> : <Link2 className="w-4 h-4" />} {copied === 'link' ? 'Link copied' : 'Copy Link'}
+            </button>
+          </div>
+          <p className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> Your referral code is permanent and cannot be changed.
+          </p>
+        </div>
+      )}
+
+      {data && (
+        <>
+          {/* Reward explainer */}
+          <div className="rounded-3xl border border-amber-200 bg-gradient-to-br from-amber-50 to-emerald-50 p-4 sm:p-5">
+            <div className="flex items-start gap-3">
+              <span className="shrink-0 w-11 h-11 rounded-full bg-emerald-800 flex items-center justify-center">
+                <Coins className="w-5 h-5 text-amber-300" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-extrabold text-emerald-950">{pct ? `${pct}% Referral Reward` : 'Referral Reward'}</p>
+                <p className="text-xs text-slate-600 font-medium mt-0.5">
+                  {pct
+                    ? `Earn ${pct}% of each qualified referral's first contribution${cap ? `, up to ${naira(cap)}` : ''}.`
+                    : 'Earn a reward when someone you refer makes their first approved contribution.'}
+                </p>
+                {rewardsOff && (
+                  <p className="text-[11px] font-bold text-amber-800 bg-amber-100/70 rounded-lg px-2 py-1 mt-2 inline-block">
+                    Referral rewards are not active at the moment.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* How it works */}
+          <div className="bg-white rounded-3xl border border-emerald-100 shadow-xs p-4 sm:p-5">
+            <h4 className="text-sm font-extrabold text-emerald-950 mb-3">How It Works</h4>
+            <ol className="space-y-3">
+              {steps.map((s, i) => (
+                <li key={i} className="flex items-start gap-3">
+                  <span className="shrink-0 w-7 h-7 rounded-full bg-emerald-700 text-white text-xs font-black flex items-center justify-center">{i + 1}</span>
+                  <p className="text-xs font-semibold text-slate-700 pt-1.5">{s}</p>
+                </li>
+              ))}
+            </ol>
+          </div>
+
+          {Number(data.welcome_bonus_amount) > 0 && (
+            <div className="bg-gradient-to-br from-emerald-800 to-emerald-950 text-white p-4 rounded-2xl shadow-sm flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase text-amber-300 tracking-wide">Welcome Bonus</p>
+                <p className="text-2xl font-black">{naira(data.welcome_bonus_amount)}</p>
+              </div>
+              <span className="flex items-center gap-1 bg-white/15 border border-white/20 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide">
+                <LockIcon className="w-3 h-3" /> Non-withdrawable
+              </span>
+            </div>
+          )}
+
+          {Number(data.points) > 0 && (
+            <div className="bg-white rounded-2xl border border-emerald-100 shadow-xs p-4 flex items-center justify-between">
+              <p className="text-xs font-bold text-slate-600">Reward Points</p>
+              <p className="text-lg font-black text-emerald-900">{Number(data.points).toLocaleString()}</p>
+            </div>
+          )}
+
+          <p className="text-[10px] text-slate-400 font-medium px-1">
+            Referral earnings, any Welcome Bonus and reward points are kept separate from your Ajo savings balance.
+          </p>
+
+          {/* History */}
+          <div className="bg-white rounded-3xl border border-emerald-100 shadow-xs p-4 sm:p-5">
+            <h4 className="text-sm font-extrabold text-emerald-950 mb-3">Referral History</h4>
+
+            <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100 rounded-xl mb-3" role="tablist" aria-label="Filter referrals">
+              {([
+                ['all', 'All', history.length],
+                ['qualified', 'Qualified', qualifiedRows.length],
+                ['pending', 'Pending', pendingRows.length]
+              ] as [ReferralHistoryFilter, string, number][]).map(([key, label, n]) => (
+                <button key={key} type="button" role="tab" aria-selected={filter === key} onClick={() => setFilter(key)}
+                  className={`py-2 rounded-lg text-xs font-bold transition ${filter === key ? 'bg-emerald-700 text-white shadow-sm' : 'text-slate-600 hover:bg-white'}`}>
+                  {label} <span className={filter === key ? 'text-emerald-100' : 'text-slate-400'}>({n})</span>
+                </button>
+              ))}
+            </div>
+
+            {history.length === 0 ? (
+              <div className="text-center py-6">
+                <span className="mx-auto w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center mb-2">
+                  <UserPlus className="w-6 h-6 text-emerald-600" />
+                </span>
+                <p className="text-sm font-bold text-slate-700">No referrals yet</p>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">Share your link to get started.</p>
+              </div>
+            ) : visibleRows.length === 0 ? (
+              <p className="text-xs text-slate-400 font-medium text-center py-4">Nothing in this list yet.</p>
+            ) : (
+              <ul className="divide-y divide-slate-100">
+                {visibleRows.map((h, i) => {
+                  const c = chip(h);
+                  const name = h.referred_name || 'Customer';
+                  return (
+                    <li key={i} className="flex items-center gap-3 py-3">
+                      <span className="shrink-0 w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 font-black flex items-center justify-center">
+                        {name.trim().charAt(0).toUpperCase() || 'C'}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-slate-800 truncate">{name}</p>
+                        <p className="text-[11px] text-slate-500 font-medium">
+                          Joined {fmtDate(h.joined_at)}
+                          {h.qualified && h.first_contribution_amount != null ? ` · First contribution ${naira(h.first_contribution_amount)}` : ''}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-sm font-black text-emerald-800">{h.qualified && h.reward_status !== 'reversed' ? `+${naira(h.reward_amount)}` : '—'}</p>
+                        <span className={`inline-block mt-0.5 px-2 py-0.5 rounded-full font-bold text-[10px] ${c.cls}`}>{c.text}</span>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </>
+      )}
+
+      {hint && (
+        <div role="status" aria-live="polite"
+          className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[60] max-w-[90vw] bg-emerald-900 text-white text-xs font-bold px-4 py-2.5 rounded-full shadow-lg">
+          {hint}
+        </div>
+      )}
+
+      <ReferralShareSheet
+        open={shareOpen && !!link}
+        onClose={() => setShareOpen(false)}
+        link={link}
+        code={code}
+        onCopy={handleCopyLink}
+        onNativeShare={handleNativeShare}
+        copied={copied === 'link'}
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------
+// Admin referral panel (rendered inside the existing Admin Settings tab)
+// ---------------------------------------------------------------------
+function AdminReferralPanel({ profiles, triggerToast: toast }: { profiles: Profile[], triggerToast?: (text: string, type?: 'success' | 'error') => void }) {
+  const triggerToast = (text: string, type: 'success' | 'error' = 'success') => { if (toast) toast(text, type); };
+  const [settings, setSettings] = useState<any>(null);
+  const [enabled, setEnabled] = useState(true);
+  const [percentage, setPercentage] = useState('15');
+  const [cap, setCap] = useState('1000');
+  const [saving, setSaving] = useState(false);
+  const [referrals, setReferrals] = useState<any[]>([]);
+  const [rewards, setRewards] = useState<any[]>([]);
+  const [bonuses, setBonuses] = useState<any[]>([]);
+  const [points, setPoints] = useState<any[]>([]);
+  const [loadError, setLoadError] = useState(false);
+  const [view, setView] = useState<'referrals' | 'bonuses' | 'points'>('referrals');
+  const [search, setSearch] = useState('');
+
+  const nameOf = (id: string) => profiles.find(p => p.id === id)?.name || 'Unknown';
+
+  const load = async () => {
+    const [s, rf, rw, wb, pt] = await Promise.all([
+      supabase.from('referral_settings').select('*').eq('id', 1).single(),
+      supabase.from('referrals').select('*').order('created_at', { ascending: false }),
+      supabase.from('referral_rewards').select('*').order('created_at', { ascending: false }),
+      supabase.from('welcome_bonuses').select('*').order('created_at', { ascending: false }),
+      supabase.from('referral_points_ledger').select('*').order('created_at', { ascending: false })
+    ]);
+    if (s.error) { setLoadError(true); return; }
+    setLoadError(false);
+    if (s.data) {
+      setSettings(s.data);
+      setEnabled(!!s.data.rewards_enabled);
+      setPercentage(String(Number(s.data.reward_percentage)));
+      setCap(String(Number(s.data.max_reward_cap)));
+    }
+    setReferrals(rf.data || []);
+    setRewards(rw.data || []);
+    setBonuses(wb.data || []);
+    setPoints(pt.data || []);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const pct = Number(percentage);
+    const capNum = Number(cap);
+    if (percentage.trim() === '' || !isFinite(pct) || pct < 0 || pct > 100) {
+      triggerToast('Referral percentage must be a number between 0 and 100.', 'error'); return;
+    }
+    if (cap.trim() === '' || !isFinite(capNum) || capNum < 0) {
+      triggerToast('Maximum reward must be 0 or more.', 'error'); return;
+    }
+    setSaving(true);
+    const { error } = await supabase.rpc('admin_update_referral_settings', {
+      p_enabled: enabled, p_percentage: pct, p_cap: capNum, p_welcome_amount: null
+    });
+    setSaving(false);
+    if (error) { triggerToast(`Could not save referral settings: ${error.message}`, 'error'); return; }
+    triggerToast('Referral settings saved. They apply to new rewards only.', 'success');
+    load();
+  };
+
+  const handleReverse = async (rewardId: string) => {
+    const reason = window.prompt('Reason for reversing this referral reward (required):');
+    if (!reason || !reason.trim()) return;
+    const { error } = await supabase.rpc('admin_reverse_referral_reward', { p_reward_id: rewardId, p_reason: reason.trim() });
+    if (error) triggerToast(`Reverse failed: ${error.message}`, 'error');
+    else { triggerToast('Referral reward reversed.', 'success'); load(); }
+  };
+
+  const handleCorrect = async (r: any) => {
+    const raw = window.prompt(`New reward amount in ₦ (current ₦${Number(r.reward_amount).toLocaleString()}):`);
+    if (raw === null) return;
+    const amt = Number(raw);
+    if (raw.trim() === '' || !isFinite(amt) || amt < 0) { triggerToast('Enter a valid amount (0 or more).', 'error'); return; }
+    const reason = window.prompt('Reason for this correction (required):');
+    if (!reason || !reason.trim()) return;
+    const { error } = await supabase.rpc('admin_correct_referral_reward', { p_reward_id: r.id, p_new_amount: amt, p_reason: reason.trim() });
+    if (error) triggerToast(`Correction failed: ${error.message}`, 'error');
+    else { triggerToast('Referral reward corrected.', 'success'); load(); }
+  };
+
+  const q = search.trim().toLowerCase();
+  const rows = useMemo(() => referrals.map(rf => ({
+    rf,
+    reward: rewards.find(r => r.referred_customer_id === rf.referred_customer_id) || null,
+    referrer: nameOf(rf.referrer_customer_id),
+    referred: nameOf(rf.referred_customer_id)
+  })).filter(x => !q || x.referrer.toLowerCase().includes(q) || x.referred.toLowerCase().includes(q) || (x.rf.referral_code || '').toLowerCase().includes(q)),
+  [referrals, rewards, profiles, q]);
+
+  const pointsByCustomer = useMemo(() => {
+    const m: Record<string, number> = {};
+    points.forEach(p => { m[p.customer_id] = (m[p.customer_id] || 0) + Number(p.points); });
+    return Object.entries(m).filter(([id]) => !q || nameOf(id).toLowerCase().includes(q));
+  }, [points, profiles, q]);
+
+  return (
+    <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs space-y-4 text-slate-800">
+      <div>
+        <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5">
+          <Users className="w-5 h-5 text-emerald-700" /> Referral Program
+        </h3>
+        <p className="text-xs text-slate-500 mt-0.5 font-medium">
+          Reward = MIN(first approved contribution × percentage, maximum reward). Changes apply to new rewards only; old rewards keep the settings they were created with.
+        </p>
+      </div>
+
+      {loadError ? (
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl p-3 font-medium">
+          Referral tables were not found. Run the referral migration in Supabase first.
+        </p>
+      ) : (
+        <>
+          <form onSubmit={handleSave} className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+            <label className="flex items-center gap-2 text-xs font-bold text-emerald-800 sm:pb-2.5">
+              <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="w-4 h-4 accent-emerald-700" />
+              Referral rewards enabled
+            </label>
+            <div>
+              <label className="block text-xs font-bold text-emerald-800 mb-1">Referral percentage (%)</label>
+              <input type="number" min="0" max="100" step="0.01" value={percentage} onChange={(e) => setPercentage(e.target.value)} className="input-green text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-emerald-800 mb-1">Maximum reward (₦)</label>
+              <input type="number" min="0" step="1" value={cap} onChange={(e) => setCap(e.target.value)} className="input-green text-sm" />
+            </div>
+            <button type="submit" disabled={saving}
+              className="bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl transition text-xs uppercase tracking-wide">
+              {saving ? 'Saving...' : 'Save Referral Settings'}
+            </button>
+          </form>
+          {settings && (
+            <p className="text-[10px] text-slate-400 font-medium">
+              Welcome Bonus: ₦{Number(settings.welcome_bonus_amount).toLocaleString()} · Withdrawable: No
+            </p>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2">
+            {([['referrals', 'Referrals & Rewards'], ['bonuses', 'Welcome Bonuses'], ['points', 'Points']] as const).map(([k, label]) => (
+              <button key={k} type="button" onClick={() => setView(k)}
+                className={`px-3 py-1.5 rounded-xl text-[11px] font-bold uppercase tracking-wide ${view === k ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'}`}>
+                {label}
+              </button>
+            ))}
+            <input type="text" placeholder="Search referrer or referred customer..." value={search} onChange={(e) => setSearch(e.target.value)}
+              className="input-green text-xs flex-1 min-w-[180px]" />
+          </div>
+
+          {view === 'referrals' && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-[11px]">
+                <thead>
+                  <tr className="text-slate-500 uppercase text-[10px] border-b border-slate-100">
+                    <th className="p-2">Referrer</th><th className="p-2">Referred</th><th className="p-2">Joined</th>
+                    <th className="p-2">Qualifying Tx</th><th className="p-2">Contribution</th><th className="p-2">Rate / Cap used</th>
+                    <th className="p-2">Reward</th><th className="p-2">Status</th><th className="p-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.length === 0 && (<tr><td colSpan={9} className="p-3 text-slate-400">No referrals found.</td></tr>)}
+                  {rows.map(({ rf, reward, referrer, referred }) => (
+                    <tr key={rf.id} className="border-b border-slate-50">
+                      <td className="p-2 font-bold">{referrer}</td>
+                      <td className="p-2 font-bold">{referred}</td>
+                      <td className="p-2">{new Date(rf.created_at).toLocaleDateString()}</td>
+                      <td className="p-2 font-mono">{reward?.qualifying_transaction_id ? String(reward.qualifying_transaction_id).slice(0, 8) : '—'}</td>
+                      <td className="p-2">{reward ? `₦${Number(reward.contribution_amount).toLocaleString()}` : '—'}</td>
+                      <td className="p-2">{reward ? `${Number(reward.referral_percentage_used)}% / ₦${Number(reward.maximum_reward_cap_used).toLocaleString()}` : '—'}</td>
+                      <td className="p-2 font-black text-emerald-800">
+                        {reward ? `₦${Number(reward.reward_amount).toLocaleString()}` : '—'}
+                        {reward?.original_reward_amount != null && (
+                          <span className="block text-[9px] font-medium text-slate-400">was ₦{Number(reward.original_reward_amount).toLocaleString()}</span>
+                        )}
+                      </td>
+                      <td className="p-2">
+                        <span className={`px-2 py-0.5 rounded-full font-black uppercase text-[9px] ${
+                          !reward ? 'bg-slate-100 text-slate-500' : reward.status === 'reversed' ? 'bg-red-100 text-red-700'
+                          : reward.status === 'pending' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                          {reward ? reward.status : 'No reward yet'}
+                        </span>
+                      </td>
+                      <td className="p-2 whitespace-nowrap">
+                        {reward && reward.status !== 'reversed' && (
+                          <>
+                            <button type="button" onClick={() => handleCorrect(reward)} className="text-emerald-700 font-bold hover:underline mr-2">Correct</button>
+                            <button type="button" onClick={() => handleReverse(reward.id)} className="text-red-600 font-bold hover:underline">Reverse</button>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {view === 'bonuses' && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-[11px]">
+                <thead><tr className="text-slate-500 uppercase text-[10px] border-b border-slate-100">
+                  <th className="p-2">Customer</th><th className="p-2">Amount</th><th className="p-2">Withdrawable</th><th className="p-2">Status</th><th className="p-2">Created</th>
+                </tr></thead>
+                <tbody>
+                  {bonuses.filter(b => !q || nameOf(b.customer_id).toLowerCase().includes(q)).map(b => (
+                    <tr key={b.id} className="border-b border-slate-50">
+                      <td className="p-2 font-bold">{nameOf(b.customer_id)}</td>
+                      <td className="p-2">₦{Number(b.amount).toLocaleString()}</td>
+                      <td className="p-2">No</td>
+                      <td className="p-2 uppercase font-black text-[9px]">{b.status}</td>
+                      <td className="p-2">{new Date(b.created_at).toLocaleDateString()}</td>
+                    </tr>
+                  ))}
+                  {bonuses.length === 0 && (<tr><td colSpan={5} className="p-3 text-slate-400">No welcome bonus records.</td></tr>)}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {view === 'points' && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-[11px]">
+                <thead><tr className="text-slate-500 uppercase text-[10px] border-b border-slate-100">
+                  <th className="p-2">Customer</th><th className="p-2">Points balance</th>
+                </tr></thead>
+                <tbody>
+                  {pointsByCustomer.map(([id, total]) => (
+                    <tr key={id} className="border-b border-slate-50">
+                      <td className="p-2 font-bold">{nameOf(id)}</td>
+                      <td className="p-2 font-black text-emerald-800">{total.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                  {pointsByCustomer.length === 0 && (<tr><td colSpan={2} className="p-3 text-slate-400">No points recorded yet.</td></tr>)}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function CustomerDashboard({ 
+  customer, transactions, markedDays, supportDetails, onAddPayoutRequest, payoutRequests, savedMonths, cycleArchives, onAddCustomerPendingTransaction, onUpdateCustomerSettings,
+  activeLoan, myLoans, myLoanRequests, onRequestLoan, profiles,
+  myMonthlySavingsPlan, myMonthlySavingsMonths, creditBalance, onSelfEnrollMonthly, myBalanceAdjustments, broadcastMessages, notifications, onLogout
+}: { 
+  customer: Profile, transactions: Transaction[], markedDays: MarkedDay[], supportDetails: SupportSettings, payoutRequests: PayoutRequest[], savedMonths: SavedMonth[], cycleArchives: any[], onAddPayoutRequest: (bank: string, acctNum: string, acctName: string, contributionIds: string[]) => void, broadcastMessages?: BroadcastMessage[],
+  onAddCustomerPendingTransaction: (amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => void, onUpdateCustomerSettings: (phone: string, dailyAmount: number, email: string) => void,
+  activeLoan: Loan | null, myLoans: Loan[], myLoanRequests: LoanRequest[], onRequestLoan: (customerId: string) => void, profiles: Profile[],
+  myMonthlySavingsPlan: MonthlySavingsPlan | null, myMonthlySavingsMonths: MonthlySavingsMonth[], creditBalance: CustomerCreditBalance | null,
+  onSelfEnrollMonthly: (amount: number) => void, myBalanceAdjustments: BalanceAdjustment[],
+  notifications?: Notification[], onLogout?: () => void
+}) {
+  const [customerTab, setCustomerTab] = useState<'home' | 'wallet' | 'oja' | 'bills' | 'rewards' | 'advertise' | 'profile' | 'games' | 'tracker' | 'transactions' | 'deposit' | 'settings' | 'history' | 'monthly-savings' | 'referral'>('home');
+  // Read-only referral/reward summary shared by the new Home, Rewards and Profile screens
+  const refDash = useReferralDashboard(customer.id);
+  const [selectedTrackerMonthKey, setSelectedTrackerMonthKey] = useState<string | null>(null);
+  const [showSupportOptions, setShowSupportOptions] = useState(false);
+  const [showLoanDetails, setShowLoanDetails] = useState(false);
+
+  const myTransactions = transactions.filter(t => t.customer_id === customer.id);
+
+  // Determine the customer's current active contribution period correctly:
+  // 1. If they have marked_days rows → use that period_key (mid-cycle).
+  // 2. If marked_days is empty (just completed Day 32 and freeze_period ran) →
+  //    derive the NEXT period from the most recently archived savedMonths,
+  //    so the display advances automatically to August after July completes.
+  // 3. Fallback to real calendar month for brand-new customers.
+  const activePeriodKey: string = (() => {
+    if (markedDays.length > 0) {
+      const k = (markedDays[0] as any)?.period_key;
+      if (k) return k;
+    }
+    const archivedKeys = savedMonths
+      .map(m => m.period_key)
+      .filter(Boolean)
+      .sort()
+      .reverse();
+    if (archivedKeys.length > 0) return nextPeriodKey(archivedKeys[0]);
+    return getCurrentPeriodKey();
+  })();
+
+  // The customer's ACTIVE, still-running cycle (whatever's currently open in marked_days)
+  const totalActiveCycle = markedDays.reduce((sum, item) => sum + item.amount, 0);
+  // Frozen 32-day (or expired) cycles that have been saved but not yet paid out -
+  // these are real money that belongs to the customer just as much as the active
+  // cycle; excluding them was the bug behind "balance only shows the new remainder".
+  const totalUncollected = sumCurrencyValues(
+    savedMonths.filter(m => m.status === 'saved' || m.status === 'requested').map(m => m.total_amount)
+  );
+  // Manual balance adjustments (e.g. a quick partial withdrawal an admin
+  // sent outside the normal payout flow) - a negative amount here reduces
+  // the customer's balance, reflected immediately across every board.
+  const myAdjustmentTotal = sumCurrencyValues(myBalanceAdjustments.map(a => Number(a.amount)));
+  // Total across everything the customer currently has with the company
+  const totalSaved = totalActiveCycle + totalUncollected + myAdjustmentTotal;
+
+  // Loan-derived values, shared by both the default Tracker tab (the real
+  // Balance Card lives there) and the History tab's summary card - computed
+  // once here rather than duplicated per-tab.
+  const latestLoan = myLoans[0] || null;
+  const justClearedLoan = latestLoan && latestLoan.status === 'Loan Cleared';
+  const pendingLoanRequest = myLoanRequests.find(r => r.status === 'Pending Approval');
+  const canRequestLoan = customer.is_active && customer.loan_status !== 'Active Loan' && customer.loan_status !== 'Pending Approval';
+  const [showLoanRequestModal, setShowLoanRequestModal] = useState(false);
+  const [showMsTermsModal, setShowMsTermsModal] = useState(false);
+  const [msSelfEnrollAmount, setMsSelfEnrollAmount] = useState('5000');
+
+  // Modal / Form state for Payout Request
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [bankName, setBankName] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [accountName, setAccountName] = useState('');
+  const [selectedMonthIds, setSelectedMonthIds] = useState<string[]>([]);
+
+  // Add Funds form states
+  const [depositAmountInput, setDepositAmountInput] = useState('');
+  const [selectedSenderBank, setSelectedSenderBank] = useState('');
+
+  // Personal Settings states
+  const [custSettingsPhone, setCustSettingsPhone] = useState(customer.phone);
+  const [custSettingsEmail, setCustSettingsEmail] = useState(customer.email || '');
+  const [custSettingsDailyAmount, setCustSettingsDailyAmount] = useState(customer.daily_amount);
+  const [newPassword, setNewPassword] = useState('');
+  const [isUpdatingPass, setIsUpdatingPass] = useState(false);
+
+  const payoutHistory = useMemo(() => {
+    return payoutRequests.filter(p => p.customer_id === customer.id);
+  }, [payoutRequests, customer.id]);
+
+  // Frozen/saved 32-day months that haven't been collected (requested/paid) yet.
+  // The Payout action is only ever surfaced when this list is non-empty.
+  const uncollectedSavedMonths = useMemo(() => {
+    return savedMonths.filter(m => m.status === 'saved');
+  }, [savedMonths]);
+
+  const selectedMonths = useMemo(() => {
+    return uncollectedSavedMonths.filter(m => selectedMonthIds.includes(m.id));
+  }, [uncollectedSavedMonths, selectedMonthIds]);
+
+  const selectedTotalAmount = useMemo(() => {
+    return sumCurrencyValues(selectedMonths.map(m => m.total_amount));
+  }, [selectedMonths]);
+
+  const selectedTotalFee = useMemo(() => {
+    // 1-day company fee deducted per saved month, at THAT month's own
+    // historical rate - never the customer's current daily_amount, so a
+    // later rate change can never affect an already-saved past month.
+    return sumCurrencyValues(selectedMonths.map(monthHistoricalDailyRate));
+  }, [selectedMonths]);
+
+  const expectedPayoutAmount = useMemo(() => {
+    if (selectedMonths.length === 0) return 0;
+    return Math.max(0, selectedTotalAmount - selectedTotalFee);
+  }, [selectedMonths, selectedTotalAmount, selectedTotalFee]);
+
+  // Configurable withdrawal charge (Admin Settings). Shown to the customer
+  // before they submit, and snapshotted onto the request at submission time
+  // (see handleCreatePayoutRequest) - never recalculated from a later setting.
+  const withdrawalChargeLabel = supportDetails.withdrawal_charge_label || 'Stamp Duty / Withdrawal Charge';
+  const withdrawalChargeAmount = supportDetails.withdrawal_charge_enabled ? Math.max(0, supportDetails.withdrawal_charge_amount || 0) : 0;
+  const expectedNetAmount = useMemo(() => {
+    return Math.max(0, expectedPayoutAmount - withdrawalChargeAmount);
+  }, [expectedPayoutAmount, withdrawalChargeAmount]);
+
+  const toggleMonthSelection = (id: string) => {
+    setSelectedMonthIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const canChangeAmount = useMemo(() => {
+    if (customer.allow_anytime_change) return true;
+    if (!customer.last_amount_change_at) return true;
+    const lastChange = new Date(customer.last_amount_change_at);
+    const now = new Date();
+    return !(lastChange.getMonth() === now.getMonth() && lastChange.getFullYear() === now.getFullYear());
+  }, [customer]);
+
+  const handleWithdrawSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bankName || !accountNumber || !accountName) return;
+    if (selectedMonthIds.length === 0) {
+      alert("Select at least one saved month to include in this payout request.");
+      return;
+    }
+    onAddPayoutRequest(bankName, accountNumber, accountName, selectedMonthIds);
+    setBankName('');
+    setAccountNumber('');
+    setAccountName('');
+    setSelectedMonthIds([]);
+    setShowWithdrawModal(false);
+  };
+
+  const handleAddFundsSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const amt = Number(depositAmountInput);
+    if (!depositAmountInput || isNaN(amt) || amt <= 0 || !selectedSenderBank) {
+      alert('Please enter a valid amount and select your bank.');
+      return;
+    }
+    
+    // Auto-save the transaction as Pending
+    onAddCustomerPendingTransaction(amt, 'Bank Transfer');
+
+    // Try to open the customer's bank app, but ONLY through a verified launch
+    // method (see BANK_APPS). Opening an app is not payment confirmation: the
+    // transaction saved above stays Pending until an admin approves it.
+    const senderBankApp = findBankAppByName(selectedSenderBank);
+    const bankFallbackMessage = `We couldn't open ${selectedSenderBank} automatically. Please open your bank app yourself and transfer to the account shown on this page.`;
+    if (senderBankApp && canLaunchBankApp(senderBankApp)) {
+      launchBankApp(senderBankApp).then(result => {
+        if (result === 'fallback') alert(bankFallbackMessage);
+      });
+    } else {
+      alert(bankFallbackMessage);
+    }
+
+    setDepositAmountInput('');
+    setSelectedSenderBank('');
+  };
+
+  const handleSettingsSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (Number(custSettingsDailyAmount) < 300) {
+      alert("Daily Contribution must be at least ₦300.");
+      return;
+    }
+    if (custSettingsEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(custSettingsEmail)) {
+      alert("Please enter a valid email address.");
+      return;
+    }
+    onUpdateCustomerSettings(custSettingsPhone, Number(custSettingsDailyAmount), custSettingsEmail);
+  };
+
+  const handleChangePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword.length < 6) {
+      alert('Password must be at least 6 characters long.');
+      return;
+    }
+    setIsUpdatingPass(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      alert('Your account password has been changed successfully!');
+      setNewPassword('');
+    } catch (err: any) {
+      alert(`Update Failed: ${err.message}`);
+    } finally {
+      setIsUpdatingPass(false);
+    }
+  };
+
+  // --- New interface navigation (additive): sections map onto the existing tabs ---
+  const inAjo = ['tracker', 'history', 'transactions', 'deposit', 'settings', 'monthly-savings'].includes(customerTab);
+  const activeSection: SectionKey = sectionForTab(customerTab);
+  const [bonusTick, setBonusTick] = useState(0);
+  const goSection = (s: SectionKey) => setCustomerTab(tabForSection(s) as any);
+  const goTab = (tab: string) => setCustomerTab(tab as any);
+  const todayLocal = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in the customer's timezone
+  const paidToday = markedDays.some(d => String(d.date || '').slice(0, 10) === todayLocal);
+  const dayCount = markedDays.reduce((m, d) => Math.max(m, d.day_number || 0), 0);
+
+  return (
+    <div className="space-y-5 sm:space-y-6 pb-28 sm:pb-6">
+      <PopupHost onSection={goSection} />
+      <NewDesktopNav active={activeSection} onSelect={goSection} />
+
+      {/* Slim identity + tab bar (hero banner above already carries the visual "welcome" moment) */}
+      {inAjo && (
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base sm:text-lg font-black text-emerald-950">Welcome, {customer.name.split(' ')[0]}!</h2>
+          <p className="text-[11px] text-slate-500">Your personal 32-day savings tracker</p>
+        </div>
+        <div className="hidden sm:flex gap-2 overflow-x-auto -mx-1 px-1 pb-1">
+          {(['tracker', 'history', 'transactions', 'deposit', 'settings', ...(myMonthlySavingsPlan ? ['monthly-savings'] : [])] as const).map((tab: any) => (
+            <button
+              key={tab}
+              onClick={() => setCustomerTab(tab)}
+              className={`shrink-0 px-3.5 py-2 rounded-xl text-[11px] font-bold tracking-wide uppercase transition-all duration-200 ${
+                customerTab === tab 
+                  ? 'bg-emerald-700 text-white shadow-sm' 
+                  : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+              }`}
+            >
+              {tab === 'tracker' && 'My Tracker'}
+              {tab === 'history' && '32-Day History'}
+              {tab === 'transactions' && 'Statement'}
+              {tab === 'deposit' && 'Deposit Funds'}
+              {tab === 'referral' && 'Refer & Earn'}
+              {tab === 'settings' && 'Settings'}
+              {tab === 'monthly-savings' && 'Monthly Savings'}
+            </button>
+          ))}
+        </div>
+      </div>
+      )}
+
+      {(() => {
+        // "The active broadcast" = the newest row that's still active. RLS
+        // already means a Customer's broadcastMessages only ever contains
+        // active rows, but sorting+taking the first here keeps this correct
+        // even if that ever changes, and keeps the "only one" rule visible
+        // in the UI code itself rather than relying purely on the backend.
+        const active = (broadcastMessages || [])
+          .filter(b => b.is_active)
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+        if (!active) return null;
+        return (
+          <div className="flex items-start gap-2.5 p-3.5 bg-amber-50 border border-amber-200 rounded-2xl shadow-sm">
+            <Megaphone className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-sm text-amber-900 font-semibold whitespace-pre-wrap break-words">{active.message}</p>
+              <p className="text-[10px] text-amber-600 font-bold mt-1 uppercase tracking-wide">
+                {new Date(active.created_at).toLocaleString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+              </p>
+            </div>
+          </div>
+        );
+      })()}
+
+      {inAjo && customerTab !== 'tracker' && (
+        <div className="sm:hidden flex gap-2 overflow-x-auto -mx-1 px-1 pb-1">
+          {(['tracker', 'history', 'transactions', 'deposit', 'settings', ...(myMonthlySavingsPlan ? ['monthly-savings'] : [])] as const).map((tab: any) => (
+            <button
+              key={tab}
+              onClick={() => setCustomerTab(tab)}
+              className={`shrink-0 px-3.5 py-2 rounded-xl text-[11px] font-bold tracking-wide uppercase transition-all duration-200 ${
+                customerTab === tab 
+                  ? 'bg-emerald-700 text-white shadow-sm' 
+                  : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+              }`}
+            >
+              {tab === 'tracker' && 'My Tracker'}
+              {tab === 'history' && '32-Day History'}
+              {tab === 'transactions' && 'Statement'}
+              {tab === 'deposit' && 'Deposit Funds'}
+              {tab === 'referral' && 'Refer & Earn'}
+              {tab === 'settings' && 'Settings'}
+              {tab === 'monthly-savings' && 'Monthly Savings'}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {customerTab === 'home' && (
+        <HomeScreen customer={customer} totalSaved={totalSaved} dayCount={dayCount} paidToday={paidToday}
+          myTransactions={myTransactions} notifications={notifications || []} supportDetails={supportDetails}
+          dash={refDash.data} onSection={goSection} onTab={goTab} />
+      )}
+      {(customerTab === 'home' || customerTab === 'wallet') && <BonusBanner onSection={goSection} onClaimed={() => setBonusTick(t => t + 1)} />}
+      {customerTab === 'games' && <GamesScreen onSection={goSection} />}
+      {customerTab === 'wallet' && <WalletScreen key={bonusTick} customer={customer} supportDetails={supportDetails} onTab={goTab} />}
+      {customerTab === 'oja' && <OjaScreen customer={customer} supportDetails={supportDetails} onSection={goSection} referralCode={refDash.data?.referral_code} />}
+      {customerTab === 'bills' && <BillsScreen defaultPhone={customer.phone} />}
+      {customerTab === 'rewards' && (
+        <RewardsScreen supportDetails={supportDetails} customer={customer} myTransactions={myTransactions} dash={refDash.data} onSection={goSection} onTab={goTab} />
+      )}
+      {customerTab === 'advertise' && <AdvertiseScreen customer={customer} supportDetails={supportDetails} referralCode={refDash.data?.referral_code} />}
+      {customerTab === 'profile' && (
+        <ProfileScreen customer={customer} dash={refDash.data} myTransactions={myTransactions} supportDetails={supportDetails}
+          onTab={goTab} onSection={goSection} onLogout={onLogout} />
+      )}
+
+      {customerTab === 'history' && (() => {
+        const myHistory = buildTrackingHistory(markedDays, savedMonths, cycleArchives);
+        const uncollectedTotal = sumCurrencyValues(
+          myHistory.filter(e => e.status === 'Uncollected').map(e => e.total_amount)
+        );
+        const collectedTotal = sumCurrencyValues(
+          myHistory.filter(e => e.status === 'Collected').map(e => e.total_amount)
+        );
+        return (
+          <div className="space-y-4">
+            {/* Savings Account summary - accumulates and never clears until an
+                explicit admin-approved payout removes a specific month */}
+            <div className="bg-gradient-to-br from-emerald-900 to-emerald-950 text-white p-5 sm:p-6 rounded-3xl shadow-md">
+              <p className="text-[11px] uppercase font-bold tracking-wider text-amber-400">My Savings Account</p>
+              <p className="text-3xl sm:text-4xl font-black mt-1.5 text-white">₦{(totalActiveCycle + uncollectedTotal + myAdjustmentTotal).toLocaleString()}</p>
+              <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3 text-xs font-semibold text-emerald-100">
+                <span>Running: ₦{totalActiveCycle.toLocaleString()}</span>
+                <span>Uncollected: ₦{uncollectedTotal.toLocaleString()}</span>
+                <span>Lifetime Collected: ₦{collectedTotal.toLocaleString()}</span>
+                {myAdjustmentTotal !== 0 && (
+                  <span className={myAdjustmentTotal < 0 ? 'text-red-300' : 'text-amber-200'}>
+                    Adjustments: {myAdjustmentTotal > 0 ? '+' : ''}₦{myAdjustmentTotal.toLocaleString()}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="card-green">
+              <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide mb-1">My 32-Day Tracking History</h3>
+              <p className="text-xs text-slate-500 mb-4 font-medium">Every 32-day cycle you've run, from the one currently in progress to fully paid-out months. Tap a month for details.</p>
+              {myHistory.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/40 p-6 text-center text-slate-400 text-sm">No tracking history yet — your first contribution will start Day 1.</div>
+              ) : (
+                <div className="space-y-2">
+                  {myHistory.map(entry => <TrackingHistoryCard key={entry.key} entry={entry} />)}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {customerTab === 'tracker' && (() => {
+        const myHistory = buildTrackingHistory(markedDays, savedMonths, cycleArchives);
+        const selectedEntry = selectedTrackerMonthKey
+          ? myHistory.find(h => h.key === selectedTrackerMonthKey)
+          : (myHistory.find(h => h.period_key === activePeriodKey) || myHistory[0]);
+        const isViewingRunningCycle = !selectedEntry || selectedEntry.status === 'Running';
+
+        return (
+        <div className="space-y-5 sm:space-y-6">
+          {/* Balance Card */}
+          <div className="card-green">
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-5 sm:gap-6 items-center">
+              <div>
+                <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Total Balance With HireMercy AJO</p>
+                <p className="text-3xl sm:text-4xl font-black text-emerald-800 mt-1.5">₦{totalSaved.toLocaleString()}</p>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11px] font-semibold text-slate-500">
+                  <span>Running: ₦{totalActiveCycle.toLocaleString()}</span>
+                  <span>•</span>
+                  <span>Uncollected: ₦{totalUncollected.toLocaleString()}</span>
+                  {myAdjustmentTotal !== 0 && (
+                    <>
+                      <span>•</span>
+                      <span className={myAdjustmentTotal < 0 ? 'text-red-500' : 'text-emerald-700'}>
+                        Adjustments: {myAdjustmentTotal > 0 ? '+' : ''}₦{myAdjustmentTotal.toLocaleString()}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div className="hidden sm:flex icon-circle w-16 h-16 shrink-0"><Wallet className="w-7 h-7" /></div>
+              <div className="flex sm:flex-col gap-4 sm:gap-2 sm:text-right border-t sm:border-t-0 sm:border-l border-emerald-100 pt-3 sm:pt-0 sm:pl-6">
+                <div>
+                  <span className="text-slate-400 block font-semibold text-[10px] uppercase tracking-wide flex items-center gap-1 sm:justify-end"><Target className="w-3 h-3" /> Daily Target Plan</span>
+                  <span className="font-bold text-slate-800 text-sm">₦{customer.daily_amount.toLocaleString()} / Day</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block font-semibold text-[10px] uppercase tracking-wide flex items-center gap-1 sm:justify-end"><Calendar className="w-3 h-3" /> Current Cycle</span>
+                  <span className="font-bold text-amber-600 text-sm">32-Day Thrift</span>
+                </div>
+              </div>
+            </div>
+
+            {activeLoan && (
+              <div className="pt-4 mt-4 border-t border-emerald-100">
+                <span className="text-slate-400 block font-bold text-[10px] uppercase">Loan Balance</span>
+                <p className="text-2xl font-black mt-0.5 text-red-600">
+                  -₦{Math.max(0, activeLoan.repayment_amount - activeLoan.amount_repaid).toLocaleString()}
+                </p>
+              </div>
+            )}
+            {!activeLoan && justClearedLoan && (
+              <div className="pt-4 mt-4 border-t border-emerald-100">
+                <p className="text-sm font-black text-green-600">Loan Repayment Complete</p>
+              </div>
+            )}
+            {creditBalance && creditBalance.credit_amount > 0 && (
+              <div className="pt-4 mt-4 border-t border-emerald-100">
+                <span className="text-slate-400 block font-bold text-[10px] uppercase">Credit Balance</span>
+                <p className="text-xl font-black mt-0.5 text-blue-600">₦{creditBalance.credit_amount.toLocaleString()}</p>
+                <p className="text-[10px] text-slate-500 mt-0.5 font-semibold">
+                  You have ₦{creditBalance.credit_amount.toLocaleString()} credit from an earlier overpayment. This will be applied to your next contribution automatically — you only need to pay ₦{Math.max(0, customer.daily_amount - creditBalance.credit_amount).toLocaleString()} more to mark the next day.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Unlock / withdrawal status banner */}
+          {activeLoan ? (
+            <div className="rounded-2xl bg-red-50 border border-red-200 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+              <span className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0"><LockIcon className="w-5 h-5" /></span>
+              <p className="text-xs font-semibold text-red-700 flex-1">You have an active loan to repay. Savings withdrawal is unavailable until your loan has been fully repaid.</p>
+            </div>
+          ) : uncollectedSavedMonths.length > 0 ? (
+            <div className="rounded-2xl bg-gradient-to-r from-amber-500 to-amber-400 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+              <span className="w-10 h-10 rounded-xl bg-white/30 text-emerald-950 flex items-center justify-center shrink-0"><Coins className="w-5 h-5" /></span>
+              <p className="text-xs font-bold text-emerald-950 flex-1">You have {uncollectedSavedMonths.length} completed cycle{uncollectedSavedMonths.length > 1 ? 's' : ''} ready for payout.</p>
+              <button
+                type="button"
+                onClick={() => setShowWithdrawModal(true)}
+                className="bg-emerald-950 hover:bg-emerald-900 active:scale-[0.98] text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 shrink-0"
+              >
+                Request Payout <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <div className="rounded-2xl bg-gradient-to-r from-emerald-800 to-emerald-900 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+              <span className="w-10 h-10 rounded-xl bg-amber-400 text-emerald-950 flex items-center justify-center shrink-0"><LockIcon className="w-5 h-5" /></span>
+              <p className="text-xs font-semibold text-white flex-1">Complete a full 32-day cycle to unlock a payout for that month.</p>
+              <button
+                type="button"
+                onClick={() => setCustomerTab('history')}
+                className="bg-amber-400 hover:bg-amber-300 active:scale-[0.98] text-emerald-950 text-xs font-bold px-4 py-2.5 rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 shrink-0"
+              >
+                View My Progress <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* Quick action icon row */}
+          <div className="card-green">
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 sm:gap-4 text-center">
+              {([
+                { tab: 'tracker', label: 'My Tracker', icon: Target },
+                { tab: 'history', label: '32-Day History', icon: Calendar },
+                { tab: 'transactions', label: 'Statement', icon: FileText },
+                { tab: 'deposit', label: 'Deposit Funds', icon: Wallet },
+                { tab: 'referral', label: 'Refer & Earn', icon: Users },
+                { tab: 'settings', label: 'Plan Settings', icon: Settings },
+              ] as const).map(({ tab, label, icon: Icon }) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setCustomerTab(tab)}
+                  className="flex flex-col items-center gap-2 group"
+                >
+                  <span className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 ${
+                    customerTab === tab ? 'bg-emerald-700 text-white shadow-md' : 'bg-emerald-50 text-emerald-700 group-hover:bg-emerald-100'
+                  }`}>
+                    <Icon className="w-5 h-5" />
+                  </span>
+                  <span className="text-[10px] font-semibold text-slate-600 leading-tight">{label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 3-card row: Loan / Monthly Savings / Support */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5">
+            {/* Loan Information (compact) */}
+            <div className="card-green flex flex-col">
+              <div className="flex items-center gap-2.5 mb-2">
+                <span className="icon-circle-light w-9 h-9"><HandCoins className="w-4 h-4" /></span>
+                <h3 className="text-xs font-bold text-emerald-950 uppercase tracking-wide">Loan Information</h3>
+              </div>
+              {pendingLoanRequest ? (
+                <p className="text-xs text-amber-700 font-semibold flex-1">Your loan request is pending admin approval.</p>
+              ) : activeLoan ? (
+                <div className="flex-1 space-y-2">
+                  <p className="text-xs text-slate-500 font-medium">Outstanding balance</p>
+                  <p className="text-lg font-black text-red-600">₦{activeLoan.amount_remaining.toLocaleString()}</p>
+                  <button type="button" onClick={() => setShowLoanDetails(v => !v)} className="text-[11px] font-bold text-emerald-700 hover:underline flex items-center gap-1">
+                    {showLoanDetails ? 'Hide details' : 'View full details'} <ChevronRight className={`w-3 h-3 transition-transform ${showLoanDetails ? 'rotate-90' : ''}`} />
+                  </button>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500 font-medium flex-1">
+                  {customer.is_active ? 'You have no active loan.' : 'Your account must be active to request a loan.'}
+                </p>
+              )}
+              {canRequestLoan && !pendingLoanRequest && !activeLoan && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const threeMonthsAgo = new Date();
+                    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+                    const registeredDate = customer.created_at ? new Date(customer.created_at) : new Date();
+                    if (registeredDate > threeMonthsAgo) {
+                      alert("You're not eligible. Contact your agent.");
+                      return;
+                    }
+                    setShowLoanRequestModal(true);
+                  }}
+                  className="mt-3 w-full bg-emerald-700 hover:bg-emerald-800 active:scale-[0.98] text-white font-bold py-2.5 rounded-xl text-xs transition-all duration-200 flex items-center justify-center gap-1"
+                >
+                  Request Loan <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Monthly Savings Plan (compact) */}
+            <div className="card-green flex flex-col">
+              <div className="flex items-center gap-2.5 mb-2">
+                <span className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center"><CalendarRange className="w-4 h-4" /></span>
+                <h3 className="text-xs font-bold text-emerald-950 uppercase tracking-wide">Monthly Savings Plan</h3>
+              </div>
+              {myMonthlySavingsPlan ? (
+                <div className="flex-1 space-y-1">
+                  <p className="text-xs text-slate-500 font-medium">Saved this year ({myMonthlySavingsPlan.year})</p>
+                  <p className="text-lg font-black text-emerald-700">₦{myMonthlySavingsPlan.total_saved.toLocaleString()}</p>
+                  <p className="text-[11px] text-slate-500 font-semibold">{myMonthlySavingsMonths.filter(m => m.plan_id === myMonthlySavingsPlan!.id && m.is_complete).length}/12 months complete</p>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500 font-medium flex-1">You are not currently enrolled in the Monthly Salary Savings Plan.</p>
+              )}
+              <button
+                type="button"
+                onClick={() => myMonthlySavingsPlan ? setCustomerTab('monthly-savings') : setShowMsTermsModal(true)}
+                className="mt-3 w-full bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-emerald-950 font-bold py-2.5 rounded-xl text-xs transition-all duration-200 flex items-center justify-center gap-1"
+              >
+                {myMonthlySavingsPlan ? 'View Plan' : 'Get Started'} <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Need Assistance (compact) */}
+            <div className="card-green flex flex-col">
+              <div className="flex items-center gap-2.5 mb-2">
+                <span className="w-9 h-9 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center"><Headphones className="w-4 h-4" /></span>
+                <h3 className="text-xs font-bold text-emerald-950 uppercase tracking-wide">Need Assistance?</h3>
+              </div>
+              <p className="text-xs text-slate-500 font-medium flex-1">Our support team is here to help you.</p>
+              {showSupportOptions ? (
+                <div className="mt-3"><SupportWidget details={supportDetails} /></div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowSupportOptions(true)}
+                  className="mt-3 w-full bg-violet-600 hover:bg-violet-700 active:scale-[0.98] text-white font-bold py-2.5 rounded-xl text-xs transition-all duration-200 flex items-center justify-center gap-1"
+                >
+                  Contact Support <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Expanded loan details (kept intact, just tucked under a toggle to match the compact card above) */}
+          {showLoanDetails && activeLoan && (
+            <div className="card-green">
+              <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide mb-3">Loan Details</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs font-semibold">
+                <div><p className="text-slate-500">Loan Status</p><p className="font-bold">{activeLoan.status === 'Loan Cleared' ? 'Loan Repaid' : activeLoan.status}</p></div>
+                <div><p className="text-slate-500">Loan ID</p><p className="font-bold text-[10px]">{activeLoan.id.slice(0, 8)}</p></div>
+                <div><p className="text-slate-500">Loan Amount</p><p className="font-bold">₦{activeLoan.loan_amount.toLocaleString()}</p></div>
+                <div><p className="text-slate-500">Repayment Amount</p><p className="font-bold">₦{activeLoan.repayment_amount.toLocaleString()}</p></div>
+                <div><p className="text-slate-500">Amount Already Counted</p><p className="font-bold">₦{activeLoan.amount_already_counted.toLocaleString()}</p></div>
+                <div><p className="text-slate-500">Amount Repaid</p><p className="font-bold">₦{activeLoan.amount_repaid.toLocaleString()}</p></div>
+                <div><p className="text-slate-500">Outstanding Balance</p><p className="font-bold text-red-600">₦{activeLoan.amount_remaining.toLocaleString()}</p></div>
+                <div><p className="text-slate-500">Current Daily Contribution</p><p className="font-bold">₦{customer.daily_amount.toLocaleString()}</p></div>
+                <div><p className="text-slate-500">Days Repaid</p><p className="font-bold">{activeLoan.days_repaid} / {activeLoan.total_days}</p></div>
+                <div><p className="text-slate-500">Remaining Days</p><p className="font-bold">{Math.max(0, activeLoan.total_days - activeLoan.days_repaid)}</p></div>
+                <div><p className="text-slate-500">Approval Date</p><p className="font-bold">{activeLoan.date_issued ? new Date(activeLoan.date_issued).toLocaleDateString() : '—'}</p></div>
+                <div><p className="text-slate-500">Approved By</p><p className="font-bold">{profiles.find(p => p.id === activeLoan.approved_by)?.name || '—'}</p></div>
+              </div>
+              <div className="pt-3">
+                <div className="w-full bg-slate-100 rounded-full h-2.5">
+                  <div
+                    className="bg-emerald-600 h-2.5 rounded-full transition-all"
+                    style={{ width: `${Math.min(100, (activeLoan.days_repaid / activeLoan.total_days) * 100)}%` }}
+                  />
+                </div>
+                <p className="text-[10px] font-bold text-slate-500 mt-1">{activeLoan.days_repaid} / {activeLoan.total_days} Days Completed</p>
+              </div>
+            </div>
+          )}
+
+          {showLoanRequestModal && (
+            <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setShowLoanRequestModal(false)}>
+              <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-sm w-full p-6" onClick={(e) => e.stopPropagation()}>
+                <h3 className="text-sm font-bold text-emerald-950 mb-3">Loan Request</h3>
+                {(() => {
+                  const { maxLoan, repaymentAmount } = computeLoanEligibility(customer.daily_amount);
+                  const completedDays = markedDays.length;
+                  const amountAlreadyCounted = Math.min(totalActiveCycle, repaymentAmount);
+                  const remainingRepayment = Math.max(0, repaymentAmount - amountAlreadyCounted);
+                  return (
+                    <div className="space-y-1.5 text-xs font-semibold mb-4">
+                      <p><span className="text-slate-500">Customer Name:</span> {customer.name}</p>
+                      <p><span className="text-slate-500">Daily Contribution:</span> ₦{customer.daily_amount.toLocaleString()}</p>
+                      <p><span className="text-slate-500">Maximum Loan Eligible:</span> ₦{maxLoan.toLocaleString()}</p>
+                      <p><span className="text-slate-500">Repayment Amount:</span> ₦{repaymentAmount.toLocaleString()}</p>
+                      <p><span className="text-slate-500">Completed Days:</span> {completedDays}</p>
+                      <p><span className="text-slate-500">Amount Already Counted:</span> ₦{amountAlreadyCounted.toLocaleString()}</p>
+                      <p className="font-black text-emerald-800">Remaining Repayment Amount: ₦{remainingRepayment.toLocaleString()}</p>
+                    </div>
+                  );
+                })()}
+                <button
+                  type="button"
+                  onClick={() => { onRequestLoan(customer.id); setShowLoanRequestModal(false); }}
+                  className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-black py-2.5 rounded-xl text-xs uppercase"
+                >
+                  Submit Loan Request
+                </button>
+              </div>
+            </div>
+          )}
+
+          {customer.admin_note && customer.admin_note.trim() !== '' && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
+              <MessageSquare className="w-5 h-5 text-amber-700 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-wide text-amber-700 mb-1">Note from HireMercy AJO</p>
+                <p className="text-xs font-semibold text-amber-900">{customer.admin_note}</p>
+              </div>
+            </div>
+          )}
+
+          {/* 32-Day Contribution Progress with month selector */}
+          <div className="card-green space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5">
+                  <span className="text-amber-500">★</span> My 32-Day Contribution Progress
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">Stars indicate approved/marked allocations corresponding to confirmed payments.</p>
+              </div>
+              {myHistory.length > 0 && (
+                <select
+                  value={selectedEntry?.key || ''}
+                  onChange={(e) => setSelectedTrackerMonthKey(e.target.value)}
+                  className="input-green bg-white text-xs py-2 w-full sm:w-48"
+                >
+                  {myHistory.map(h => (
+                    <option key={h.key} value={h.key}>{h.month_label} {h.status === 'Running' ? '(Current)' : `(${h.status})`}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {markedDays.length === 0 && savedMonths.length > 0 && isViewingRunningCycle && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
+                <p className="text-xs font-black text-emerald-800">
+                  ✓ Previous cycle complete — {periodLabelFromKey(activePeriodKey)} is ready
+                </p>
+                <p className="text-[11px] text-emerald-600 font-semibold mt-0.5">
+                  Your next contribution will automatically start Day 1 of {periodLabelFromKey(activePeriodKey)}.
+                </p>
+              </div>
+            )}
+
+            {isViewingRunningCycle ? (
+              <>
+                <p className="text-xs font-bold text-emerald-700">{markedDays.length} / 32 Days Completed</p>
+                <Grid32 trackingDays={markedDays} dailyAmount={customer.daily_amount} />
+              </>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-emerald-50/60 rounded-xl p-3 text-center">
+                  <p className="text-[10px] text-slate-500 uppercase font-bold">Month</p>
+                  <p className="text-sm font-black text-emerald-900 mt-0.5">{selectedEntry?.month_label}</p>
+                </div>
+                <div className="bg-emerald-50/60 rounded-xl p-3 text-center">
+                  <p className="text-[10px] text-slate-500 uppercase font-bold">Days Completed</p>
+                  <p className="text-sm font-black text-emerald-900 mt-0.5">{selectedEntry?.total_days} / 32</p>
+                </div>
+                <div className="bg-emerald-50/60 rounded-xl p-3 text-center">
+                  <p className="text-[10px] text-slate-500 uppercase font-bold">Total Amount</p>
+                  <p className="text-sm font-black text-emerald-900 mt-0.5">₦{selectedEntry?.total_amount.toLocaleString()}</p>
+                </div>
+                <div className="bg-emerald-50/60 rounded-xl p-3 text-center">
+                  <p className="text-[10px] text-slate-500 uppercase font-bold">Status</p>
+                  <p className="text-sm font-black text-emerald-900 mt-0.5">{selectedEntry?.status}</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Payout records table */}
+          <div className="card-green space-y-4">
+            <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5">
+              <FileText className="w-5 h-5 text-emerald-700" />
+              My Payout & Reset History
+            </h3>
+            <div className="overflow-x-auto text-slate-800 font-bold">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-emerald-50/50 text-emerald-900 font-extrabold border-b border-emerald-200">
+                    <th className="p-3">Requested At</th>
+                    <th className="p-3">Recipient Account</th>
+                    <th className="p-3">Cleared Period</th>
+                    <th className="p-3">Accrued Sum</th>
+                    <th className="p-3 text-emerald-800">Payout (Accrued - 1 Day)</th>
+                    <th className="p-3">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-emerald-50 bg-white">
+                  {payoutHistory.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="p-4 text-center text-slate-400 font-medium">
+                        <FileText className="w-5 h-5 mx-auto mb-1 text-slate-300" />
+                        No previous payout logs.
+                      </td>
+                    </tr>
+                  ) : (
+                    payoutHistory.map(h => (
+                      <tr key={h.id}>
+                        <td className="p-3 text-slate-500">
+                          {new Date(h.created_at).toLocaleDateString()}
+                        </td>
+                        <td className="p-3 text-slate-700 font-bold">
+                          {h.payout_method === 'Cash' ? (
+                            <strong className="block">Cash Payment</strong>
+                          ) : (
+                            <>
+                              <strong className="block">{h.account_name}</strong>
+                              {h.bank_name} • {h.account_number}
+                            </>
+                          )}
+                        </td>
+                        <td className="p-3 font-bold text-amber-800">{h.month_paid || 'N/A'}</td>
+                        <td className="p-3">₦{h.amount.toLocaleString()}</td>
+                        <td className="p-3 font-bold text-emerald-800">₦{h.payout_amount.toLocaleString()}</td>
+                        <td className="p-3">
+                          <span className={`px-2.5 py-0.5 rounded-full font-black uppercase text-[9px] ${
+                            h.status === 'Pending' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                          }`}>
+                            {h.status === 'Successful' ? 'Successful' : h.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        );
+      })()}
+
+      {/* Statement History Tab */}
+      {customerTab === 'transactions' && (
+        <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs animate-fade-in space-y-4">
+          <div>
+            <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5 font-bold font-bold">
+              <FileText className="w-5 h-5 text-emerald-700" />
+              Statement History Ledger
+            </h3>
+            <p className="text-xs text-slate-500 font-medium font-bold">Review your past contribution deposits, including both pending approvals and confirmed payouts.</p>
+          </div>
+          <div className="overflow-x-auto text-slate-800 font-medium">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-emerald-50/50 text-emerald-900 font-extrabold border-b border-emerald-200">
+                  <th className="p-3">Date</th>
+                  <th className="p-3">Payment Channel</th>
+                  <th className="p-3">Amount Deposited</th>
+                  <th className="p-3">Days Marked</th>
+                  <th className="p-3 text-right">Approval Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-emerald-50 bg-white">
+                {myTransactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="p-4 text-center text-slate-400">No previous deposit receipts found.</td>
+                  </tr>
+                ) : (
+                  myTransactions.map(t => (
+                    <tr key={t.id} className="hover:bg-emerald-50/20 transition">
+                      <td className="p-3 text-slate-500">{t.date}</td>
+                      <td className="p-3 font-semibold text-slate-700">{t.payment_method}</td>
+                      <td className="p-3 font-bold text-emerald-800">₦{t.amount.toLocaleString()}</td>
+                      <td className="p-3">
+                        {t.status === 'Successful' ? (
+                          <span className="bg-amber-100 text-amber-950 font-black px-2 py-0.5 rounded">
+                            Days {t.start_day} - {t.end_day} ({t.days_covered} Days)
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 italic font-bold text-[10px]">Processing approval...</span>
+                        )}
+                      </td>
+                      <td className="p-3 text-right">
+                        <span className={`px-2.5 py-0.5 rounded-full font-black text-[9px] uppercase ${
+                          t.status === 'Pending' ? 'bg-amber-100 text-amber-800 animate-pulse' : 'bg-emerald-100 text-emerald-800'
+                        }`}>
+                          {t.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Deposit Funds / Add Funds Tab */}
+      {customerTab === 'deposit' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in text-slate-800 font-bold font-bold">
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs space-y-4">
+            <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5 font-bold font-bold">
+              <Coins className="w-5 h-5 text-emerald-700" />
+              Add Savings Contribution
+            </h3>
+            <p className="text-xs text-slate-500 font-medium font-bold">Follow the steps below to fund your 32-day plan: </p>
+            
+            <div className="space-y-3 text-xs bg-emerald-50/30 p-4 rounded-2xl border border-emerald-100 leading-relaxed font-semibold">
+              <p className="text-emerald-900 font-extrabold text-sm">Instructions:</p>
+              <p>1. Copy the company bank account parameters shown in the adjacent widget.</p>
+              <p>2. Select the specific bank you are transferring *from* below.</p>
+              <p>3. Enter the exact transferred sum, then click "Complete Transaction".</p>
+              <p>4. We will try to open your banking app for you. If it does not open, open it yourself to finalize the transfer.</p>
+            </div>
+
+            <form onSubmit={handleAddFundsSubmit} className="space-y-4 pt-2">
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1">Transferred Amount (₦) *</label>
+                <input 
+                  type="number" 
+                  required
+                  placeholder="e.g. 10000"
+                  value={depositAmountInput}
+                  onChange={(e) => setDepositAmountInput(e.target.value)}
+                  className="input-green text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1">Payment Method / Channel *</label>
+                <div className="w-full px-3 py-2 border border-emerald-200 bg-emerald-50 rounded-xl text-emerald-900 font-extrabold text-xs">
+                  Bank Transfer Only (Direct Transfer)
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1">Transferring From (Your Bank) *</label>
+                <select
+                  required
+                  value={selectedSenderBank}
+                  onChange={(e) => setSelectedSenderBank(e.target.value)}
+                  className="input-green bg-white text-sm font-semibold"
+                >
+                  <option value="">-- Choose Your Bank --</option>
+                  {nigerianBanks.map(b => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
+              </div>
+
+              <button 
+                type="submit"
+                className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl transition-all duration-200 text-sm shadow-md"
+              >
+                Complete Transaction & Open App
+              </button>
+            </form>
+          </div>
+
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs flex flex-col justify-between">
+            <div className="space-y-4">
+              {customer.virtual_account_number && (
+                <div className="p-5 bg-emerald-50 border-2 border-emerald-300 rounded-3xl space-y-3 text-xs leading-loose text-slate-800 shadow-inner font-bold mb-2">
+                  <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5">
+                    <Landmark className="w-5 h-5 text-emerald-700" />
+                    Your Personal Savings Account
+                  </h3>
+                  <p className="text-[11px] text-emerald-700 font-semibold">Fastest way to save — transfer straight into this account, in your name, anytime. It's reflected automatically, no need to fill the form.</p>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block uppercase font-bold">Bank:</span>
+                    <strong className="text-slate-900 text-sm font-bold">{customer.virtual_account_bank}</strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block uppercase font-bold">Account Number:</span>
+                    <strong className="text-slate-900 text-lg tracking-widest block py-0.5 font-bold">{customer.virtual_account_number}</strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block uppercase font-bold">Account Name:</span>
+                    <strong className="text-slate-900 text-sm font-bold">{customer.name}</strong>
+                  </div>
+                </div>
+              )}
+              <BankTransferPanel
+                bankName={supportDetails.admin_bank_name}
+                accountNumber={supportDetails.admin_account_number}
+                accountName={supportDetails.admin_account_name}
+              />
+            </div>
+            
+            <div className="text-[10px] text-slate-400 font-semibold bg-slate-50 p-3 rounded-xl border border-slate-100 mt-4 leading-relaxed font-bold font-bold">
+              ⚠️ Warning: Do not transfer funds to any other account coordinates. Contact support instantly if you experience technical issues.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Plan Settings Tab */}
+      {customerTab === 'settings' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in max-w-4xl mx-auto text-slate-800 font-bold">
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs space-y-4">
+            <div>
+              <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide font-bold">Plan Settings Dashboard</h3>
+              <p className="text-xs text-slate-500 mt-0.5 font-medium">Keep your details up to date and configure target pace constraints.</p>
+            </div>
+
+            <form onSubmit={handleSettingsSubmit} className="space-y-4 text-xs font-bold">
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1">Phone Number Line *</label>
+                <input 
+                  type="text" 
+                  required
+                  value={custSettingsPhone}
+                  onChange={(e) => setCustSettingsPhone(e.target.value)}
+                  className="input-green font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1">Email Address</label>
+                <input 
+                  type="email" 
+                  placeholder="you@example.com"
+                  value={custSettingsEmail}
+                  onChange={(e) => setCustSettingsEmail(e.target.value)}
+                  className="input-green font-medium"
+                />
+                <span className="text-[10px] text-slate-400 block mt-1">Used for account records. Your Personal Savings Account number stays the same either way.</span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1 font-bold">Daily Contribution Target (₦) *</label>
+                <input 
+                  type="number"
+                  disabled={!canChangeAmount}
+                  min={300}
+                  placeholder="Minimum ₦300"
+                  value={custSettingsDailyAmount.toString()}
+                  onChange={(e) => setCustSettingsDailyAmount(Number(e.target.value))}
+                  className="input-green disabled:bg-slate-100 disabled:text-slate-400 font-bold"
+                />
+
+                {!canChangeAmount ? (
+                  <span className="text-[10px] text-amber-700 bg-amber-50 p-2.5 rounded-xl border border-amber-200 block mt-2 font-medium leading-relaxed">
+                    🔒 You can only modify your contribution plan once a calendar month. If you need to make urgent updates, please request Admin to grant permission.
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-slate-400 block mt-1">Note: Modifying this changes the cost per split slot on your tracking card going forward (Minimum ₦300).</span>
+                )}
+              </div>
+
+              <button 
+                type="submit"
+                className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl transition shadow-md font-bold uppercase tracking-wide text-xs"
+              >
+                Update Settings & Targets
+              </button>
+            </form>
+
+            {/* Monthly Savings self-enroll */}
+            {!myMonthlySavingsPlan && (customer.savings_type === 'daily' || !customer.savings_type) && (
+              <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 space-y-2">
+                <p className="text-xs font-black text-blue-800">Monthly Salary Savings Plan</p>
+                <p className="text-[10px] text-blue-600 font-semibold leading-relaxed">
+                  You are currently on the 32-Day Daily plan. You can also enroll in the Monthly Salary Savings Plan (₦5,000 minimum per month, Jan–Dec). Both plans run independently.
+                </p>
+                <button type="button" onClick={() => setShowMsTermsModal(true)}
+                  className="w-full bg-blue-700 hover:bg-blue-800 text-white font-black py-2 rounded-xl text-xs uppercase">
+                  Enroll in Monthly Savings Plan
+                </button>
+              </div>
+            )}
+            {myMonthlySavingsPlan && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3">
+                <p className="text-xs font-black text-emerald-800">✓ Enrolled in Monthly Savings Plan ({myMonthlySavingsPlan.year})</p>
+                <p className="text-[10px] text-emerald-600 font-semibold mt-0.5">View your Jan–Dec progress in the Monthly Savings tab above.</p>
+              </div>
+            )}
+          </div>
+
+          {/* Secure change password widget for Customers */}
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs space-y-4 h-fit">
+            <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide font-bold">Change Account Password</h3>
+            <p className="text-xs text-slate-500 font-medium">Update your password security. Passwords must be at least 6 characters.</p>
+            
+            <form onSubmit={handleChangePasswordSubmit} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-xs font-bold text-emerald-800 mb-1 font-bold">New Password</label>
+                <input 
+                  type="password"
+                  required
+                  placeholder="••••••••"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="input-green"
+                />
+              </div>
+              <button 
+                type="submit"
+                disabled={isUpdatingPass}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl transition shadow-md font-bold uppercase tracking-wide text-xs font-bold"
+              >
+                {isUpdatingPass ? 'Updating Password...' : 'Change Password'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Referral Tab */}
+      {customerTab === 'referral' && <ReferralCustomerSection customer={customer} />}
+
+      {/* Monthly Savings Dashboard Tab */}
+      {customerTab === 'monthly-savings' && myMonthlySavingsPlan && (
+        <div className="space-y-6 animate-fade-in">
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide">My Monthly Savings</h3>
+                <p className="text-xs text-slate-500 mt-0.5 font-semibold">{myMonthlySavingsPlan.year} Plan • Target ₦{Number(myMonthlySavingsPlan.monthly_target_amount).toLocaleString()}/month</p>
+              </div>
+              <div className="text-right">
+                <p className="text-2xl font-black text-emerald-700">₦{Number(myMonthlySavingsPlan.total_saved).toLocaleString()}</p>
+                <p className="text-[10px] text-slate-400 font-bold">Total saved this year</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 mb-5">
+              {[
+                { label: 'Months Complete', value: myMonthlySavingsMonths.filter(m => m.plan_id === myMonthlySavingsPlan!.id && m.is_complete).length + '/12' },
+                { label: 'Plan Status', value: myMonthlySavingsPlan.status },
+                { label: 'Withdrawal', value: 'December only' }
+              ].map(c => (
+                <div key={c.label} className="bg-emerald-50 rounded-2xl p-3 text-center">
+                  <p className="text-[10px] font-black uppercase text-emerald-700">{c.label}</p>
+                  <p className="text-sm font-black text-emerald-950 mt-1">{c.value}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Jan-Dec grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {['January','February','March','April','May','June','July','August','September','October','November','December'].map((name, idx) => {
+                const monthNum = idx + 1;
+                const md = myMonthlySavingsMonths.find(m => m.plan_id === myMonthlySavingsPlan!.id && m.month_number === monthNum);
+                const isCurrentMonth = monthNum === new Date().getMonth() + 1;
+                const isPast = monthNum < new Date().getMonth() + 1;
+                return (
+                  <div key={monthNum} className={`rounded-2xl p-3 border-2 ${
+                    md?.is_complete ? 'bg-emerald-600 border-emerald-600' :
+                    md && md.total_deposited > 0 ? 'bg-amber-50 border-amber-300' :
+                    isCurrentMonth ? 'bg-blue-50 border-blue-300' :
+                    isPast ? 'bg-red-50 border-red-200' :
+                    'bg-slate-50 border-slate-100'
+                  }`}>
+                    <p className={`text-xs font-black ${md?.is_complete ? 'text-white' : 'text-slate-700'}`}>{name}</p>
+                    {md?.is_complete ? (
+                      <p className="text-lg font-black text-white mt-1">✓</p>
+                    ) : md && md.total_deposited > 0 ? (
+                      <>
+                        <p className="text-xs font-bold text-amber-800 mt-1">₦{md.total_deposited.toLocaleString()}</p>
+                        <p className="text-[9px] text-amber-600 font-bold">₦{Math.max(0, Number(myMonthlySavingsPlan!.monthly_target_amount) - md.total_deposited).toLocaleString()} left</p>
+                      </>
+                    ) : isCurrentMonth ? (
+                      <p className="text-[10px] text-blue-600 font-bold mt-1">Current month</p>
+                    ) : isPast ? (
+                      <p className="text-[10px] text-red-500 font-bold mt-1">Missed</p>
+                    ) : (
+                      <p className="text-[10px] text-slate-300 font-bold mt-1">Upcoming</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+            <p className="text-xs font-black text-amber-800 mb-1">Important Reminders</p>
+            <ul className="text-[11px] text-amber-700 font-semibold space-y-1 list-disc list-inside">
+              <li>Minimum ₦{Number(myMonthlySavingsPlan.monthly_target_amount).toLocaleString()} deposit required per month to mark it complete.</li>
+              <li>Withdrawals are processed by Admin only — you cannot self-withdraw from this plan.</li>
+              <li>Savings are only available for withdrawal after December of this year.</li>
+              <li>One month's savings is retained as a company service charge.</li>
+              <li>Contact your field agent to make a deposit for any month.</li>
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {/* Monthly Savings Terms Modal (self-enroll) */}
+      {showMsTermsModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setShowMsTermsModal(false)}>
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="bg-emerald-800 text-white p-5 rounded-t-3xl">
+              <h3 className="text-base font-black">Monthly Salary Savings Plan</h3>
+              <p className="text-emerald-200 text-xs mt-0.5">Terms and Conditions — Please read carefully before enrolling</p>
+            </div>
+            <div className="overflow-y-auto p-5 space-y-3 text-xs text-slate-700 flex-1">
+              {[
+                { t: '1. Plan Duration', b: 'The Monthly Salary Savings Plan runs for a full calendar year (January to December). Your plan begins in the month you enroll and covers all 12 months of that year.' },
+                { t: '2. Minimum Monthly Contribution', b: 'You are required to save a minimum of ₦5,000 per month. Deposits can be made in multiple installments. A month is complete once ₦5,000 has been deposited.' },
+                { t: '3. Company Profit Month', b: 'One month&apos;s savings (1 out of 12) is retained by HireMercyAJO as a service charge for managing and securing your savings throughout the year.' },
+                { t: '4. Withdrawal Policy — Customers', b: 'You CANNOT make self-service withdrawal requests from this plan. Withdrawals are processed exclusively by Admin or authorized staff, and only after December of the plan year.' },
+                { t: '5. Withdrawal Policy — Admin', b: 'The Admin or authorized staff may process withdrawals on your behalf at any time during the year where necessary.' },
+                { t: '6. No Loan on This Plan', b: 'The Monthly Salary Savings Plan does not support loan applications. Loans are only available on the 32-Day Daily Savings Plan.' },
+                { t: '7. Independent Plan', b: 'This plan runs completely separately from your 32-Day Daily Savings Plan. Each has its own balance, deposits, and rules.' },
+                { t: '8. Agreement', b: 'By accepting these terms, you confirm that you have read, understood, and agreed to all conditions of the HireMercyAJO Monthly Salary Savings Plan.' },
+              ].map(item => (
+                <div key={item.t}>
+                  <p className="font-black text-emerald-800 mb-0.5">{item.t}</p>
+                  <p className="text-slate-600 leading-relaxed">{item.b}</p>
+                </div>
+              ))}
+            </div>
+            <div className="p-4 border-t border-slate-100 space-y-3">
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">How much will you save each month? (₦) *</label>
+                <input
+                  type="number"
+                  min={5000}
+                  value={msSelfEnrollAmount}
+                  onChange={e => setMsSelfEnrollAmount(e.target.value)}
+                  placeholder="e.g. 5000"
+                  className="w-full border rounded-xl px-3 py-2 text-xs font-semibold"
+                />
+                <span className="text-[10px] text-slate-400 block mt-1">Minimum ₦5,000. This is the amount you're committing to save every month, Jan–Dec.</span>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setShowMsTermsModal(false)}
+                  className="flex-1 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50">
+                  Cancel
+                </button>
+                <button type="button" onClick={() => {
+                  const amount = Number(msSelfEnrollAmount);
+                  if (!amount || amount < 5000) {
+                    alert('Monthly Savings Target must be a minimum of ₦5,000.');
+                    return;
+                  }
+                  setShowMsTermsModal(false);
+                  onSelfEnrollMonthly(amount);
+                }}
+                  className="flex-1 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black uppercase">
+                  I Accept — Enroll Me
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+
+      {/* Withdrawal Form Modal */}
+      {showWithdrawModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <form onSubmit={handleWithdrawSubmit} className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full p-6 border border-emerald-100 shadow-2xl space-y-4 text-slate-800 font-bold font-bold">
+            <div className="flex justify-between items-center border-b border-emerald-50 pb-3">
+              <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide">Request Settlement Payout</h3>
+              <button 
+                type="button"
+                onClick={() => setShowWithdrawModal(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs font-black text-emerald-800">Select saved month(s) to cash out *</p>
+              <div className="max-h-40 overflow-y-auto space-y-1.5 border border-emerald-100 rounded-xl p-2">
+                {uncollectedSavedMonths.length === 0 ? (
+                  <p className="text-[11px] text-slate-400 p-2">No uncollected saved months available.</p>
+                ) : (
+                  uncollectedSavedMonths.map(m => (
+                    <label
+                      key={m.id}
+                      className="flex items-center justify-between gap-2 p-2 rounded-xl border border-emerald-50 hover:bg-emerald-50/40 cursor-pointer text-xs"
+                    >
+                      <span className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedMonthIds.includes(m.id)}
+                          onChange={() => toggleMonthSelection(m.id)}
+                          className="w-4 h-4 accent-emerald-700"
+                        />
+                        <span className="font-bold text-slate-700">{m.month_label}</span>
+                      </span>
+                      <span className="font-black text-emerald-800">₦{m.total_amount.toLocaleString()}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-[11px] text-amber-900 space-y-1.5 leading-relaxed font-semibold font-bold font-bold">
+              <p>⚖️ Payout Calculations:</p>
+              <p>• Selected Months: <strong>{selectedMonths.length}</strong></p>
+              <p>• Total Accumulation: <strong>₦{selectedTotalAmount.toLocaleString()}</strong></p>
+              <p>• Company Profit Deduction: <strong>- ₦{selectedTotalFee.toLocaleString()}</strong> ({selectedMonths.length} × 1 contribution day, at each month's own saved rate)</p>
+              <p className={withdrawalChargeAmount > 0 ? '' : 'text-emerald-800 border-t border-amber-200 pt-1 text-xs'}>
+                • Final Settlement: <strong>₦{expectedPayoutAmount.toLocaleString()}</strong>
+              </p>
+              {withdrawalChargeAmount > 0 && (
+                <>
+                  <p>• {withdrawalChargeLabel}: <strong>- ₦{withdrawalChargeAmount.toLocaleString()}</strong></p>
+                  <p className="text-emerald-800 border-t border-amber-200 pt-1 text-xs">
+                    • Amount You'll Receive: <strong>₦{expectedNetAmount.toLocaleString()}</strong>
+                  </p>
+                </>
+              )}
+            </div>
+
+            <div className="space-y-3 text-slate-800 font-bold">
+              <div>
+                <label className="block text-xs font-black text-emerald-800 mb-1 font-bold">Bank Name *</label>
+                <select 
+                  required
+                  value={bankName}
+                  onChange={(e) => setBankName(e.target.value)}
+                  className="input-green bg-white text-xs font-bold font-bold"
+                >
+                  <option value="">-- Choose Recipient Bank --</option>
+                  {nigerianBanks.map(b => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-emerald-800 mb-1 font-bold">Account Number *</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="e.g. 0123456789"
+                  maxLength={10}
+                  value={accountNumber}
+                  onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ''))}
+                  className="input-green text-xs font-bold font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-emerald-800 mb-1 font-bold">Account Name *</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="e.g. Sarah Alabi"
+                  value={accountName}
+                  onChange={(e) => setAccountName(e.target.value)}
+                  className="input-green text-xs font-bold font-bold"
+                />
+              </div>
+            </div>
+
+            <button 
+              type="submit"
+              disabled={selectedMonthIds.length === 0}
+              className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-2.5 rounded-xl text-xs transition-all duration-200 shadow-md mt-4"
+            >
+              Submit Settlement Request
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* Fixed bottom navigation - mobile only (new interface) */}
+      <NewBottomNav active={activeSection} onSelect={goSection} onLogout={onLogout} />
+    </div>
+  );
+}
+
+// =========================================================================
+// 5. MAIN APPLICATION COMPONENT
+// =========================================================================
+
+function AppMain() {
+  const [showSplash, setShowSplash] = useState(() => !sessionStorage.getItem('hm_splash_shown'));
+  const [currentUser, setCurrentUser] = useState<Profile | null>(null);
+  const [sessionUser, setSessionUser] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Live Database States
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [markedDays, setMarkedDays] = useState<Record<string, MarkedDay[]>>({});
+  const [payoutRequests, setPayoutRequests] = useState<PayoutRequest[]>([]);
+  const [broadcastMessages, setBroadcastMessages] = useState<BroadcastMessage[]>([]);
+  const [savedMonths, setSavedMonths] = useState<Record<string, SavedMonth[]>>({});
+  const [payoutHistory, setPayoutHistory] = useState<PayoutHistoryRecord[]>([]);
+  const [cycleArchives, setCycleArchives] = useState<Record<string, any[]>>({});
+  const [loanRequests, setLoanRequests] = useState<LoanRequest[]>([]);
+  const [loans, setLoans] = useState<Loan[]>([]);
+  const [loanHistory, setLoanHistory] = useState<any[]>([]);
+  const [monthlySavingsPlans, setMonthlySavingsPlans] = useState<MonthlySavingsPlan[]>([]);
+  const [monthlySavingsMonths, setMonthlySavingsMonths] = useState<MonthlySavingsMonth[]>([]);
+  const [customerCreditBalance, setCustomerCreditBalance] = useState<CustomerCreditBalance | null>(null);
+  const [balanceAdjustments, setBalanceAdjustments] = useState<Record<string, BalanceAdjustment[]>>({});
+  const [manualExpenses, setManualExpenses] = useState<ManualExpense[]>([]);
+  const [supportDetails, setSupportDetails] = useState<SupportSettings>({
+    id: 1,
+    support_phone: '+234 803 461 2345',
+    support_whatsapp: '+234 803 461 2345',
+    support_email: 'support@hiremercy.com',
+    advert_title: 'Cartoon characters safely collecting small daily contributions from customers and returning them back to you in bulk!',
+    advert_description: 'Join the smart daily savings circle with HireMercyAJO.',
+    advert_image_url: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80',
+    advert_enabled: true,
+    withdrawal_charge_enabled: true,
+    withdrawal_charge_amount: 50,
+    withdrawal_charge_label: 'Stamp Duty / Withdrawal Charge'
+  });
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [withdrawalRequests, setWithdrawalRequests] = useState<WithdrawalRequest[]>([]);
+  const [currentDayKey, setCurrentDayKey] = useState(getWATDateKey());
+
+  // UI States
+  // Referral link support: /register?ref=HM-XXXXXX opens the registration screen.
+  const [pendingReferralCode] = useState<string | null>(() => readReferralCodeFromUrl());
+  const [authScreen, setAuthScreen] = useState<'login' | 'register' | 'admin_setup'>(() => {
+    try {
+      if (readReferralCodeFromUrl() || /\/register\/?$/.test(window.location.pathname)) return 'register';
+    } catch { /* ignore */ }
+    return 'login';
+  });
+  const [notification, setNotification] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+  const [hasCheckedAdmin, setHasCheckedAdmin] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
+  const [showIosInstallBanner, setShowIosInstallBanner] = useState(false);
+  const [showInAppBrowserBanner, setShowInAppBrowserBanner] = useState(false);
+  const [showAlarmBanner, setShowAlarmBanner] = useState(false);
+  const [alarmMessage, setAlarmMessage] = useState<string>('');
+  const [adminDashboardRoute, setAdminDashboardRoute] = useState<AdminTab | null>(null);
+  const previousPendingIdsRef = useRef<string[]>([]);
+
+  const hasAdmin = useMemo(() => {
+    return profiles.some(p => p.role === 'Admin');
+  }, [profiles]);
+
+  // Auth Session state listener
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }: { data: { session: Session | null } }) => {
+      const session = data.session;
+      setSessionUser(session?.user ?? null);
+      if (session?.user) {
+        fetchCurrentUserProfile(session.user.id);
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
+      setSessionUser(session?.user ?? null);
+      if (session?.user) {
+        fetchCurrentUserProfile(session.user.id);
+      } else {
+        setCurrentUser(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // REALTIME SYNCHRONIZATION HOOK: Listens to Postgres events on the tables
+  // that have Realtime enabled, with a 20-second background poll used only
+  // as a fallback while Realtime is not connected.
+  const currentUserRef = useRef(currentUser);
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
+
+  // Tracks whether the Realtime websocket is currently connected. The
+  // background polling interval below checks this before firing, so it
+  // only ever acts as a true fallback rather than running unconditionally
+  // alongside a working Realtime connection.
+  const isRealtimeConnectedRef = useRef(false);
+
+  // Admin-only: tracks whether the tab/screen is currently visible, and
+  // when the Admin Dashboard last polled while hidden. Used only to
+  // throttle background polling for Admin - Staff and Customer polling
+  // behavior is untouched by these two refs.
+  const isPageVisibleRef = useRef(typeof document !== 'undefined' ? document.visibilityState === 'visible' : true);
+  const lastAdminPollRef = useRef(Date.now());
+
+  // EGRESS ARCHITECTURE (Part 2 of the sync redesign): payout_history and
+  // loan_history are purely archival - needed only when an admin actually
+  // opens the Payout Archive page, a customer's detail modal, or the Loan
+  // History view. These refs track whether that on-demand full fetch has
+  // already happened this session, so re-opening the same page twice never
+  // re-downloads the same data (requirement: avoid duplicate fetches).
+  // They reset to false in the login effect below, so a fresh session
+  // always starts clean.
+  const hasLoadedFullPayoutHistoryRef = useRef(false);
+  const hasLoadedFullLoanHistoryRef = useRef(false);
+  // Populated inside the sync effect below with the real implementations,
+  // so a stable callback can be handed to AdminDashboard as a prop without
+  // needing to restart the whole realtime/polling effect whenever
+  // AdminDashboard re-renders.
+  const ensurePayoutHistoryLoadedRef = useRef<() => void>(() => {});
+  const ensureLoanHistoryLoadedRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // Reset on-demand flags for this fresh session/role - if the same
+    // browser tab switches users, the new session starts clean rather than
+    // assuming the previous user's on-demand pages are still "loaded".
+    hasLoadedFullPayoutHistoryRef.current = false;
+    hasLoadedFullLoanHistoryRef.current = false;
+
+    // "Light" tables: naturally small/bounded (current cycle, this
+    // customer's own rows, or capped by customer count) - safe to refresh
+    // in full on every fallback tick or realtime event without it costing
+    // much. This is what the 30s fallback poll refreshes.
+    const syncLightTables = async () => {
+      const latestUser = currentUserRef.current;
+      if (!latestUser) return;
+      try {
+        await syncAllOperationalData(latestUser);
+        await fetchNotifications(latestUser);
+        await fetchLoans(latestUser);
+        await fetchLoanRequests(latestUser);
+        await fetchMonthlySavings(latestUser);
+        await fetchCreditBalance(latestUser);
+        await fetchBalanceAdjustments(latestUser);
+        await fetchManualExpenses(latestUser);
+        // Recent-window only (not full) - the initial login load already
+        // has full history for these two; a fallback tick only needs to
+        // catch up on anything from the last 90 days.
+        await fetchPayoutRequests(latestUser, false);
+        await fetchSavedMonths(latestUser, false);
+      } catch (err) {
+        console.error("Background sync (light tables) failed:", err);
+      }
+    };
+
+    // "Heavy" archival tables: payout_history and loan_history. These are
+    // NEVER part of the recurring fallback poll or the blanket realtime
+    // handler below - they only ever get fetched (a) once, on-demand, when
+    // the admin actually opens the page that needs them (see
+    // ensurePayoutHistoryLoaded/ensureLoanHistoryLoaded, wired into
+    // AdminDashboard), and (b) on a targeted Realtime event for that exact
+    // table, and only then if that page has already been opened this
+    // session - there's no point refreshing data nobody is looking at.
+    const ensurePayoutHistoryLoaded = async () => {
+      if (hasLoadedFullPayoutHistoryRef.current) return;
+      const latestUser = currentUserRef.current;
+      if (!latestUser) return;
+      hasLoadedFullPayoutHistoryRef.current = true;
+      try {
+        await fetchPayoutHistory(latestUser, true);
+      } catch (err) {
+        console.error('On-demand payout_history load failed:', err);
+        hasLoadedFullPayoutHistoryRef.current = false;
+      }
+    };
+
+    const ensureLoanHistoryLoaded = async () => {
+      if (hasLoadedFullLoanHistoryRef.current) return;
+      const latestUser = currentUserRef.current;
+      if (!latestUser) return;
+      hasLoadedFullLoanHistoryRef.current = true;
+      try {
+        await fetchLoanHistory(latestUser, true);
+      } catch (err) {
+        console.error('On-demand loan_history load failed:', err);
+        hasLoadedFullLoanHistoryRef.current = false;
+      }
+    };
+
+    // Expose these two to the rest of the app (AdminDashboard reads them via
+    // ensurePayoutHistoryLoadedRef/ensureLoanHistoryLoadedRef) without
+    // widening this effect's dependency array.
+    ensurePayoutHistoryLoadedRef.current = ensurePayoutHistoryLoaded;
+    ensureLoanHistoryLoadedRef.current = ensureLoanHistoryLoaded;
+
+    // 1. Set up live Realtime postgres listeners - only for the tables that
+    //    are actually in the Supabase `supabase_realtime` publication
+    //    (Database > Replication). Listening for a table that isn't
+    //    published is harmless but pointless. Each table now maps to a
+    //    TARGETED refresh of just that table's own state - not a full
+    //    13-query resync - so a single transaction being posted no longer
+    //    re-downloads loans, loan history, monthly savings, etc.
+    const channel = supabase.channel('schema-db-changes');
+
+    const tableNames = ['transactions', 'marked_days', 'notifications', 'loans', 'loan_requests', 'payout_requests', 'balance_adjustments', 'manual_expenses', 'contributions', 'payout_history', 'cycle_archives', 'loan_history'] as const;
+    const events = ['INSERT', 'UPDATE', 'DELETE'] as const;
+
+    const handleRealtimeEvent = async (table: (typeof tableNames)[number], eventType: (typeof events)[number]) => {
+      const latestUser = currentUserRef.current;
+      if (!latestUser) return;
+      try {
+        switch (table) {
+          case 'transactions':
+          case 'marked_days':
+            await syncAllOperationalData(latestUser);
+            break;
+          case 'notifications':
+            await fetchNotifications(latestUser);
+            break;
+          case 'loans':
+            await fetchLoans(latestUser);
+            break;
+          case 'loan_requests':
+            await fetchLoanRequests(latestUser);
+            break;
+          case 'balance_adjustments':
+            await fetchBalanceAdjustments(latestUser);
+            break;
+          case 'manual_expenses':
+            await fetchManualExpenses(latestUser);
+            break;
+          case 'payout_requests':
+            // A DELETE could remove a row older than the 90-day window (a
+            // stale pending request finally actioned) - the windowed merge
+            // can't see outside that window, so fall back to a full fetch
+            // specifically for deletes to guarantee it's reflected. INSERT/
+            // UPDATE are always recent by definition, so the cheap windowed
+            // path is correct for those.
+            await fetchPayoutRequests(latestUser, eventType === 'DELETE');
+            break;
+          case 'contributions':
+            // Same reasoning, and this one matters even more: this table is
+            // the direct source of the Outstanding Customer Balances figure,
+            // so a payout (which DELETEs the paid contribution rows) must
+            // always be reflected correctly, even for a month-old saved
+            // cycle that took a while to get paid out.
+            await fetchSavedMonths(latestUser, eventType === 'DELETE');
+            break;
+          case 'cycle_archives':
+            // Not windowed (its date column isn't confirmed), but this
+            // only runs when a cycle actually completes somewhere - not on
+            // a timer - so an occasional full refetch here is cheap.
+            await fetchCycleArchives(latestUser);
+            break;
+          case 'payout_history':
+            // Purely archival - only worth refreshing if the admin has
+            // actually opened the page/modal that shows it this session.
+            if (hasLoadedFullPayoutHistoryRef.current) {
+              await fetchPayoutHistory(latestUser, true);
+            }
+            break;
+          case 'loan_history':
+            if (hasLoadedFullLoanHistoryRef.current) {
+              await fetchLoanHistory(latestUser, true);
+            }
+            break;
+        }
+      } catch (err) {
+        console.error(`Realtime-triggered refresh failed for ${table}:`, err);
+      }
+    };
+
+    tableNames.forEach((table) => {
+      events.forEach((event) => {
+        channel.on('postgres_changes', { event, schema: 'public', table }, () => {
+          console.debug('Realtime event received:', event, table);
+          handleRealtimeEvent(table, event);
+        });
+      });
+    });
+
+    // Track whether the Realtime websocket is actually connected, so the
+    // fallback poll below only ever runs when Realtime genuinely isn't
+    // delivering events - not unconditionally alongside it.
+    // pollingTimerRef is the single source of truth for "is the fallback
+    // currently running" - startFallbackPolling/stopFallbackPolling are
+    // both idempotent, so no matter how many times Realtime's status
+    // flips, at most one interval can ever exist.
+    // Background throttling: when the dashboard is hidden (tab inactive,
+    // app minimized, or screen off), drop from the normal cadence to a
+    // 5-minute one - this applies to every role. With 200+ total users, any
+    // of them leaving the app open in a backgrounded tab was polling at
+    // full speed for no one, which was a real, avoidable contributor to
+    // egress. Nothing changes about behavior while actively viewing the
+    // screen - this only reduces polling when nobody is looking.
+    const FALLBACK_POLL_MS = 30000;
+    const pollingTimerRef = { current: null as ReturnType<typeof setInterval> | null };
+    let wasDisconnected = false;
+
+    const HIDDEN_POLL_MS = 5 * 60 * 1000; // 5 minutes
+
+    const handleVisibilityChange = () => {
+      const isVisible = document.visibilityState === 'visible';
+      isPageVisibleRef.current = isVisible;
+      if (isVisible) {
+        // Dashboard just became active again - fetch fresh light data
+        // immediately (independent of the fallback interval's own cadence).
+        lastAdminPollRef.current = Date.now();
+        syncLightTables();
+      }
+    };
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+
+    const runFallbackTick = () => {
+      if (!isPageVisibleRef.current) {
+        // Hidden dashboard: only poll once every 5 minutes, for any role.
+        const now = Date.now();
+        if (now - lastAdminPollRef.current < HIDDEN_POLL_MS) {
+          return;
+        }
+        lastAdminPollRef.current = now;
+      } else {
+        lastAdminPollRef.current = Date.now();
+      }
+      syncLightTables();
+    };
+
+    const startFallbackPolling = () => {
+      if (pollingTimerRef.current) return; // already running
+      pollingTimerRef.current = setInterval(runFallbackTick, FALLBACK_POLL_MS);
+    };
+
+    const stopFallbackPolling = () => {
+      if (pollingTimerRef.current) {
+        clearInterval(pollingTimerRef.current);
+        pollingTimerRef.current = null;
+      }
+    };
+
+    channel.subscribe((status) => {
+      const connected = status === 'SUBSCRIBED';
+      isRealtimeConnectedRef.current = connected;
+      console.debug('Realtime channel status:', status);
+      if (connected) {
+        // Realtime is healthy and delivering events - the REST fallback
+        // is not needed right now.
+        stopFallbackPolling();
+        if (wasDisconnected) {
+          // We were disconnected for a while. The light tables already
+          // caught themselves up via the fallback tick that was running.
+          // But two things the fallback tick only does a *narrow* (90-day)
+          // refresh of - contributions and payout_requests - could have had
+          // an OLDER row deleted while we were dark (a months-old saved
+          // cycle finally getting paid out, say), which a narrow window
+          // can't see. Since contributions directly feeds the Outstanding
+          // Customer Balances figure, do one full, authoritative refetch of
+          // both now to guarantee correctness, then resume normal
+          // event-driven updates. Same idea for the on-demand heavy tables
+          // (payout_history/loan_history), but only if that page was
+          // actually opened this session.
+          wasDisconnected = false;
+          const latestUser = currentUserRef.current;
+          if (latestUser) {
+            fetchSavedMonths(latestUser, true);
+            fetchPayoutRequests(latestUser, true);
+            if (hasLoadedFullPayoutHistoryRef.current) fetchPayoutHistory(latestUser, true);
+            if (hasLoadedFullLoanHistoryRef.current) fetchLoanHistory(latestUser, true);
+          }
+        }
+      } else {
+        // status is 'CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED', or the brief
+        // pre-connect state - make sure the fallback is running so data
+        // still stays fresh while Realtime is unavailable.
+        wasDisconnected = true;
+        startFallbackPolling();
+      }
+    });
+
+    // Start the fallback right away too, covering the brief window before
+    // the first subscribe() status callback fires - it will be stopped
+    // immediately once/if that callback reports 'SUBSCRIBED'.
+    startFallbackPolling();
+
+    return () => {
+      supabase.removeChannel(channel);
+      stopFallbackPolling();
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
+    };
+  }, [currentUser?.id, currentUser?.role]);
+
+  useEffect(() => {
+    fetchGlobalConfiguration();
+  }, []);
+
+  useEffect(() => {
+    const syncDayKey = () => setCurrentDayKey(getWATDateKey());
+    syncDayKey();
+    const timer = window.setInterval(syncDayKey, 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const ua = window.navigator.userAgent || '';
+    const isAlreadyInstalled = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+    if (isAlreadyInstalled) return;
+
+    const isIos = /iPad|iPhone|iPod/.test(ua) && !(window as any).MSStream;
+
+    // Real mobile Safari ALWAYS includes both "Version/X.X" and "Safari/" in
+    // its user agent. In-app browsers (WhatsApp, Instagram, Facebook, etc.)
+    // are built on the same underlying WebKit engine and often still include
+    // "Safari/" as boilerplate, but they never set the "Version/" token -
+    // that's set by Safari itself, not by WebKit. This is what catches
+    // WhatsApp's iOS in-app browser specifically: it doesn't send a unique
+    // app token the way FBAN/Instagram do, so without this check it was
+    // silently misidentified as "real Safari" and shown instructions
+    // ("Add to Home Screen") that don't actually work from inside an
+    // in-app browser at all - which is very likely why install was failing
+    // for exactly the customers who tapped a link shared via WhatsApp chat.
+    const isIosInAppBrowser = isIos && !/Version\/[\d.]+.*Safari/i.test(ua);
+
+    const isInAppBrowser = /FBAN|FBAV|Instagram|Line\/|Twitter|MicroMessenger|WhatsApp/i.test(ua)
+      || (ua.includes('wv') && /Android/i.test(ua)) // generic Android WebView signature (covers most in-app browsers incl. many WhatsApp builds)
+      || isIosInAppBrowser;
+
+    if (isInAppBrowser) {
+      setShowInAppBrowserBanner(true);
+    } else if (isIos) {
+      // iOS never fires beforeinstallprompt - Apple provides no such API to any
+      // website, on any browser. Manual "Add to Home Screen" is the only path.
+      setShowIosInstallBanner(true);
+    }
+    // Otherwise (real Chrome/Edge/Samsung Internet on Android, desktop Chrome):
+    // the existing beforeinstallprompt listener below handles it natively.
+  }, []);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setDeferredPrompt(event);
+      setShowInstallBanner(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt as EventListener);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => null);
+    }
+
+    const firedToday: Record<string, string> = {};
+
+    const getTodayKey = (hour: number) => {
+      return `${new Date().toISOString().slice(0, 10)}-${hour}`;
+    };
+
+    const hasTransactionToday = () => {
+      const today = new Date().toISOString().slice(0, 10);
+      return transactions.some(tx => tx.date.startsWith(today));
+    };
+
+    const playAlarmSound = () => {
+      try {
+        const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
+        if (!AudioContext) return;
+        const context = new AudioContext();
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        oscillator.type = 'sine';
+        oscillator.frequency.value = 880;
+        gain.gain.value = 0.1;
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+        oscillator.start();
+        oscillator.stop(context.currentTime + 1.2);
+      } catch (err) {
+        console.warn('Alarm sound failed:', err);
+      }
+    };
+
+    const showReminder = () => {
+      const text = "Don't forget to contribute your AJO with HireMercyAJO thank you";
+      setAlarmMessage(text);
+      setShowAlarmBanner(true);
+      triggerToast(text, 'success');
+      playAlarmSound();
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        new Notification('HireMercyAJO Reminder', { body: text });
+      }
+    };
+
+    const checkAlarms = () => {
+      const now = new Date();
+      const hour = now.getHours();
+      const minute = now.getMinutes();
+      const rounded = hour * 60 + minute;
+      const schedule = [600, 720, 840, 1080];
+      const shouldAlarm = (timeKey: string) => {
+        if (firedToday[timeKey] === timeKey) return false;
+        firedToday[timeKey] = timeKey;
+        return true;
+      };
+
+      schedule.forEach((target) => {
+        if (rounded === target) {
+          const hourKey = target / 60;
+          const timeKey = getTodayKey(hourKey);
+          if (target === 840 || target === 1080) {
+            if (!hasTransactionToday() && shouldAlarm(timeKey)) {
+              showReminder();
+            }
+          } else if (shouldAlarm(timeKey)) {
+            showReminder();
+          }
+        }
+      });
+    };
+
+    const timer = setInterval(checkAlarms, 30 * 1000);
+    checkAlarms();
+
+    return () => clearInterval(timer);
+  }, [transactions]);
+
+  const playNotificationSound = (type: 'success' | 'error' = 'success') => {
+    try {
+      const AudioContextCtor = window.AudioContext || (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextCtor) return;
+      const audioContext = new AudioContextCtor();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      oscillator.type = type === 'success' ? 'sine' : 'square';
+      oscillator.frequency.value = type === 'success' ? 880 : 520;
+      gainNode.gain.setValueAtTime(0.12, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.45);
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      oscillator.start();
+      oscillator.stop(audioContext.currentTime + 0.45);
+    } catch {
+      // ignore browser audio issues
+    }
+  };
+
+  const triggerToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setNotification({ type, text });
+    playNotificationSound(type);
+    setTimeout(() => setNotification(null), 4000);
+  };
+
+  useEffect(() => {
+    if (!currentUser || currentUser.role === 'Customer') return;
+
+    const pendingTransactions = transactions.filter(tx => tx.status === 'Pending');
+    const pendingIds = pendingTransactions.map(tx => tx.id);
+    const newPendingIds = pendingIds.filter(id => !previousPendingIdsRef.current.includes(id));
+
+    if (newPendingIds.length > 0) {
+      const transactionLabel = pendingTransactions.find(tx => tx.id === newPendingIds[0]);
+      const senderName = transactionLabel?.customer_name || transactionLabel?.customer_id || 'a customer';
+      triggerToast(`New pending contribution from ${senderName} needs admin review.`, 'success');
+      setAdminDashboardRoute('transactions');
+    }
+
+    previousPendingIdsRef.current = pendingIds;
+  }, [transactions, currentUser]);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const choiceResult = await deferredPrompt.userChoice;
+    if (choiceResult.outcome === 'accepted') {
+      triggerToast('Installation started. Welcome to HireMercyAJO!', 'success');
+    } else {
+      triggerToast('Install prompt dismissed.', 'error');
+    }
+    setDeferredPrompt(null);
+    setShowInstallBanner(false);
+  };
+
+  const fetchGlobalConfiguration = async () => {
+    const { data: bData } = await supabase.from('branches').select('*');
+    if (bData) setBranches(bData);
+
+    const { data: pData } = await supabase.from('profiles').select('*');
+    if (pData) {
+      setProfiles(pData);
+    }
+    setHasCheckedAdmin(true);
+
+    const { data: sData } = await supabase.from('system_settings').select('*').eq('id', 1).single();
+    if (sData) setSupportDetails(sData);
+
+    // RLS scopes this automatically: a Customer only ever gets back active
+    // broadcasts, Admin gets everything (for management). Same query, same
+    // state variable, correct result for either role.
+    const { data: brData } = await supabase.from('broadcast_messages').select('*').order('created_at', { ascending: false });
+    if (brData) setBroadcastMessages(brData);
+  };
+
+  const fetchCurrentUserProfile = async (userId: string) => {
+    setIsLoading(true);
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (error) {
+      triggerToast(`Database Error: ${error.message}`, 'error');
+    }
+
+    if (profile) {
+      setCurrentUser(profile);
+      await syncAllOperationalData(profile);
+      // Login load, scoped to what's needed immediately (Part 1 of the sync
+      // redesign): payout_requests/contributions load in FULL here since
+      // they're needed broadly and immediately (current balances, the
+      // Outstanding Payout Ledger, Records, Overview) - losing older rows
+      // from memory would be a real regression for those. cycle_archives
+      // similarly loads in full since a customer's own History tab and
+      // several admin views read it right away.
+      //
+      // payout_history only needs a RECENT window here (Overview's
+      // "current month payout" stat is all that needs it at login) - its
+      // full history is purely archival and now loads on-demand only when
+      // the Payout Archive page or a customer's detail modal is actually
+      // opened (see ensurePayoutHistoryLoadedRef).
+      //
+      // loan_history isn't fetched at login at all anymore - nothing on
+      // the initial dashboard needs it; it loads on-demand the first time
+      // the Loan History view is opened (see ensureLoanHistoryLoadedRef).
+      await Promise.all([
+        fetchNotifications(profile),
+        fetchPayoutRequests(profile),
+        fetchSavedMonths(profile),
+        fetchPayoutHistory(profile, false),
+        fetchCycleArchives(profile),
+        fetchLoans(profile),
+        fetchLoanRequests(profile),
+        fetchMonthlySavings(profile),
+        fetchCreditBalance(profile),
+        fetchBalanceAdjustments(profile),
+        fetchManualExpenses(profile)
+      ]);
+    }
+    setIsLoading(false);
+  };
+
+  // Supabase's PostgREST API caps any single response at 1000 rows by
+  // default - a plain, unbounded select() on a table that's grown past
+  // that silently returns only the first 1000, with no error. This loops
+  // using .range() to fetch every page until exhausted, guaranteeing the
+  // complete result set regardless of table size. This is what was
+  // missing for marked_days: unlike transactions (safe to window by recent
+  // date), we genuinely need every customer's current data regardless of
+  // age, so pagination - not a date/row cutoff - is the correct fix here.
+  const fetchAllRows = async (table: string, select: string) => {
+    const pageSize = 1000;
+    let allRows: any[] = [];
+    let from = 0;
+    while (true) {
+      const { data, error } = await supabase.from(table).select(select).range(from, from + pageSize - 1);
+      if (error) {
+        console.error(`fetchAllRows(${table}) failed:`, error.message);
+        break;
+      }
+      if (!data || data.length === 0) break;
+      allRows = allRows.concat(data);
+      if (data.length < pageSize) break; // last page reached
+      from += pageSize;
+    }
+    return allRows;
+  };
+
+  // EGRESS FIX (Admin/Staff only): a handful of tables - contributions
+  // (saved months), payout_history, payout_requests, loan_history - hold the
+  // full lifetime history of the business and only ever grow. Previously
+  // they were re-downloaded in FULL, unbounded, on every single background
+  // sync tick (every ~30s whenever Realtime wasn't connected, for every open
+  // Admin/Staff session) - a huge and entirely avoidable egress cost at
+  // 150+ customers.
+  //
+  // Fix: fetch the complete history exactly ONCE per login session (so no
+  // records ever become unreachable - Records/Reports can still browse every
+  // past month exactly as before), then on every recurring tick after that,
+  // only fetch a recent window (matches the existing 90-day precedent set on
+  // `transactions`) and merge it in - replacing only that same recent slice
+  // of local state (which correctly picks up inserts/updates/deletes within
+  // the window) while leaving everything older, already loaded, untouched.
+  //
+  // cycle_archives is deliberately left out of this - its exact date column
+  // isn't confirmed (see the pickField() usage below), and guessing wrong
+  // would silently break that table's sync entirely, which is worse than
+  // its current, smaller egress cost.
+  const RECENT_SYNC_WINDOW_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
+
+  function mergeWindowedRows<T extends Record<string, any>>(
+    existing: T[],
+    fresh: T[],
+    dateField: string,
+    cutoffIso: string
+  ): T[] {
+    const untouchedOlder = existing.filter(row => {
+      const raw = row[dateField];
+      return !raw || new Date(raw).toISOString() < cutoffIso;
+    });
+    return [...untouchedOlder, ...fresh];
+  }
+
+  const syncAllOperationalData = async (userProfile: Profile) => {
+    if (userProfile.role === 'Admin' || userProfile.role === 'Staff') {
+      const [pData, { data: txData }, mData] = await Promise.all([
+        fetchAllRows('profiles', 'id, name, phone, email, role, branch_id, daily_amount, is_active, created_at, last_amount_change_at, allow_anytime_change, admin_note'),
+        // FIX: this table grows forever and was being fetched in FULL, with
+        // no limit, on every single Admin page load - almost certainly the
+        // main driver of the Supabase egress quota being exhausted.
+        // Using a date filter (not a row-count limit) so the current
+        // month's data - which Monthly Financial Summary depends on being
+        // complete - is always fully included, while still bounding
+        // unbounded growth from many months/years of accumulated history.
+        // Older data is still permanently in the database; only how much
+        // gets re-downloaded on every page load is limited.
+        supabase.from('transactions').select('id, customer_id, amount, date, payment_method, days_covered, start_day, end_day, branch_id, status, created_at').gte('created_at', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()).order('created_at', { ascending: false }),
+        fetchAllRows('marked_days', 'id, customer_id, day_number, amount, date, period_key, transaction_id')
+      ]);
+      if (pData && pData.length > 0) setProfiles(pData);
+      if (txData) setTransactions(txData);
+      if (mData && mData.length > 0) {
+        const grouped: Record<string, MarkedDay[]> = {};
+        mData.forEach((item: any) => {
+          if (!grouped[item.customer_id]) grouped[item.customer_id] = [];
+          grouped[item.customer_id].push({
+            id: item.id,
+            day_number: item.day_number,
+            amount: item.amount,
+            date: item.date,
+            period_key: item.period_key,
+            transaction_id: item.transaction_id
+          });
+        });
+        setMarkedDays(grouped);
+      }
+    } else {
+      const [{ data: txData }, { data: mData }] = await Promise.all([
+        supabase.from('transactions').select('*').eq('customer_id', userProfile.id).order('created_at', { ascending: false }),
+        supabase.from('marked_days').select('*').eq('customer_id', userProfile.id)
+      ]);
+      if (txData) setTransactions(txData);
+      if (mData) {
+        setMarkedDays({
+          [userProfile.id]: mData.map((item: any) => ({
+            id: item.id,
+            day_number: item.day_number,
+            amount: item.amount,
+            date: item.date,
+            period_key: item.period_key,
+            transaction_id: item.transaction_id
+          }))
+        });
+      }
+    }
+  };
+
+  const fetchNotifications = async (userProfile: Profile) => {
+    let query = supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(100);
+    
+    if (userProfile.role === 'Customer') {
+      query = query.eq('user_id', userProfile.id);
+    } else {
+      query = query.is('user_id', null);
+    }
+
+    const { data } = await query;
+    if (data) setNotifications(data);
+  };
+
+  // "Clear All Notifications" - deletes every notification currently visible
+  // to this user (their own, if Customer; global/admin ones, if Admin/Staff).
+  // Supabase stays the source of truth: this permanently deletes server-side
+  // (backed by the DELETE policy scoped identically to the SELECT above), not
+  // just a local/visual clear, so it stays cleared across devices too.
+  const clearAllNotifications = async (userProfile: Profile) => {
+    let query = supabase.from('notifications').delete();
+    if (userProfile.role === 'Customer') {
+      query = query.eq('user_id', userProfile.id);
+    } else {
+      query = query.is('user_id', null);
+    }
+    const { error } = await query;
+    if (error) {
+      triggerToast(`Failed to clear notifications: ${error.message}`, 'error');
+      return;
+    }
+    setNotifications([]);
+    triggerToast('Notifications cleared.', 'success');
+  };
+
+  const fetchPayoutRequests = async (userProfile: Profile, isFullSync: boolean = true) => {
+    let query = supabase.from('payout_requests').select('*').order('created_at', { ascending: false });
+
+    if (userProfile.role === 'Customer') {
+      query = query.eq('customer_id', userProfile.id);
+    } else if (!isFullSync) {
+      // Recurring background tick (Admin/Staff only): only the recent slice
+      // - the one-time full sync on login already has everything older.
+      query = query.gte('created_at', new Date(Date.now() - RECENT_SYNC_WINDOW_MS).toISOString());
+    }
+
+    const { data } = await query;
+    if (data) {
+      // Store raw data - customer names are resolved at display time from
+      // live profiles state, avoiding the race condition where profiles
+      // hasn't loaded yet when this fetch completes on initial page load.
+      if (userProfile.role !== 'Customer' && !isFullSync) {
+        const cutoffIso = new Date(Date.now() - RECENT_SYNC_WINDOW_MS).toISOString();
+        setPayoutRequests(prev => mergeWindowedRows(prev, data as PayoutRequest[], 'created_at', cutoffIso));
+      } else {
+        setPayoutRequests(data as PayoutRequest[]);
+      }
+    }
+  };
+
+  // Loads the "contributions" ledger: frozen/saved 32-day months that a customer has
+  // not yet been paid out for. Admin/Staff see every customer's saved months; a
+  // Customer only sees their own.
+  const fetchSavedMonths = async (userProfile: Profile, isFullSync: boolean = true) => {
+    let query = supabase.from('contributions').select('*').order('created_at', { ascending: false });
+
+    if (userProfile.role === 'Customer') {
+      query = query.eq('customer_id', userProfile.id);
+    } else if (!isFullSync) {
+      query = query.gte('created_at', new Date(Date.now() - RECENT_SYNC_WINDOW_MS).toISOString());
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.warn('Saved months fetch failed (has the `contributions` table been created?):', error.message);
+      return;
+    }
+
+    if (data) {
+      const regroup = (rows: any[]) => {
+        const grouped: Record<string, SavedMonth[]> = {};
+        rows.forEach((item: any) => {
+          if (!grouped[item.customer_id]) grouped[item.customer_id] = [];
+          grouped[item.customer_id].push(item);
+        });
+        return grouped;
+      };
+
+      if (userProfile.role !== 'Customer' && !isFullSync) {
+        const cutoffIso = new Date(Date.now() - RECENT_SYNC_WINDOW_MS).toISOString();
+        setSavedMonths(prev => {
+          const flatExisting: SavedMonth[] = Object.values(prev).flat() as SavedMonth[];
+          const merged = mergeWindowedRows<SavedMonth>(flatExisting, data as SavedMonth[], 'created_at', cutoffIso);
+          return regroup(merged);
+        });
+      } else {
+        setSavedMonths(regroup(data));
+      }
+    }
+  };
+
+  // Loads manual balance adjustments (quick partial withdrawals/corrections
+  // sent via the admin Customer Note box). Admin/Staff see everyone's;
+  // a Customer only sees their own (matches the RLS policy).
+  const fetchBalanceAdjustments = async (userProfile: Profile) => {
+    let query = supabase.from('balance_adjustments').select('*').order('created_at', { ascending: false });
+    if (userProfile.role === 'Customer') {
+      query = query.eq('customer_id', userProfile.id);
+    }
+    const { data, error } = await query;
+    if (error) {
+      console.warn('Balance adjustments fetch failed:', error.message);
+      return;
+    }
+    if (data) {
+      const grouped: Record<string, BalanceAdjustment[]> = {};
+      data.forEach((item: any) => {
+        if (!grouped[item.customer_id]) grouped[item.customer_id] = [];
+        grouped[item.customer_id].push(item);
+      });
+      setBalanceAdjustments(grouped);
+    }
+  };
+
+  // Loads ad-hoc expense entries saved from the admin Quick Notepad, counted
+  // into the monthly Total Expenses figure alongside Cash Sheet records.
+  // Admin/Staff only - Customers never see this.
+  const fetchManualExpenses = async (userProfile: Profile) => {
+    if (userProfile.role === 'Customer') return;
+    const { data, error } = await supabase.from('manual_expenses').select('*').order('expense_date', { ascending: false });
+    if (error) {
+      console.warn('Manual expenses fetch failed:', error.message);
+      return;
+    }
+    if (data) setManualExpenses(data);
+  };
+
+  // Loads the "payout_history" archive: completed/approved payout requests, along with
+  // which saved month(s) they settled. Written to by handleApprovePayout below.
+  const fetchPayoutHistory = async (userProfile: Profile, isFullSync: boolean = true) => {
+    let query = supabase.from('payout_history').select('*').order('approved_at', { ascending: false });
+
+    if (userProfile.role === 'Customer') {
+      query = query.eq('customer_id', userProfile.id);
+    } else if (!isFullSync) {
+      query = query.gte('approved_at', new Date(Date.now() - RECENT_SYNC_WINDOW_MS).toISOString());
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.warn('Payout history fetch failed (has the `payout_history` table been created?):', error.message);
+      return;
+    }
+
+    if (data) {
+      // Store raw data - names resolved at display time from live profiles state
+      if (userProfile.role !== 'Customer' && !isFullSync) {
+        const cutoffIso = new Date(Date.now() - RECENT_SYNC_WINDOW_MS).toISOString();
+        setPayoutHistory(prev => mergeWindowedRows(prev, data as PayoutHistoryRecord[], 'approved_at', cutoffIso));
+      } else {
+        setPayoutHistory(data as PayoutHistoryRecord[]);
+      }
+    }
+  };
+
+  // Loads "cycle_archives" - your pre-existing table that records approved/paid-out
+  // 32-day cycles (the source of the (Collected) badge in the history view). Read
+  // defensively via select('*') since this table's exact columns weren't part of
+  // the schema we've confirmed - pickField() below normalizes whatever shape it is.
+  const fetchCycleArchives = async (userProfile: Profile) => {
+    let query = supabase.from('cycle_archives').select('*');
+
+    if (userProfile.role === 'Customer') {
+      query = query.eq('customer_id', userProfile.id);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.warn('cycle_archives fetch failed (check the table/column names):', error.message);
+      return;
+    }
+
+    if (data) {
+      const grouped: Record<string, any[]> = {};
+      data.forEach((row: any) => {
+        const cId = pickField(row, ['customer_id', 'customerId']);
+        if (!cId) return;
+        if (!grouped[cId]) grouped[cId] = [];
+        grouped[cId].push(row);
+      });
+      setCycleArchives(grouped);
+    }
+  };
+
+  const fetchLoanRequests = async (userProfile: Profile) => {
+    let query = supabase.from('loan_requests').select('*').order('requested_at', { ascending: false });
+    if (userProfile.role === 'Customer') {
+      query = query.eq('customer_id', userProfile.id);
+    }
+    const { data, error } = await query;
+    if (error) {
+      console.warn('loan_requests fetch failed:', error.message);
+      return;
+    }
+    if (data) setLoanRequests(data as LoanRequest[]);
+  };
+
+  const fetchLoans = async (userProfile: Profile) => {
+    let query = supabase.from('loans').select('*').order('created_at', { ascending: false });
+    if (userProfile.role === 'Customer') {
+      query = query.eq('customer_id', userProfile.id);
+    }
+    const { data, error } = await query;
+    if (error) {
+      console.warn('loans fetch failed:', error.message);
+      return;
+    }
+    if (data) setLoans(data as Loan[]);
+  };
+
+  const fetchLoanHistory = async (userProfile: Profile, isFullSync: boolean = true) => {
+    let query = supabase.from('loan_history').select('*').order('created_at', { ascending: false });
+    if (userProfile.role === 'Customer') {
+      query = query.eq('customer_id', userProfile.id);
+    } else if (!isFullSync) {
+      query = query.gte('created_at', new Date(Date.now() - RECENT_SYNC_WINDOW_MS).toISOString());
+    }
+    const { data, error } = await query;
+    if (error) {
+      console.warn('loan_history fetch failed:', error.message);
+      return;
+    }
+    if (data) {
+      if (userProfile.role !== 'Customer' && !isFullSync) {
+        const cutoffIso = new Date(Date.now() - RECENT_SYNC_WINDOW_MS).toISOString();
+        setLoanHistory(prev => mergeWindowedRows(prev, data, 'created_at', cutoffIso));
+      } else {
+        setLoanHistory(data);
+      }
+    }
+  };
+
+  const fetchMonthlySavings = async (userProfile: Profile) => {
+    let plansQuery = supabase.from('monthly_savings_plans').select('*').order('year', { ascending: false });
+    let monthsQuery = supabase.from('monthly_savings_months').select('*');
+    if (userProfile.role === 'Customer') {
+      plansQuery = plansQuery.eq('customer_id', userProfile.id);
+      monthsQuery = monthsQuery.eq('customer_id', userProfile.id);
+    }
+    const [{ data: plansData }, { data: monthsData }] = await Promise.all([plansQuery, monthsQuery]);
+    if (plansData) setMonthlySavingsPlans(plansData as MonthlySavingsPlan[]);
+    if (monthsData) setMonthlySavingsMonths(monthsData as MonthlySavingsMonth[]);
+  };
+
+  const fetchCreditBalance = async (userProfile: Profile) => {
+    if (userProfile.role !== 'Customer') return;
+    const { data } = await supabase
+      .from('customer_credit_balances')
+      .select('*')
+      .eq('customer_id', userProfile.id)
+      .maybeSingle();
+    setCustomerCreditBalance(data as CustomerCreditBalance || null);
+  };
+
+  // Resets a customer's password directly to '123456' via a server-side
+  // Edge Function - this can NEVER be done safely from client code, since it
+  // requires the Supabase service role key, which must never be shipped to
+  // the browser. See supabase/functions/admin-reset-password for the
+  // function this calls.
+  const handleResetPasswordToDefault = async (customerId: string) => {
+    const target = profiles.find(p => p.id === customerId);
+    if (!target) return;
+    if (!window.confirm(`Reset ${target.name}'s password to "123456"? They should change it after logging in.`)) return;
+
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-reset-password', {
+        body: { customerId }
+      });
+      if (error) throw error;
+      triggerToast(`Password reset to 123456 for ${target.name}.`, 'success');
+    } catch (err: any) {
+      triggerToast(`Password reset failed: ${err.message || 'Edge Function not deployed yet'}`, 'error');
+    }
+  };
+
+  const handleMarkNotificationsRead = async () => {
+    if (!currentUser || notifications.length === 0) return;
+    
+    if (currentUser.role === 'Customer') {
+      const unreadIds = notifications.filter(n => !n.is_read).map(n => n.id);
+      if (unreadIds.length > 0) {
+        await supabase.from('notifications').update({ is_read: true }).in('id', unreadIds);
+      }
+    }
+    
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+  };
+
+  const handleLogin = async (phone: string, pass: string) => {
+    setIsLoading(true);
+    const formattedPhone = formatNigerianPhone(phone);
+
+    const { error } = await supabase.auth.signInWithPassword({
+      phone: formattedPhone,
+      password: pass
+    });
+
+    setIsLoading(false);
+    if (error) {
+      triggerToast(error.message, 'error');
+    } else {
+      triggerToast('Login successful!', 'success');
+    }
+  };
+
+  const handleCreateAdmin = async (data: any) => {
+    setIsLoading(true);
+    const formattedPhone = formatNigerianPhone(data.phone);
+    const fallbackEmail = `${formattedPhone.replace(/\D/g, '')}@hiremercy.com`;
+
+    const { error } = await supabase.auth.signUp({
+      phone: formattedPhone,
+      password: data.password,
+      options: {
+        data: {
+          name: data.name,
+          phone: formattedPhone,
+          role: 'Admin',
+          daily_amount: 0,
+          email: data.email || fallbackEmail
+        }
+      }
+    });
+
+    setIsLoading(false);
+    if (error) {
+      triggerToast(error.message, 'error');
+    } else {
+      triggerToast('Primary Admin account created successfully! You can now log in.', 'success');
+      setAuthScreen('login');
+      fetchGlobalConfiguration();
+    }
+  };
+
+  const handleCreateBranch = async (name: string, address: string) => {
+    setIsLoading(true);
+    const { error } = await supabase
+      .from('branches')
+      .insert([{ name, address }]);
+
+    setIsLoading(false);
+    if (error) {
+      triggerToast(`Branch failed: ${error.message}`, 'error');
+    } else {
+      triggerToast('Branch successfully registered!', 'success');
+      fetchGlobalConfiguration();
+    }
+  };
+
+  // Branch details update
+  const handleUpdateBranch = async (id: string, name: string, address: string) => {
+    setIsLoading(true);
+    const { error } = await supabase
+      .from('branches')
+      .update({ name, address })
+      .eq('id', id);
+
+    setIsLoading(false);
+    if (error) {
+      triggerToast(`Update failed: ${error.message}`, 'error');
+    } else {
+      triggerToast('Branch details updated!', 'success');
+      fetchGlobalConfiguration();
+    }
+  };
+
+  // Delete Branch
+  const handleDeleteBranch = async (id: string) => {
+    setIsLoading(true);
+    const { error } = await supabase
+      .from('branches')
+      .delete()
+      .eq('id', id);
+
+    setIsLoading(false);
+    if (error) {
+      triggerToast(`Delete failed: ${error.message}`, 'error');
+    } else {
+      triggerToast('Branch removed successfully.', 'success');
+      fetchGlobalConfiguration();
+    }
+  };
+
+  // Staff creation using phone number to bypass default email rate limit
+  const handleCreateStaff = async (name: string, phone: string, email: string, branchId: string, password: string) => {
+    setIsLoading(true);
+    const formattedPhone = formatNigerianPhone(phone);
+    const fallbackEmail = `${formattedPhone.replace(/\D/g, '')}@hiremercy.com`;
+
+    // SECURITY: the role is assigned by the admin-create-staff Edge Function
+    // (verifies the caller is an Admin, writes the role server-side). The
+    // browser never sends a role any more.
+    let error: { message: string } | null = null;
+    try {
+      const { data: fnData, error: fnError } = await supabase.functions.invoke('admin-create-staff', {
+        body: { name, phone: formattedPhone, email: email || fallbackEmail, branchId, password }
+      });
+      if (fnError) {
+        let msg = fnError.message;
+        try { const body = await (fnError as any).context?.json?.(); if (body?.error) msg = body.error; } catch { /* keep generic */ }
+        error = { message: msg };
+      } else if (fnData && (fnData as any).error) {
+        error = { message: (fnData as any).error };
+      }
+    } catch (err: any) {
+      error = { message: err?.message || 'admin-create-staff Edge Function is not deployed yet' };
+    }
+
+    setIsLoading(false);
+    if (error) {
+      triggerToast(`Staff Onboarding Failed: ${error.message}`, 'error');
+    } else {
+      triggerToast('Staff registered successfully! They can log in using their phone and chosen password.', 'success');
+      fetchGlobalConfiguration();
+    }
+  };
+
+  // Staff updates
+  const handleUpdateStaff = async (id: string, name: string, phone: string, email: string, branchId: string) => {
+    setIsLoading(true);
+    const formattedPhone = formatNigerianPhone(phone);
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ name, phone: formattedPhone, email, branch_id: branchId })
+      .eq('id', id);
+
+    setIsLoading(false);
+    if (error) {
+      triggerToast(`Update failed: ${error.message}`, 'error');
+    } else {
+      triggerToast('Staff details updated successfully!', 'success');
+      fetchGlobalConfiguration();
+    }
+  };
+
+  // Delete Staff
+  const handleDeleteStaff = async (id: string) => {
+    setIsLoading(true);
+    const { error } = await supabase
+      .from('profiles')
+      .delete()
+      .eq('id', id);
+
+    setIsLoading(false);
+    if (error) {
+      triggerToast(`Delete failed: ${error.message}`, 'error');
+    } else {
+      triggerToast('Staff profile removed from directory.', 'success');
+      fetchGlobalConfiguration();
+    }
+  };
+
+  const handleRegister = async (data: any) => {
+    setIsLoading(true);
+    const formattedPhone = formatNigerianPhone(data.phone);
+    const fallbackEmail = `${formattedPhone.replace(/\D/g, '')}@hiremercy.com`;
+
+    const { data: signUpData, error } = await supabase.auth.signUp({
+      phone: formattedPhone,
+      password: data.password || 'customer123',
+      options: {
+        data: {
+          name: data.name,
+          phone: formattedPhone,
+          role: 'Customer',
+          daily_amount: Number(data.daily_amount),
+          monthly_target_amount: Number(data.monthly_target_amount) || 5000,
+          branch_id: data.branch_id,
+          is_active: true,
+          email: data.email || fallbackEmail,
+          savings_type: data.savings_type || 'daily',
+          monthly_savings_terms_accepted: data.monthly_savings_terms_accepted || false,
+          // Referral: consumed by a database trigger (re-validated server-side)
+          ...(data.referral_code ? { referral_code: String(data.referral_code).toUpperCase() } : {})
+        }
+      }
+    });
+
+    setIsLoading(false);
+    if (error) {
+      triggerToast(error.message, 'error');
+    } else {
+      triggerToast('Customer registered successfully!', 'success');
+      setAuthScreen('login');
+      fetchGlobalConfiguration();
+
+      // Create their Paystack dedicated virtual account in the background.
+      // Non-blocking and silent on failure - registration itself already
+      // succeeded, and an account can always be generated later (e.g. from
+      // the customer's own dashboard, or by an admin) if this doesn't work
+      // right now (for example, before Paystack live keys are configured).
+      const newUserId = signUpData?.user?.id;
+      if (newUserId) {
+        supabase.functions.invoke('paystack-create-virtual-account', {
+          body: { customerId: newUserId }
+        }).catch(() => { /* silent - see comment above */ });
+      }
+    }
+  };
+
+  const handleUpdateSupportDetails = async (
+    phone: string,
+    whatsapp: string,
+    email: string,
+    bankName: string,
+    acctNum: string,
+    acctName: string,
+    advertTitle: string,
+    advertDescription: string,
+    advertImageUrl: string,
+    advertEnabled: boolean,
+    advertVideoUrl: string,
+    themeBackgroundColor: string,
+    withdrawalChargeEnabled: boolean,
+    withdrawalChargeAmount: number,
+    withdrawalChargeLabel: string,
+    opayAlertEmail: string,
+    opayAutomationEnabled: boolean
+  ) => {
+    setIsLoading(true);
+    const { error } = await supabase
+      .from('system_settings')
+      .update({
+        support_phone: phone,
+        support_whatsapp: whatsapp,
+        support_email: email,
+        admin_bank_name: bankName,
+        admin_account_number: acctNum,
+        admin_account_name: acctName,
+        advert_title: advertTitle,
+        advert_description: advertDescription,
+        advert_image_url: advertImageUrl,
+        advert_enabled: advertEnabled,
+        advert_video_url: advertVideoUrl,
+        theme_background_color: themeBackgroundColor,
+        withdrawal_charge_enabled: withdrawalChargeEnabled,
+        withdrawal_charge_amount: Math.max(0, withdrawalChargeAmount || 0),
+        withdrawal_charge_label: withdrawalChargeLabel || 'Stamp Duty / Withdrawal Charge',
+        // Only the mailbox address and the on/off switch live here - the
+        // Gmail App Password itself is never read, written, or even
+        // touched by this frontend; it only ever exists as an Edge
+        // Function secret (OPAY_GMAIL_APP_PASSWORD).
+        opay_alert_email: opayAlertEmail.trim() || null,
+        opay_automation_enabled: opayAutomationEnabled
+      })
+      .eq('id', 1);
+
+    setIsLoading(false);
+    if (error) {
+      triggerToast(`Update failed: ${error.message}`, 'error');
+    } else {
+      triggerToast('Support & Banking details updated successfully!', 'success');
+      fetchGlobalConfiguration();
+    }
+  };
+
+  // Broadcast Messages: simple admin-authored notices shown on the customer
+  // dashboard. RLS (not this code) is what actually keeps writes Admin-only
+  // and reads scoped to active-only for everyone else - these handlers are
+  // thin wrappers, the real enforcement lives in the database.
+  const handleCreateBroadcast = async (message: string) => {
+    const text = message.trim();
+    if (!text) return;
+    setIsLoading(true);
+    const { error } = await supabase.from('broadcast_messages').insert([{
+      message: text,
+      is_active: true,
+      created_by: currentUser?.id || null
+    }]);
+    setIsLoading(false);
+    if (error) {
+      triggerToast(`Failed to publish broadcast: ${error.message}`, 'error');
+    } else {
+      triggerToast('Broadcast published.', 'success');
+      fetchGlobalConfiguration();
+    }
+  };
+
+  const handleUpdateBroadcast = async (id: string, message: string) => {
+    const text = message.trim();
+    if (!text) return;
+    setIsLoading(true);
+    const { error } = await supabase
+      .from('broadcast_messages')
+      .update({ message: text, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    setIsLoading(false);
+    if (error) {
+      triggerToast(`Failed to update broadcast: ${error.message}`, 'error');
+    } else {
+      triggerToast('Broadcast updated.', 'success');
+      fetchGlobalConfiguration();
+    }
+  };
+
+  const handleToggleBroadcastActive = async (id: string, isActive: boolean) => {
+    setIsLoading(true);
+    const { error } = await supabase
+      .from('broadcast_messages')
+      .update({ is_active: isActive, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    setIsLoading(false);
+    if (error) {
+      triggerToast(`Failed to update broadcast: ${error.message}`, 'error');
+    } else {
+      triggerToast(isActive ? 'Broadcast activated.' : 'Broadcast deactivated.', 'success');
+      fetchGlobalConfiguration();
+    }
+  };
+
+  const handleDeleteBroadcast = async (id: string) => {
+    setIsLoading(true);
+    const { error } = await supabase.from('broadcast_messages').delete().eq('id', id);
+    setIsLoading(false);
+    if (error) {
+      triggerToast(`Failed to delete broadcast: ${error.message}`, 'error');
+    } else {
+      triggerToast('Broadcast deleted.', 'success');
+      setBroadcastMessages(prev => prev.filter(b => b.id !== id));
+    }
+  };
+
+  // Client-side Split Process (SIMPLIFIED: Direct marked_days insert has been removed 
+  // because your PostgreSQL database trigger handles marked_days updates automatically!)
+  const approveAndProcessSplit = async (tx: Transaction) => {
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+
+    // Simply update transaction status. Your database trigger automatically computes 
+    // days_covered, start_day, end_day, and creates the marked_days rows.
+    const { error: updateTxErr } = await supabase
+      .from('transactions')
+      .update({
+        status: 'Successful',
+        date: todayStr
+      })
+      .eq('id', tx.id);
+
+    if (updateTxErr) {
+      throw new Error(`Failed to update transaction status: ${updateTxErr.message}`);
+    }
+  };
+
+  // NOTE: Freezing a completed 32-day cycle and rolling the remainder into
+  // the next calendar month now happens ENTIRELY inside the database, as
+  // part of the `split_transaction_fn()` trigger on `transactions` (see the
+  // SQL migrations). That trigger runs synchronously within the same INSERT/
+  // UPDATE, so by the time control returns to this client, the freeze +
+  // rollover + correct month labeling has already happened server-side.
+  //
+  // A previous version of this file also tried to do this same freeze
+  // client-side (a function called freezeCompletedMonth). That was a bug:
+  // it re-derived "the current month" from today's real-world date instead
+  // of the period actually being frozen, and it raced against the DB
+  // trigger's own logic - which is exactly what caused a rolled-over month
+  // to get mislabeled with the wrong name. It has been removed. The client
+  // now does nothing but refetch state after a transaction; the database is
+  // the only thing that ever writes to `contributions` or reassigns
+  // `period_key`.
+  const resyncAfterTransaction = async (userProfile: Profile, affectedCustomerId?: string) => {
+    if ((userProfile.role === 'Admin' || userProfile.role === 'Staff') && affectedCustomerId) {
+      const [{ data: freshTx }, { data: freshMarked }] = await Promise.all([
+        supabase.from('transactions')
+          .select('id, customer_id, amount, date, payment_method, days_covered, start_day, end_day, branch_id, status, created_at')
+          .eq('customer_id', affectedCustomerId)
+          .gte('created_at', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString())
+          .order('created_at', { ascending: false }),
+        supabase.from('marked_days')
+          .select('id, customer_id, day_number, amount, date, period_key, transaction_id')
+          .eq('customer_id', affectedCustomerId)
+      ]);
+
+      if (freshTx) {
+        setTransactions(prev => {
+          const others = prev.filter((t: any) => t.customer_id !== affectedCustomerId);
+          const merged = [...freshTx, ...others];
+          merged.sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+          return merged;
+        });
+      }
+      if (freshMarked) {
+        setMarkedDays(prev => ({
+          ...prev,
+          [affectedCustomerId]: freshMarked.map((item: any) => ({
+            id: item.id,
+            day_number: item.day_number,
+            amount: item.amount,
+            date: item.date,
+            period_key: item.period_key,
+            transaction_id: item.transaction_id
+          }))
+        }));
+      }
+    } else {
+      await syncAllOperationalData(userProfile);
+    }
+    await fetchNotifications(userProfile);
+    await fetchSavedMonths(userProfile);
+    await fetchCycleArchives(userProfile);
+    await fetchLoans(userProfile);
+    await fetchLoanRequests(userProfile);
+    await fetchCreditBalance(userProfile);
+    await fetchBalanceAdjustments(userProfile);
+    await fetchManualExpenses(userProfile);
+  };
+
+  const createTransaction = async (customerId: string, amount: number, paymentMethod: 'Cash' | 'Bank Transfer' | 'Mobile Money', staffId: string) => {
+    setIsLoading(true);
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+
+    const targetCustomer = profiles.find(p => p.id === customerId);
+    const branchId = targetCustomer?.branch_id || null;
+
+    // Directly insert the transaction with Successful status. 
+    // The database trigger will automatically perform the splitting.
+    const { data: newTx, error: txError } = await supabase
+      .from('transactions')
+      .insert([
+        {
+          customer_id: customerId,
+          amount: amount,
+          payment_method: paymentMethod,
+          staff_id: staffId === 'admin-id' ? null : staffId,
+          status: 'Successful',
+          date: todayStr,
+          branch_id: branchId
+        }
+      ])
+      .select('*')
+      .single();
+
+    setIsLoading(false);
+
+    if (txError) {
+      triggerToast(`Post Failed: ${txError.message}`, 'error');
+      return;
+    }
+
+    if (newTx) {
+      setTransactions(prev => [newTx, ...prev]);
+    }
+
+    triggerToast('Contribution successfully posted and split!', 'success');
+    if (currentUser) {
+      await resyncAfterTransaction(currentUser, customerId);
+    }
+  };
+
+  // Deleting a transaction is a single DB-level operation now: the
+  // transaction row is the one source of truth, and everything that was
+  // derived from it (marked_days, and - for loan customers - the matching
+  // loan_repayments row plus the loan balance it affected) cascades and
+  // reverses automatically at the database level, by transaction_id, not
+  // by a day-number range. This also means it now correctly works for
+  // customers on an Active Loan, where it previously failed silently: the
+  // old code here deleted marked_days by day-number range first (which
+  // always succeeded) and only THEN tried to delete the transaction, which
+  // always failed for a loan customer because loan_repayments had no
+  // cascade - leaving marked_days gone but the transaction and its loan
+  // balance impact still sitting there, every time. Fixed at the DB level
+  // (loan_repayments now cascades + a reversal trigger undoes the loan
+  // balance), so this just needs to delete the one row.
+  const deleteTransaction = async (txId: string) => {
+    setIsLoading(true);
+    const tx = transactions.find(t => t.id === txId);
+    if (!tx) {
+      triggerToast('Transaction record not found.', 'error');
+      setIsLoading(false);
+      return;
+    }
+
+    const { error: txDelError } = await supabase
+      .from('transactions')
+      .delete()
+      .eq('id', txId);
+
+    setIsLoading(false);
+    if (txDelError) {
+      triggerToast(`Deletion Failed: ${txDelError.message}`, 'error');
+    } else {
+      setTransactions(prev => prev.filter(t => t.id !== txId));
+      if (tx && tx.status === 'Successful') {
+        setMarkedDays(prev => {
+          const existing = prev[tx.customer_id] || [];
+          return {
+            ...prev,
+            [tx.customer_id]: existing.filter(day => day.day_number < tx.start_day || day.day_number > tx.end_day)
+          };
+        });
+      }
+      triggerToast('Transaction removed. Allocated dates unmarked.', 'success');
+      if (currentUser) {
+        syncAllOperationalData(currentUser);
+        fetchNotifications(currentUser);
+        // syncAllOperationalData doesn't touch loan balances - if the
+        // deleted transaction belonged to a loan customer, the DB-level
+        // reversal trigger already corrected the loan row; this just pulls
+        // that corrected balance into view without a full page reload.
+        fetchLoans(currentUser);
+      }
+    }
+  };
+
+  // WORKFLOW 2: Customer selects one or more of their uncollected "Saved" months
+  // (checkboxes in the withdrawal modal) and submits a single payout request
+  // covering just those months.
+  const handleCreatePayoutRequest = async (bank: string, acctNum: string, acctName: string, contributionIds: string[]) => {
+    if (!currentUser) return;
+    if (!contributionIds || contributionIds.length === 0) {
+      triggerToast('Select at least one saved month to request a payout for.', 'error');
+      return;
+    }
+    setIsLoading(true);
+
+    const eligibleMonths = (savedMonths[currentUser.id] || []).filter(
+      m => contributionIds.includes(m.id) && m.status === 'saved'
+    );
+
+    if (eligibleMonths.length === 0) {
+      setIsLoading(false);
+      triggerToast('Selected month(s) are no longer available for payout.', 'error');
+      return;
+    }
+
+    const totalAmount = sumCurrencyValues(eligibleMonths.map(m => m.total_amount));
+    // Company fee: 1 contribution day deducted per saved month included in
+    // this request, at EACH month's own historical rate - never the
+    // customer's current daily_amount, so past saved months are never
+    // affected by a later rate change.
+    const payoutAmount = Math.max(0, totalAmount - sumCurrencyValues(eligibleMonths.map(monthHistoricalDailyRate)));
+    const monthPaidText = eligibleMonths.map(m => m.month_label).join(', ');
+
+    // Withdrawal charge: snapshot the setting AS IT STANDS RIGHT NOW onto
+    // this request. If the admin changes the amount/label tomorrow, this
+    // request (and its eventual payout_history archive row) keeps today's
+    // value - never recalculated from the live setting.
+    const chargeAmount = supportDetails.withdrawal_charge_enabled ? Math.max(0, supportDetails.withdrawal_charge_amount || 0) : 0;
+    const chargeLabel = supportDetails.withdrawal_charge_label || 'Stamp Duty / Withdrawal Charge';
+    const netAmount = Math.max(0, payoutAmount - chargeAmount);
+
+    const payoutPayload: any = {
+      customer_id: currentUser.id,
+      customer_name: currentUser.name,
+      account_name: acctName,
+      account_number: acctNum,
+      bank_name: bank,
+      payout_method: 'Transfer',
+      amount: totalAmount,
+      payout_amount: payoutAmount,
+      status: 'Pending',
+      month_paid: monthPaidText,
+      contribution_ids: contributionIds,
+      charge_amount: chargeAmount,
+      charge_label: chargeAmount > 0 ? chargeLabel : null,
+      net_amount: netAmount
+    };
+
+    let { data: newRequest, error } = await supabase
+      .from('payout_requests')
+      .insert([payoutPayload])
+      .select('*')
+      .single();
+
+    if (error && /month_pay|month_paid|contribution_ids/i.test(error.message)) {
+      const { data: retryRequest, error: retryError } = await supabase
+        .from('payout_requests')
+        .insert([
+          {
+            ...payoutPayload,
+            month_paid: undefined,
+            contribution_ids: undefined
+          }
+        ])
+        .select('*')
+        .single();
+      newRequest = retryRequest;
+      error = retryError;
+    }
+
+    if (error) {
+      setIsLoading(false);
+      triggerToast(`Request failed: ${error.message}`, 'error');
+      return;
+    }
+
+    // Mark the selected saved months as "Requested" so they can't be double-submitted
+    // while this request is pending admin review.
+    await supabase.from('contributions').update({ status: 'requested' }).in('id', contributionIds);
+    setSavedMonths(prev => ({
+      ...prev,
+      [currentUser.id]: (prev[currentUser.id] || []).map(m =>
+        contributionIds.includes(m.id) ? { ...m, status: 'requested' } : m
+      )
+    }));
+
+    setIsLoading(false);
+    if (newRequest) {
+      setPayoutRequests(prev => [{ ...newRequest, contribution_ids: contributionIds }, ...prev]);
+    }
+
+    try {
+      await supabase.from('notifications').insert([{
+        user_id: null,
+        title: 'New withdrawal request',
+        message: `${currentUser.name} requested a payout of ₦${payoutAmount.toLocaleString()} (${eligibleMonths.length} saved month${eligibleMonths.length > 1 ? 's' : ''}) to ${bank}.${chargeAmount > 0 ? ` ${chargeLabel}: -₦${chargeAmount.toLocaleString()}, net ₦${netAmount.toLocaleString()}.` : ''}`,
+        is_read: false
+      }]);
+    } catch (notificationError) {
+      console.warn('Admin notification failed:', notificationError);
+    }
+
+    setAdminDashboardRoute('payouts');
+    triggerToast('Withdrawal settlement request submitted to Admin!', 'success');
+  };
+
+  // WORKFLOW 3 (Admin "Approve & Payout"): move the saved month(s) attached to this
+  // request out of the active `contributions` ledger and archive them into
+  // `payout_history`, then mark the request itself Successful.
+  const handleApprovePayout = async (reqId: string) => {
+    setIsLoading(true);
+
+    const req = payoutRequests.find(r => r.id === reqId);
+    if (!req) {
+      setIsLoading(false);
+      return;
+    }
+
+    const contributionIds = req.contribution_ids && req.contribution_ids.length > 0
+      ? req.contribution_ids
+      : (savedMonths[req.customer_id] || []).filter(m => m.status === 'requested').map(m => m.id);
+
+    const settledMonths = (savedMonths[req.customer_id] || []).filter(m => contributionIds.includes(m.id));
+
+    const { error: updateError } = await supabase
+      .from('payout_requests')
+      .update({ status: 'Successful', processed_at: new Date().toISOString() })
+      .eq('id', reqId);
+
+    if (updateError) {
+      triggerToast(`Approval failed: ${updateError.message}`, 'error');
+      setIsLoading(false);
+      return;
+    }
+
+    if (contributionIds.length > 0) {
+      // Archive each settled saved month into payout_history...
+      const archiveRows = (settledMonths.length > 0 ? settledMonths : contributionIds.map(id => ({ id }))).map((m: any) => ({
+        customer_id: req.customer_id,
+        contribution_id: m.id,
+        payout_request_id: reqId,
+        month_label: m.month_label || req.month_paid || getNigerianMonthName(),
+        total_amount: m.total_amount ?? req.amount,
+        payout_amount: m.total_amount != null && m.total_days != null
+          ? Math.max(0, m.total_amount - monthHistoricalDailyRate(m))
+          : req.payout_amount,
+        bank_name: req.bank_name,
+        account_number: req.account_number,
+        account_name: req.account_name,
+        // Charge applies once to the whole request (same as bank_name/account_number
+        // above), snapshotted exactly as it was on the request - never recalculated
+        // from the current system_settings value.
+        charge_amount: req.charge_amount ?? 0,
+        charge_label: req.charge_label ?? null,
+        net_amount: req.net_amount ?? req.payout_amount,
+        approved_at: new Date().toISOString()
+      }));
+
+      const { error: archiveError } = await supabase.from('payout_history').insert(archiveRows);
+      if (archiveError) {
+        console.warn('Failed to write payout_history archive:', archiveError.message);
+      }
+
+      // ...then remove those settled records from the active/saved ledger.
+      const { error: deleteError } = await supabase.from('contributions').delete().in('id', contributionIds);
+      if (deleteError) {
+        console.warn('Failed to clear contributions ledger:', deleteError.message);
+      }
+
+      setSavedMonths(prev => ({
+        ...prev,
+        [req.customer_id]: (prev[req.customer_id] || []).filter(m => !contributionIds.includes(m.id))
+      }));
+    }
+
+    setPayoutRequests(prev => prev.map(r => r.id === reqId ? { ...r, status: 'Successful' } : r));
+
+    try {
+      await supabase.from('notifications').insert([{
+        user_id: req.customer_id,
+        title: 'Withdrawal approved',
+        message: req.charge_amount
+          ? `Your payout request for ₦${req.payout_amount.toLocaleString()} has been approved. ${req.charge_label || 'Charge'}: -₦${Number(req.charge_amount).toLocaleString()}. Net amount: ₦${Number(req.net_amount ?? req.payout_amount).toLocaleString()}.`
+          : `Your payout request for ₦${req.payout_amount.toLocaleString()} has been approved.`,
+        is_read: false
+      }]);
+    } catch (notificationError) {
+      console.warn('Customer notification failed:', notificationError);
+    }
+
+    playNotificationSound('success');
+    setIsLoading(false);
+    triggerToast('Payout approved! Settled month(s) archived to payout history.', 'success');
+
+    if (currentUser) {
+      syncAllOperationalData(currentUser);
+      fetchPayoutRequests(currentUser);
+      fetchSavedMonths(currentUser);
+      fetchPayoutHistory(currentUser);
+    }
+  };
+
+  const handleApproveWithdrawal = async (reqId: string) => {
+    await handleApprovePayout(reqId);
+  };
+
+  const handleRejectPayout = async (reqId: string) => {
+    setIsLoading(true);
+
+    const req = payoutRequests.find(r => r.id === reqId);
+    if (!req) {
+      setIsLoading(false);
+      return;
+    }
+
+    const { error: updateError } = await supabase
+      .from('payout_requests')
+      .update({ status: 'Rejected', processed_at: new Date().toISOString() })
+      .eq('id', reqId);
+
+    setIsLoading(false);
+
+    if (updateError) {
+      triggerToast(`Reject failed: ${updateError.message}`, 'error');
+      return;
+    }
+
+    setPayoutRequests(prev => prev.map(r => r.id === reqId ? { ...r, status: 'Rejected' } : r));
+
+    // Release the saved month(s) back onto the active ledger so the customer can request again
+    const releaseIds = req.contribution_ids && req.contribution_ids.length > 0
+      ? req.contribution_ids
+      : (savedMonths[req.customer_id] || []).filter(m => m.status === 'requested').map(m => m.id);
+
+    if (releaseIds.length > 0) {
+      await supabase.from('contributions').update({ status: 'saved' }).in('id', releaseIds);
+      setSavedMonths(prev => ({
+        ...prev,
+        [req.customer_id]: (prev[req.customer_id] || []).map(m =>
+          releaseIds.includes(m.id) ? { ...m, status: 'saved' } : m
+        )
+      }));
+    }
+
+    try {
+      await supabase.from('notifications').insert([{
+        user_id: req.customer_id,
+        title: 'Withdrawal rejected',
+        message: `Your payout request for ₦${req.payout_amount.toLocaleString()} was rejected by admin.`,
+        is_read: false
+      }]);
+    } catch (notificationError) {
+      console.warn('Customer rejection notification failed:', notificationError);
+    }
+    triggerToast('Withdrawal request rejected.', 'error');
+  };
+
+  // Deletes the customer's Auth account via an Edge Function (requires the
+  // service role key, which must never be shipped to the browser - see
+  // supabase/functions/admin-delete-customer). profiles_id_fkey has
+  // ON DELETE CASCADE from auth.users, so this also removes their profile
+  // and everything that cascades from it (transactions, loans, etc.) in
+  // one clean operation - and critically, frees their phone/email for
+  // re-registration, which a plain profiles-row delete never did.
+  const handleDeleteCustomer = async (id: string) => {
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.functions.invoke('admin-delete-customer', {
+        body: { customerId: id }
+      });
+      if (error) throw error;
+      triggerToast('Customer account deleted successfully.', 'success');
+      fetchGlobalConfiguration();
+    } catch (err: any) {
+      triggerToast(`Delete failed: ${err.message || 'Edge Function not deployed yet'}`, 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleUpdateCustomer = async (id: string, name: string, phone: string, email: string, dailyAmount: number, branchId: string, allowAnytimeChange: boolean) => {
+    setIsLoading(true);
+    const formattedPhone = formatNigerianPhone(phone);
+    const { error } = await supabase
+      .from('profiles')
+      .update({ 
+        name, 
+        phone: formattedPhone, 
+        email, 
+        daily_amount: Number(dailyAmount), 
+        branch_id: branchId,
+        allow_anytime_change: allowAnytimeChange
+      })
+      .eq('id', id);
+
+    setIsLoading(false);
+    if (error) {
+      triggerToast(`Update failed: ${error.message}`, 'error');
+    } else {
+      triggerToast('Customer updated successfully!', 'success');
+      fetchGlobalConfiguration();
+    }
+  };
+
+  const handleToggleCustomerActive = async (id: string, is_active: boolean) => {
+    setIsLoading(true);
+    const { error } = await supabase
+      .from('profiles')
+      .update({ is_active })
+      .eq('id', id);
+
+    setIsLoading(false);
+    if (error) {
+      triggerToast(`Status change failed: ${error.message}`, 'error');
+    } else {
+      triggerToast(is_active ? 'Customer activated.' : 'Customer suspended.', 'success');
+      fetchGlobalConfiguration();
+    }
+  };
+
+  // Enroll a customer in the monthly salary savings plan for the given year.
+  // Creates the plan row; months are created on-demand by the deposit trigger.
+  const handleEnrollMonthlySavings = async (customerId: string, year: number, monthlyTargetAmount: number) => {
+    if (!currentUser) return;
+    if (!monthlyTargetAmount || monthlyTargetAmount < 5000) {
+      triggerToast('Monthly Savings Target must be a minimum of ₦5,000.', 'error');
+      return;
+    }
+    setIsLoading(true);
+    const existing = monthlySavingsPlans.find(p => p.customer_id === customerId && p.year === year);
+    if (existing) {
+      triggerToast('This customer is already enrolled for ' + year + '.', 'error');
+      setIsLoading(false);
+      return;
+    }
+    const { error } = await supabase.from('monthly_savings_plans').insert([{
+      customer_id: customerId,
+      year,
+      created_by: currentUser.id,
+      monthly_target_amount: monthlyTargetAmount
+    }]);
+    setIsLoading(false);
+    if (error) {
+      triggerToast('Enrollment failed: ' + error.message, 'error');
+    } else {
+      triggerToast('Customer enrolled in ' + year + ' Monthly Savings Plan at ₦' + monthlyTargetAmount.toLocaleString() + '/month.', 'success');
+      await fetchMonthlySavings(currentUser);
+    }
+  };
+
+  // Customer self-enrolls in monthly savings. Updates their profile
+  // savings_type and terms acceptance, then creates the plan for this year
+  // at the amount they chose (validated client-side and enforced by a DB
+  // check constraint of >= 5000).
+  const handleCustomerSelfEnrollMonthly = async (monthlyTargetAmount: number) => {
+    if (!currentUser) return;
+    if (!monthlyTargetAmount || monthlyTargetAmount < 5000) {
+      triggerToast('Monthly Savings Target must be a minimum of ₦5,000.', 'error');
+      return;
+    }
+    setIsLoading(true);
+    const year = new Date().getFullYear();
+    const existing = monthlySavingsPlans.find(p => p.customer_id === currentUser.id && p.year === year);
+
+    // Update profile savings_type and record terms acceptance
+    const newType = currentUser.savings_type === 'daily' ? 'both' : currentUser.savings_type;
+    const { error: profileError } = await supabase.from('profiles').update({
+      savings_type: newType,
+      monthly_savings_terms_accepted: true,
+      monthly_savings_terms_accepted_at: new Date().toISOString()
+    }).eq('id', currentUser.id);
+
+    if (profileError) {
+      triggerToast('Enrollment failed: ' + profileError.message, 'error');
+      setIsLoading(false);
+      return;
+    }
+
+    if (!existing) {
+      const { error: planError } = await supabase.from('monthly_savings_plans').insert([{
+        customer_id: currentUser.id,
+        year,
+        created_by: currentUser.id,
+        monthly_target_amount: monthlyTargetAmount
+      }]);
+      if (planError) {
+        triggerToast('Plan creation failed: ' + planError.message, 'error');
+        setIsLoading(false);
+        return;
+      }
+    }
+
+    setIsLoading(false);
+    triggerToast('You are now enrolled in the ' + year + ' Monthly Savings Plan at ₦' + monthlyTargetAmount.toLocaleString() + '/month!', 'success');
+    await fetchMonthlySavings(currentUser);
+    await fetchGlobalConfiguration();
+  };
+
+  // Record a monthly savings deposit. The DB trigger handles updating the
+  // month total and marking the month complete when ≥ ₦5,000 is reached.
+  const handleRecordMonthlyDeposit = async (
+    customerId: string, year: number, monthNumber: number,
+    amount: number, paymentMethod: 'Cash' | 'Bank Transfer' | 'Mobile Money'
+  ) => {
+    if (!currentUser) return;
+    if (amount < 1) { triggerToast('Amount must be at least ₦1.', 'error'); return; }
+    setIsLoading(true);
+    let plan = monthlySavingsPlans.find(p => p.customer_id === customerId && p.year === year);
+    if (!plan) {
+      const { data: newPlan, error: planError } = await supabase
+        .from('monthly_savings_plans').insert([{ customer_id: customerId, year, created_by: currentUser.id }])
+        .select().single();
+      if (planError || !newPlan) {
+        triggerToast('Failed to create savings plan: ' + planError?.message, 'error');
+        setIsLoading(false);
+        return;
+      }
+      plan = newPlan as MonthlySavingsPlan;
+    }
+    const { error } = await supabase.from('monthly_savings_deposits').insert([{
+      plan_id: plan.id,
+      customer_id: customerId,
+      month_number: monthNumber,
+      amount,
+      payment_method: paymentMethod,
+      deposited_by: currentUser.id
+    }]);
+    setIsLoading(false);
+    if (error) {
+      triggerToast('Deposit failed: ' + error.message, 'error');
+    } else {
+      const monthName = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][monthNumber - 1];
+      triggerToast('₦' + amount.toLocaleString() + ' recorded for ' + monthName + ' ' + year + '.', 'success');
+      await fetchMonthlySavings(currentUser);
+    }
+  };
+
+  const handleUpdateLoanStatus = async (id: string, loan_status: 'No Loan' | 'Pending Approval' | 'Active Loan' | 'Loan Cleared') => {
+    setIsLoading(true);
+    const { error } = await supabase
+      .from('profiles')
+      .update({ loan_status })
+      .eq('id', id);
+
+    setIsLoading(false);
+    if (error) {
+      triggerToast(`Loan status update failed: ${error.message}`, 'error');
+    } else {
+      triggerToast('Loan status updated.', 'success');
+      fetchGlobalConfiguration();
+    }
+  };
+
+  // Customer-initiated loan request. Blocked (both here and by the button
+  // being disabled in the UI) if the customer already has an Active Loan
+  // or a request already Pending Approval. A customer whose prior loan
+  // reached 'Loan Cleared' CAN request again, per the business rule that
+  // only blocks active/pending loans, not completed ones.
+  const handleRequestLoan = async (customerId: string) => {
+    const customer = profiles.find(p => p.id === customerId);
+    if (!customer) return;
+    if (customer.loan_status === 'Active Loan' || customer.loan_status === 'Pending Approval') {
+      triggerToast('You already have an active or pending loan.', 'error');
+      return;
+    }
+    if (!customer.is_active) {
+      triggerToast('Your account must be active to request a loan.', 'error');
+      return;
+    }
+    const threeMonthsAgo = new Date();
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+    const registeredDate = customer.created_at ? new Date(customer.created_at) : new Date();
+    if (registeredDate > threeMonthsAgo) {
+      triggerToast("You're not eligible. Contact your agent.", 'error');
+      return;
+    }
+
+    const { maxLoan, repaymentAmount, serviceCharge } = computeLoanEligibility(customer.daily_amount);
+    setIsLoading(true);
+
+    const { error: reqError } = await supabase.from('loan_requests').insert([{
+      customer_id: customerId,
+      daily_amount_snapshot: customer.daily_amount,
+      loan_amount: maxLoan,
+      repayment_amount: repaymentAmount,
+      service_charge: serviceCharge,
+      status: 'Pending Approval'
+    }]);
+
+    if (reqError) {
+      setIsLoading(false);
+      triggerToast(`Loan request failed: ${reqError.message}`, 'error');
+      return;
+    }
+
+    await supabase.from('profiles').update({ loan_status: 'Pending Approval' }).eq('id', customerId);
+    await supabase.from('loan_history').insert([{
+      customer_id: customerId, event_type: 'Requested', loan_amount: maxLoan, repayment_amount: repaymentAmount
+    }]);
+
+    setIsLoading(false);
+    triggerToast('Loan request submitted successfully.', 'success');
+    await fetchLoanRequests(customer);
+    await fetchGlobalConfiguration();
+  };
+
+  // Approves a pending customer loan request, creating the real loans row.
+  // Produces the exact same loans-row shape as handleAssignLoan below, per
+  // the spec's requirement that both methods behave identically thereafter.
+  // Shared by both loan-creation paths (customer-request approval and
+  // direct admin assignment). Reads the customer's CURRENT marked_days
+  // fresh from the DB (not stale client state) and credits whatever days
+  // are already complete toward the new loan, so repayment never restarts
+  // from Day 1. Retroactively logs one loan_repayments row per already-
+  // completed day (tagged with that day's real period_key) so that when
+  // freeze_period() eventually processes that period, it correctly
+  // recognizes it as a loan repayment cycle - see the DB migration comment
+  // on freeze_period for why this is necessary. Returns the values the
+  // caller should use in its own loans-row insert.
+  const computeRetroactiveLoanCredit = async (customerId: string, loanId: string, repaymentAmount: number) => {
+    const { data: currentMarkedDays } = await supabase
+      .from('marked_days')
+      .select('id, transaction_id, day_number, amount, period_key')
+      .eq('customer_id', customerId);
+
+    const rows = currentMarkedDays || [];
+    const amountAlreadyCounted = Math.min(
+      sumCurrencyValues(rows.map(r => r.amount)),
+      repaymentAmount
+    );
+    const daysAlreadyCounted = rows.length;
+
+    if (rows.length > 0) {
+      await supabase.from('loan_repayments').insert(
+        rows.map(r => ({
+          loan_id: loanId,
+          customer_id: customerId,
+          transaction_id: r.transaction_id,
+          day_number: r.day_number,
+          amount: r.amount,
+          period_key: r.period_key
+        }))
+      );
+    }
+
+    return { amountAlreadyCounted, daysAlreadyCounted };
+  };
+
+  const handleApproveLoanRequest = async (requestId: string) => {
+    if (!currentUser) return;
+    const request = loanRequests.find(r => r.id === requestId);
+    if (!request) return;
+
+    setIsLoading(true);
+    const today = new Date();
+    const newLoanId = crypto.randomUUID();
+
+    const { amountAlreadyCounted, daysAlreadyCounted } = await computeRetroactiveLoanCredit(
+      request.customer_id, newLoanId, request.repayment_amount
+    );
+    const remainingAfterCredit = Math.max(0, request.repayment_amount - amountAlreadyCounted);
+    const clearedImmediately = remainingAfterCredit <= 0;
+
+    const { error: loanError } = await supabase.from('loans').insert([{
+      id: newLoanId,
+      customer_id: request.customer_id,
+      status: clearedImmediately ? 'Loan Cleared' : 'Active Loan',
+      loan_amount: request.loan_amount,
+      repayment_amount: request.repayment_amount,
+      service_charge: request.service_charge,
+      daily_amount_snapshot: request.daily_amount_snapshot,
+      outstanding_balance: remainingAfterCredit,
+      amount_already_counted: amountAlreadyCounted,
+      amount_repaid: amountAlreadyCounted,
+      amount_remaining: remainingAfterCredit,
+      days_repaid: daysAlreadyCounted,
+      total_days: 32,
+      approved_by: currentUser.id,
+      source: 'customer_request',
+      loan_request_id: request.id,
+      date_issued: today.toISOString().slice(0, 10),
+      completed_at: clearedImmediately ? new Date().toISOString() : null
+    }]);
+
+    if (loanError) {
+      setIsLoading(false);
+      triggerToast(`Loan approval failed: ${loanError.message}`, 'error');
+      return;
+    }
+
+    await supabase.from('loan_requests').update({
+      status: 'Approved', decided_at: new Date().toISOString(), decided_by: currentUser.id
+    }).eq('id', requestId);
+    await supabase.from('profiles').update({ loan_status: clearedImmediately ? 'Loan Cleared' : 'Active Loan' }).eq('id', request.customer_id);
+    await supabase.from('loan_history').insert([{
+      loan_id: newLoanId, customer_id: request.customer_id, event_type: 'Approved',
+      loan_amount: request.loan_amount, repayment_amount: request.repayment_amount, performed_by: currentUser.id
+    }]);
+    if (clearedImmediately) {
+      await supabase.from('loan_history').insert([{
+        loan_id: newLoanId, customer_id: request.customer_id, event_type: 'Completed',
+        loan_amount: request.loan_amount, repayment_amount: request.repayment_amount, performed_by: currentUser.id
+      }]);
+    }
+
+    setIsLoading(false);
+    triggerToast('Loan approved and disbursed.', 'success');
+    await fetchLoanRequests(currentUser);
+    await fetchLoans(currentUser);
+    await fetchGlobalConfiguration();
+  };
+
+  const handleRejectLoanRequest = async (requestId: string, reason: string) => {
+    if (!currentUser) return;
+    const request = loanRequests.find(r => r.id === requestId);
+    if (!request) return;
+
+    setIsLoading(true);
+    const { error } = await supabase.from('loan_requests').update({
+      status: 'Rejected', decided_at: new Date().toISOString(), decided_by: currentUser.id, rejection_reason: reason
+    }).eq('id', requestId);
+
+    if (error) {
+      setIsLoading(false);
+      triggerToast(`Rejection failed: ${error.message}`, 'error');
+      return;
+    }
+
+    await supabase.from('profiles').update({ loan_status: 'No Loan' }).eq('id', request.customer_id);
+    await supabase.from('loan_history').insert([{
+      customer_id: request.customer_id, event_type: 'Rejected',
+      loan_amount: request.loan_amount, repayment_amount: request.repayment_amount, performed_by: currentUser.id
+    }]);
+
+    setIsLoading(false);
+    triggerToast('Loan request rejected.', 'success');
+    await fetchLoanRequests(currentUser);
+    await fetchGlobalConfiguration();
+  };
+
+  // Admin direct assignment - for customers who don't use the app
+  // themselves. Produces the identical loans-row shape as approving a
+  // customer request above. Admin may reduce the disbursed amount below
+  // the maximum eligible; the fixed 2-day service charge (daily x 2) is
+  // preserved on top of whatever amount is actually disbursed, so
+  // repayment_amount = approvedAmount + serviceCharge. This design choice
+  // - keeping the service charge fixed rather than scaling proportionally
+  // - is the most direct generalization of the stated formula and is worth
+  // confirming matches intent if a reduced amount is ever actually used.
+  const handleAssignLoan = async (customerId: string, approvedAmount: number, remarks: string, disbursementDate: string) => {
+    if (!currentUser) return;
+    const customer = profiles.find(p => p.id === customerId);
+    if (!customer) return;
+
+    // Check the database directly rather than trusting local profile state -
+    // `profiles` isn't part of the Realtime/polling refresh cycle, so a
+    // long-lived admin session can hold a stale loan_status. This is exactly
+    // what let a duplicate loan slip through before: the cached profile
+    // still said "no active loan" days after one had actually been assigned.
+    const { data: existingActiveLoan } = await supabase
+      .from('loans')
+      .select('id')
+      .eq('customer_id', customerId)
+      .in('status', ['Active Loan'])
+      .maybeSingle();
+    const { data: existingPendingRequest } = await supabase
+      .from('loan_requests')
+      .select('id')
+      .eq('customer_id', customerId)
+      .eq('status', 'Pending Approval')
+      .maybeSingle();
+
+    if (existingActiveLoan || existingPendingRequest || customer.loan_status === 'Active Loan' || customer.loan_status === 'Pending Approval') {
+      triggerToast('This customer already has an active or pending loan.', 'error');
+      return;
+    }
+
+    const { serviceCharge } = computeLoanEligibility(customer.daily_amount);
+    const repaymentAmount = sumCurrencyValues([approvedAmount + serviceCharge]);
+    const issuedDate = disbursementDate || new Date().toISOString().slice(0, 10);
+    const newLoanId = crypto.randomUUID();
+
+    setIsLoading(true);
+    const { amountAlreadyCounted, daysAlreadyCounted } = await computeRetroactiveLoanCredit(
+      customerId, newLoanId, repaymentAmount
+    );
+    const remainingAfterCredit = Math.max(0, repaymentAmount - amountAlreadyCounted);
+    const clearedImmediately = remainingAfterCredit <= 0;
+
+    const { error: loanError } = await supabase.from('loans').insert([{
+      id: newLoanId,
+      customer_id: customerId,
+      status: clearedImmediately ? 'Loan Cleared' : 'Active Loan',
+      loan_amount: approvedAmount,
+      repayment_amount: repaymentAmount,
+      service_charge: serviceCharge,
+      daily_amount_snapshot: customer.daily_amount,
+      outstanding_balance: remainingAfterCredit,
+      amount_already_counted: amountAlreadyCounted,
+      amount_repaid: amountAlreadyCounted,
+      amount_remaining: remainingAfterCredit,
+      days_repaid: daysAlreadyCounted,
+      total_days: 32,
+      approved_by: currentUser.id,
+      remarks,
+      source: 'admin_assigned',
+      date_issued: issuedDate,
+      completed_at: clearedImmediately ? new Date().toISOString() : null
+    }]);
+
+    if (loanError) {
+      setIsLoading(false);
+      triggerToast(`Loan assignment failed: ${loanError.message}`, 'error');
+      return;
+    }
+
+    await supabase.from('profiles').update({ loan_status: clearedImmediately ? 'Loan Cleared' : 'Active Loan' }).eq('id', customerId);
+    await supabase.from('loan_history').insert([{
+      loan_id: newLoanId, customer_id: customerId, event_type: 'Assigned',
+      loan_amount: approvedAmount, repayment_amount: repaymentAmount, performed_by: currentUser.id
+    }]);
+    if (clearedImmediately) {
+      await supabase.from('loan_history').insert([{
+        loan_id: newLoanId, customer_id: customerId, event_type: 'Completed',
+        loan_amount: approvedAmount, repayment_amount: repaymentAmount, performed_by: currentUser.id
+      }]);
+    }
+
+    setIsLoading(false);
+    triggerToast('Loan assigned successfully.', 'success');
+    await fetchLoans(currentUser);
+    await fetchGlobalConfiguration();
+  };
+
+  // FIX: this used to unconditionally delete ALL of a customer's marked_days
+  // AND their entire transactions history, based only on their active/
+  // running cycle total - with no connection to `contributions` at all. That
+  // meant clicking this could wipe a customer's balance without ever
+  // archiving anything, and without touching their actual uncollected saved
+  // months. It's rewritten to be a same-day shortcut for exactly what the
+  // real Approve & Payout flow does: archive uncollected `contributions`
+  // into `payout_history` and remove them from the active ledger. It no
+  // longer ever touches marked_days or transactions.
+  const handleTriggerManualPayout = async (customerId: string, method: 'Transfer' | 'Cash', bank: string, acctNum: string, acctName: string) => {
+    setIsLoading(true);
+
+    const targetCustomer = profiles.find(p => p.id === customerId);
+    if (!targetCustomer) {
+      triggerToast('Customer not found.', 'error');
+      setIsLoading(false);
+      return;
+    }
+
+    const uncollectedMonths = (savedMonths[customerId] || []).filter(
+      m => m.status === 'saved' || m.status === 'requested'
+    );
+
+    // Payout rule change: previously, a payout could only be triggered once
+    // at least one full 32-day cycle had frozen into savedMonths. Admin can
+    // now pay out at any time. If there's no fully-completed month, pay out
+    // whatever is currently marked (marked_days) instead, then clear those
+    // days afterward so the tracker and balance stay correct post-payout -
+    // exactly like a normal completed-cycle payout clears its saved month.
+    // The original completed-cycle path below is otherwise unchanged.
+    const runningDays = markedDays[customerId] || [];
+    const isPartialPayout = uncollectedMonths.length === 0 && runningDays.length > 0;
+
+    if (uncollectedMonths.length === 0 && runningDays.length === 0) {
+      triggerToast('This customer has no contributions to pay out.', 'error');
+      setIsLoading(false);
+      return;
+    }
+
+    const contributionIds = uncollectedMonths.map(m => m.id);
+    const totalAmount = isPartialPayout
+      ? sumCurrencyValues(runningDays.map(d => d.amount))
+      : sumCurrencyValues(uncollectedMonths.map(m => m.total_amount));
+    // Matches manualPayoutCalculation's preview logic exactly: a partial
+    // payout of the still-running cycle uses the current daily_amount
+    // (it's the live rate), but completed/saved months each use their OWN
+    // historical rate so a later daily_amount change can never retroactively
+    // affect an already-saved past month.
+    const totalFee = isPartialPayout
+      ? targetCustomer.daily_amount
+      : sumCurrencyValues(uncollectedMonths.map(monthHistoricalDailyRate));
+    // Same adjustment offset as manualPayoutCalculation's preview - a
+    // negative adjustment means money was already sent via a quick
+    // withdrawal (Customer Note box), so it's subtracted here to prevent
+    // double-paying. The per-month archive rows below stay historically
+    // accurate to what each month was actually worth; only the real
+    // cash-out amount (payout_requests.payout_amount, and what's actually
+    // sent) reflects the adjustment.
+    const adjustmentTotal = sumCurrencyValues((balanceAdjustments[customerId] || []).map(a => Number(a.amount)));
+    const payoutAmount = Math.max(0, totalAmount - totalFee + adjustmentTotal);
+    const monthPaidText = isPartialPayout
+      ? `${getNigerianMonthName()} (early payout - ${runningDays.length}/32 days)`
+      : uncollectedMonths.map(m => m.month_label).join(', ');
+
+    const payoutPayload: any = {
+      customer_id: customerId,
+      customer_name: targetCustomer.name,
+      account_name: method === 'Cash' ? null : acctName,
+      account_number: method === 'Cash' ? null : acctNum,
+      bank_name: method === 'Cash' ? null : bank,
+      payout_method: method,
+      amount: totalAmount,
+      payout_amount: payoutAmount,
+      status: 'Successful',
+      month_paid: monthPaidText,
+      contribution_ids: contributionIds,
+      processed_at: new Date().toISOString()
+    };
+
+    let { data: newRequest, error: insertError } = await supabase
+      .from('payout_requests')
+      .insert([payoutPayload])
+      .select('*')
+      .single();
+
+    if (insertError && /month_pay|month_paid|contribution_ids/i.test(insertError.message)) {
+      const { data: retryRequest, error: retryError } = await supabase
+        .from('payout_requests')
+        .insert([{ ...payoutPayload, month_paid: undefined, contribution_ids: undefined }])
+        .select('*')
+        .single();
+      newRequest = retryRequest;
+      insertError = retryError;
+    }
+
+    if (insertError) {
+      triggerToast(`Payout trigger failed: ${insertError.message}`, 'error');
+      setIsLoading(false);
+      return;
+    }
+
+    if (isPartialPayout) {
+      const { error: archiveError } = await supabase.from('payout_history').insert([{
+        customer_id: customerId,
+        customer_name: targetCustomer.name,
+        payout_request_id: newRequest?.id,
+        month_label: monthPaidText,
+        total_amount: totalAmount,
+        payout_amount: payoutAmount,
+        bank_name: method === 'Cash' ? null : bank,
+        account_number: method === 'Cash' ? null : acctNum,
+        account_name: method === 'Cash' ? null : acctName,
+        payout_method: method,
+        approved_at: new Date().toISOString()
+      }]);
+      if (archiveError) {
+        console.warn('Failed to write payout_history archive:', archiveError.message);
+      }
+
+      const dayIds = runningDays.map(d => d.id).filter(Boolean) as string[];
+      if (dayIds.length > 0) {
+        const { error: deleteError } = await supabase.from('marked_days').delete().in('id', dayIds);
+        if (deleteError) {
+          console.warn('Failed to clear paid-out marked days:', deleteError.message);
+        }
+      }
+
+      setMarkedDays(prev => ({ ...prev, [customerId]: [] }));
+    } else {
+      // Archive each settled month into payout_history, same as the real
+      // Approve & Payout flow, then remove them from the active ledger.
+      const archiveRows = uncollectedMonths.map(m => ({
+        customer_id: customerId,
+        customer_name: targetCustomer.name,
+        contribution_id: m.id,
+        payout_request_id: newRequest?.id,
+        month_label: m.month_label,
+        total_amount: m.total_amount,
+        payout_amount: Math.max(0, m.total_amount - monthHistoricalDailyRate(m)),
+        bank_name: method === 'Cash' ? null : bank,
+        account_number: method === 'Cash' ? null : acctNum,
+        account_name: method === 'Cash' ? null : acctName,
+        payout_method: method,
+        approved_at: new Date().toISOString()
+      }));
+
+      const { error: archiveError } = await supabase.from('payout_history').insert(archiveRows);
+      if (archiveError) {
+        console.warn('Failed to write payout_history archive:', archiveError.message);
+      }
+
+      const { error: deleteError } = await supabase.from('contributions').delete().in('id', contributionIds);
+      if (deleteError) {
+        console.warn('Failed to clear contributions ledger:', deleteError.message);
+      }
+
+      setSavedMonths(prev => ({
+        ...prev,
+        [customerId]: (prev[customerId] || []).filter(m => !contributionIds.includes(m.id))
+      }));
+    }
+    if (newRequest) {
+      setPayoutRequests(prev => [newRequest, ...prev]);
+    }
+
+    setIsLoading(false);
+    triggerToast(`Payout triggered! ₦${payoutAmount.toLocaleString()} ${isPartialPayout ? '(early payout)' : `across ${uncollectedMonths.length} month(s)`} archived.`, 'success');
+
+    // The adjustment total has now been factored into this payout - clear
+    // the consumed entries so they're never subtracted from a future payout
+    // again. Any adjustment sent AFTER this point (not yet fetched here)
+    // is untouched.
+    const consumedAdjustmentIds = (balanceAdjustments[customerId] || []).map(a => a.id);
+    if (consumedAdjustmentIds.length > 0) {
+      const { error: clearAdjError } = await supabase.from('balance_adjustments').delete().in('id', consumedAdjustmentIds);
+      if (clearAdjError) {
+        console.warn('Failed to clear settled balance adjustments:', clearAdjError.message);
+      }
+    }
+
+    if (currentUser) {
+      await fetchPayoutRequests(currentUser);
+      await fetchSavedMonths(currentUser);
+      await fetchCycleArchives(currentUser);
+      await fetchBalanceAdjustments(currentUser);
+    }
+  };
+
+  const handleAddCustomerPendingTransaction = async (amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => {
+    if (!currentUser) return;
+    setIsLoading(true);
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+
+    const { data: pendingTx, error } = await supabase
+      .from('transactions')
+      .insert([
+        {
+          customer_id: currentUser.id,
+          amount: amount,
+          payment_method: method,
+          status: 'Pending',
+          date: todayStr,
+          branch_id: currentUser.branch_id,
+          days_covered: 0,
+          start_day: 0,
+          end_day: 0
+        }
+      ])
+      .select('*')
+      .single();
+
+    setIsLoading(false);
+    if (error) {
+      triggerToast(`Deposit submission failed: ${error.message}`, 'error');
+    } else {
+      if (pendingTx) {
+        setTransactions(prev => [pendingTx, ...prev]);
+      }
+      triggerToast('Deposit details submitted! Awaiting Admin confirmation.', 'success');
+      syncAllOperationalData(currentUser);
+    }
+  };
+
+  const handleUpdateCustomerSettings = async (phone: string, dailyAmount: number, email: string) => {
+    if (!currentUser) return;
+    setIsLoading(true);
+    const formattedPhone = formatNigerianPhone(phone);
+    
+    const updateData: any = { phone: formattedPhone };
+    
+    if (dailyAmount !== currentUser.daily_amount) {
+      updateData.daily_amount = Number(dailyAmount);
+      updateData.last_amount_change_at = new Date().toISOString();
+      updateData.allow_anytime_change = false; // consume anytime permission
+    }
+
+    // Email is stored for our own records - Paystack doesn't support
+    // changing a customer's email after their virtual account is created,
+    // so this intentionally does NOT touch their Paystack customer record.
+    // Their existing virtual account number is unaffected either way.
+    const trimmedEmail = (email || '').trim();
+    let emailAuthSyncFailed = false;
+    if (trimmedEmail && trimmedEmail !== currentUser.email) {
+      updateData.email = trimmedEmail;
+      // IMPORTANT: this also syncs into auth.users.email, which is what
+      // "Forgot Password" actually looks up (not profiles.email). Without
+      // this, resetPasswordForEmail() silently finds no matching account -
+      // no error shown, no email sent - which is exactly the bug we found.
+      const { error: authEmailError } = await supabase.auth.updateUser({ email: trimmedEmail });
+      if (authEmailError) {
+        emailAuthSyncFailed = true;
+      }
+    }
+    
+    const { error } = await supabase
+      .from('profiles')
+      .update(updateData)
+      .eq('id', currentUser.id);
+
+    setIsLoading(false);
+    if (error) {
+      triggerToast(`Settings update failed: ${error.message}`, 'error');
+    } else {
+      setCurrentUser(prev => prev ? { ...prev, ...updateData } : prev);
+      setProfiles(prev => prev.map(p => p.id === currentUser.id ? { ...p, ...updateData } : p));
+      if (emailAuthSyncFailed) {
+        triggerToast('Profile updated, but the email could not be confirmed for password recovery - please try re-entering it.', 'error');
+      } else {
+        triggerToast('Your profile settings have been updated!', 'success');
+      }
+      fetchCurrentUserProfile(currentUser.id);
+    }
+  };
+
+  const handleApproveTransaction = async (txId: string) => {
+    setIsLoading(true);
+    const tx = transactions.find(t => t.id === txId);
+    if (!tx) {
+      triggerToast('Transaction record not found.', 'error');
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      await approveAndProcessSplit(tx);
+      playNotificationSound('success');
+      triggerToast('Deposit confirmed! Days successfully marked on tracking card.', 'success');
+      if (currentUser) {
+        await resyncAfterTransaction(currentUser, tx.customer_id);
+      }
+    } catch (err: any) {
+      triggerToast(`Approval split logic failed: ${err.message}`, 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setCurrentUser(null);
+  };
+
+  const unreadCount = useMemo(() => {
+    return notifications.filter(n => !n.is_read).length;
+  }, [notifications]);
+
+  const todaysTransactionCount = useMemo(() => {
+    return transactions.filter(tx => tx.date === currentDayKey && tx.status === 'Successful').length;
+  }, [transactions, currentDayKey]);
+
+  if (showSplash) {
+    return <WelcomeScreen onComplete={() => { sessionStorage.setItem('hm_splash_shown', '1'); setShowSplash(false); }} />;
+  }
+
+  return (
+    <div className="min-h-screen bg-emerald-50/40 text-slate-800 antialiased font-sans">
+      {showInstallBanner && deferredPrompt && (
+        <div className="fixed bottom-4 left-4 right-4 z-50 bg-emerald-900 text-white p-4 rounded-2xl shadow-2xl border border-emerald-700 animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h4 className="text-xs font-black uppercase tracking-wide text-amber-400">Install HireMercy AJO</h4>
+              <p className="text-[11px] text-emerald-100 mt-1">Add this app to your home screen for faster access and offline support.</p>
+            </div>
+            <div className="flex gap-2 items-center">
+              <button
+                type="button"
+                onClick={handleInstallClick}
+                className="bg-amber-500 hover:bg-amber-600 text-emerald-950 font-black px-3.5 py-1.5 rounded-xl text-xs whitespace-nowrap transition"
+              >
+                Install Now
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowInstallBanner(false)}
+                className="text-emerald-300 hover:text-white px-2 text-xs"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showInAppBrowserBanner && (
+        <div className="fixed bottom-4 left-4 right-4 z-50 bg-emerald-900 text-white p-4 rounded-2xl shadow-2xl border border-emerald-700 animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div>
+              <h4 className="text-xs font-black uppercase tracking-wide text-amber-400">Can't Install From Here</h4>
+              <p className="text-[11px] text-emerald-100 mt-1 leading-relaxed">
+                You opened this link inside WhatsApp/Facebook/Instagram, which blocks app installation.
+                Tap the <strong>⋮</strong> or <strong>•••</strong> menu at the top right and choose
+                <strong> "Open in Browser"</strong> (Chrome or Safari), then try installing again from there.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowInAppBrowserBanner(false)}
+              className="text-emerald-300 hover:text-white px-2 text-xs flex-shrink-0"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showIosInstallBanner && (
+        <div className="fixed bottom-4 left-4 right-4 z-50 bg-emerald-900 text-white p-4 rounded-2xl shadow-2xl border border-emerald-700 animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div>
+              <h4 className="text-xs font-black uppercase tracking-wide text-amber-400">Install on iPhone/iPad</h4>
+              <p className="text-[11px] text-emerald-100 mt-1 leading-relaxed">
+                Tap the <strong>Share</strong> icon (square with an arrow) in Safari's toolbar, then scroll down and
+                select <strong>"Add to Home Screen"</strong>.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowIosInstallBanner(false)}
+              className="text-emerald-300 hover:text-white px-2 text-xs flex-shrink-0"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+      {showAlarmBanner && (
+        <div className="fixed bottom-24 left-4 right-4 z-50 bg-amber-500 text-emerald-950 p-4 rounded-2xl shadow-2xl border border-amber-400 animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-wide">HireMercyAJO Reminder</p>
+              <p className="text-[12px] mt-1">{alarmMessage}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAlarmBanner(false)}
+              className="text-emerald-950 bg-white/90 px-3 py-1 rounded-full text-[11px] font-bold shadow-sm"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+      {/* Toast Alert System */}
+      {notification && (
+        <div className={`fixed left-1/2 top-4 z-[80] flex max-w-xl -translate-x-1/2 items-start gap-3 rounded-3xl border px-5 py-4 shadow-2xl backdrop-blur-sm animate-bounce ${
+          notification.type === 'success'
+            ? 'border-emerald-300 bg-emerald-900 text-white'
+            : 'border-red-300 bg-red-900 text-white'
+        }`}>
+          <div className={`rounded-full p-2 ${notification.type === 'success' ? 'bg-emerald-700' : 'bg-red-700'}`}>
+            {notification.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
+          </div>
+          <div>
+            <p className="text-sm font-black uppercase tracking-[0.2em]">{notification.type === 'success' ? 'Notification' : 'Action needed'}</p>
+            <p className="mt-1 text-sm font-semibold">{notification.text}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Header bar */}
+      <header className="bg-gradient-to-r from-emerald-800 to-emerald-950 text-white shadow-md py-3.5 px-4 sm:px-6 border-b-4 border-amber-500 sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto flex flex-row justify-between items-center gap-3 sm:gap-4">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-2xl sm:rounded-3xl bg-gradient-to-br from-amber-400 via-amber-300 to-emerald-900 shadow-lg border border-emerald-700">
+              <span className="text-sm sm:text-lg font-extrabold uppercase tracking-[0.25em] sm:tracking-[0.35em] text-white">HI</span>
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-2xl font-black tracking-wide truncate">
+                HireMercy<span className="text-amber-400">AJO</span>
+              </h1>
+              <p className="text-[10px] sm:text-xs text-emerald-100 hidden sm:block">Intelligent 32-Day Savings Management</p>
+            </div>
+          </div>
+          
+          {currentUser ? (
+            <div className="flex items-center gap-2 sm:gap-4">
+              {/* Notification Bell Panel Dropdown */}
+              <div className="relative">
+                {currentUser.role !== 'Customer' && transactions.some(tx => tx.status === 'Pending') && (
+                  <button
+                    type="button"
+                    onClick={() => setAdminDashboardRoute('transactions')}
+                    className="hidden sm:inline-flex mr-2 rounded-xl border border-amber-400/60 bg-amber-500/90 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-emerald-950 shadow-sm transition-all duration-200 hover:bg-amber-400"
+                  >
+                    {transactions.filter(tx => tx.status === 'Pending').length} pending
+                  </button>
+                )}
+                <button 
+                  onClick={() => {
+                    setShowNotifications(!showNotifications);
+                    if (!showNotifications) handleMarkNotificationsRead();
+                  }}
+                  className="p-2 sm:p-2.5 bg-emerald-900 hover:bg-emerald-800 rounded-xl text-amber-400 relative transition-all duration-200"
+                  title="Notifications & Activity Logs"
+                >
+                  <Bell className="w-5 h-5" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-amber-500 text-emerald-950 text-[9px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-emerald-900">
+                      {unreadCount}
+                    </span>
+                  )}
+                </button>
+                {deferredPrompt && (
+                  <button
+                    type="button"
+                    onClick={handleInstallClick}
+                    className="hidden sm:inline-flex ml-3 px-3 py-2 rounded-xl bg-amber-500 text-emerald-950 font-bold text-xs uppercase tracking-[0.08em] hover:bg-amber-600 transition-all duration-200"
+                  >
+                    Install App
+                  </button>
+                )}
+
+                {showNotifications && (
+                  <div className="fixed inset-x-3 top-16 sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-3 sm:w-80 bg-white rounded-2xl shadow-xl border border-emerald-100 py-3 text-slate-800 z-50 fade-in">
+                    <div className="px-4 pb-2 border-b border-emerald-50 flex justify-between items-center">
+                      <span className="font-bold text-xs text-emerald-950 uppercase tracking-wide">
+                        {currentUser.role === 'Customer' ? 'My Notifications' : 'Audit Activity Alerts'}
+                      </span>
+                      <div className="flex items-center gap-2.5">
+                        {notifications.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm('Clear all notifications? This cannot be undone.')) {
+                                clearAllNotifications(currentUser);
+                              }
+                            }}
+                            className="text-[10px] text-rose-500 hover:text-rose-700 font-bold"
+                          >
+                            Clear All
+                          </button>
+                        )}
+                        <button 
+                          type="button"
+                          onClick={() => setShowNotifications(false)} 
+                          className="text-[10px] text-slate-400 hover:text-slate-600 font-bold"
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto divide-y divide-emerald-50 text-xs">
+                      {notifications.length === 0 ? (
+                        <div className="p-4 text-center text-slate-400">No activity alerts logged.</div>
+                      ) : (
+                        notifications.map(n => (
+                          <div key={n.id} className={`p-3.5 transition-all duration-200 hover:bg-emerald-50/40 ${!n.is_read && currentUser.role === 'Customer' ? 'bg-amber-50/50' : ''}`}>
+                            <p className="font-bold text-emerald-950 mb-0.5">{n.title}</p>
+                            <p className="text-slate-600 text-[11px] leading-relaxed mb-1">{n.message}</p>
+                            <span className="text-[9px] text-slate-400">
+                              {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="text-right hidden sm:block">
+                <p className="text-xs sm:text-sm font-bold text-white truncate max-w-[110px] sm:max-w-none">{currentUser.name}</p>
+                <span className="text-[9px] sm:text-[10px] bg-amber-500 text-emerald-950 px-2 sm:px-2.5 py-0.5 rounded-full font-bold uppercase tracking-widest">
+                  {currentUser.role}
+                </span>
+              </div>
+              
+              <button 
+                onClick={handleLogout} 
+                className="p-2 sm:p-2.5 bg-emerald-900 hover:bg-emerald-800 border border-emerald-700 rounded-xl text-amber-400 hover:text-amber-300 transition-all duration-200"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+            </div>
+          ) : (
+            <span className="text-[10px] sm:text-xs bg-emerald-900/40 text-emerald-200 px-2.5 sm:px-3 py-1.5 rounded-xl border border-emerald-700 flex items-center gap-1.5">
+              <Info className="w-4 h-4 text-amber-400 shrink-0" />
+              <span className="hidden sm:inline">Live Supabase Integration Active</span>
+              <span className="sm:hidden">Live</span>
+            </span>
+          )}
+        </div>
+      </header>
+
+      {/* Main workspace */}
+      <main className="max-w-7xl mx-auto py-5 sm:py-8 px-3 sm:px-6">
+        {currentUser?.role !== 'Customer' && <AdvertisementBanner details={supportDetails} />}
+        {isLoading && (
+          <div className="flex items-center justify-center gap-2 py-6 text-emerald-700 font-semibold text-sm">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            Processing database sync request...
+          </div>
+        )}
+
+        {!currentUser ? (
+          authScreen === 'admin_setup' ? (
+            <AdminSetupScreen onCreate={handleCreateAdmin} />
+          ) : authScreen === 'login' ? (
+            <div className="max-w-5xl mx-auto md:grid md:grid-cols-2 md:gap-6 md:items-center">
+              <AuthHero mode="login" onLogin={() => setAuthScreen('login')} onRegister={() => setAuthScreen('register')} />
+              <LoginScreen
+                onLogin={handleLogin}
+                onSwitch={() => setAuthScreen('register')}
+              />
+            </div>
+          ) : (
+            <div className="max-w-5xl mx-auto md:grid md:grid-cols-2 md:gap-6 md:items-start">
+              <AuthHero mode="register" onLogin={() => setAuthScreen('login')} onRegister={() => setAuthScreen('register')} />
+              <RegisterScreen
+                onBack={() => setAuthScreen('login')}
+                onRegister={handleRegister}
+                branches={branches}
+                referralCode={pendingReferralCode}
+              />
+            </div>
+          )
+        ) : (
+          <div className="space-y-8">
+            {currentUser.role === 'Admin' && (
+              <AdminDashboard 
+                profiles={profiles} 
+                branches={branches} 
+                transactions={transactions} 
+                markedDays={markedDays} 
+                supportDetails={supportDetails}
+                payoutRequests={payoutRequests}
+                savedMonths={savedMonths}
+                payoutHistory={payoutHistory}
+                withdrawalRequests={withdrawalRequests}
+                broadcastMessages={broadcastMessages}
+                onCreateBroadcast={handleCreateBroadcast}
+                onUpdateBroadcast={handleUpdateBroadcast}
+                onToggleBroadcastActive={handleToggleBroadcastActive}
+                onDeleteBroadcast={handleDeleteBroadcast}
+                triggerToast={triggerToast}
+                onResetPasswordToDefault={handleResetPasswordToDefault}
+                onRefreshProfiles={fetchGlobalConfiguration}
+                currentUserId={currentUser?.id || ''}
+                balanceAdjustments={balanceAdjustments}
+                manualExpenses={manualExpenses}
+                onRefreshAdjustmentsAndExpenses={async () => {
+                  if (currentUser) {
+                    await fetchBalanceAdjustments(currentUser);
+                    await fetchManualExpenses(currentUser);
+                  }
+                }}
+                onEnsurePayoutHistoryLoaded={() => ensurePayoutHistoryLoadedRef.current()}
+                onEnsureLoanHistoryLoaded={() => ensureLoanHistoryLoadedRef.current()}
+                cycleArchives={cycleArchives}
+                onDeleteTransaction={deleteTransaction}
+                onAddTransaction={createTransaction}
+                onUpdateSupport={handleUpdateSupportDetails}
+                onApprovePayout={handleApprovePayout}
+                onRejectPayout={handleRejectPayout}
+                onCreateBranch={handleCreateBranch}
+                onUpdateBranch={handleUpdateBranch}
+                onDeleteBranch={handleDeleteBranch}
+                onCreateStaff={handleCreateStaff}
+                onUpdateStaff={handleUpdateStaff}
+                onDeleteStaff={handleDeleteStaff}
+                onRegisterCustomer={handleRegister}
+                onDeleteCustomer={handleDeleteCustomer}
+                onUpdateCustomer={handleUpdateCustomer}
+                onToggleCustomerActive={handleToggleCustomerActive}
+                onUpdateLoanStatus={handleUpdateLoanStatus}
+                loans={loans}
+                loanRequests={loanRequests}
+                loanHistory={loanHistory}
+                onApproveLoanRequest={handleApproveLoanRequest}
+                onRejectLoanRequest={handleRejectLoanRequest}
+                onAssignLoan={handleAssignLoan}
+                monthlySavingsPlans={monthlySavingsPlans}
+                monthlySavingsMonths={monthlySavingsMonths}
+                onEnrollMonthlySavings={handleEnrollMonthlySavings}
+                onRecordMonthlyDeposit={handleRecordMonthlyDeposit}
+                onTriggerManualPayout={handleTriggerManualPayout}
+                onApproveTransaction={handleApproveTransaction}
+                onApproveWithdrawal={handleApproveWithdrawal}
+                routeTarget={adminDashboardRoute}
+                onRouteHandled={() => setAdminDashboardRoute(null)}
+              />
+            )}
+            {currentUser.role === 'Staff' && (
+              <StaffDashboard 
+                profiles={profiles} 
+                transactions={transactions} 
+                markedDays={markedDays} 
+                staffProfile={currentUser}
+                supportDetails={supportDetails}
+                branches={branches}
+                onAddTransaction={createTransaction}
+                onRegisterCustomer={handleRegister}
+              />
+            )}
+            {currentUser.role === 'Customer' && (
+              <CustomerDashboard 
+                customer={currentUser} 
+                transactions={transactions} 
+                markedDays={markedDays[currentUser.id] || []}
+                supportDetails={supportDetails}
+                payoutRequests={payoutRequests}
+                savedMonths={savedMonths[currentUser.id] || []}
+                cycleArchives={cycleArchives[currentUser.id] || []}
+                broadcastMessages={broadcastMessages}
+                onAddPayoutRequest={handleCreatePayoutRequest}
+                onAddCustomerPendingTransaction={handleAddCustomerPendingTransaction}
+                onUpdateCustomerSettings={handleUpdateCustomerSettings}
+                activeLoan={loans.find(l => l.customer_id === currentUser.id && l.status === 'Active Loan') || null}
+                myLoans={loans.filter(l => l.customer_id === currentUser.id)}
+                myLoanRequests={loanRequests.filter(r => r.customer_id === currentUser.id)}
+                onRequestLoan={handleRequestLoan}
+                profiles={profiles}
+                myMonthlySavingsPlan={monthlySavingsPlans.find(p => p.customer_id === currentUser.id && p.year === new Date().getFullYear()) || null}
+                myMonthlySavingsMonths={monthlySavingsMonths.filter(m => m.customer_id === currentUser.id)}
+                creditBalance={customerCreditBalance}
+                onSelfEnrollMonthly={handleCustomerSelfEnrollMonthly}
+                myBalanceAdjustments={balanceAdjustments[currentUser.id] || []}
+                notifications={notifications}
+                onLogout={handleLogout}
+              />
+            )}
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+/** Public shop pages (?shop=name) open without login; everything else is the normal app. */
+export default function App() {
+  const slug = shopSlugFromUrl();
+  if (slug) return <PublicShopPage slug={slug} />;
+  return <AppMain />;
+}
