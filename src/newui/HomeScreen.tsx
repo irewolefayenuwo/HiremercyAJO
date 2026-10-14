@@ -1,8 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Wallet, PiggyBank, Smartphone, Store, Gift, Users, Megaphone, Headphones, Flame, Bell,
-  ChevronRight, Target, Receipt, Lock
-} from 'lucide-react';
+  ChevronRight, Target, Receipt, Lock, Gamepad2 } from 'lucide-react';
 import type { Profile, Transaction, Notification, SupportSettings } from '../App';
 import { Mascot, type MascotPose } from './Mascot';
 import { Card, EmptyState, Pill, ProgressBar, SectionTitle, firstName, greeting, naira, whatsappUrl } from './ui';
@@ -79,7 +78,12 @@ function PromoCarousel({ slides }: { slides: Slide[] }) {
         {slides.map(s => (
           <button key={s.id} type="button" onClick={s.onClick}
             className={`relative overflow-hidden text-left rounded-3xl text-white shadow-md w-[88%] sm:w-[calc(50%-6px)] min-h-[150px] p-4 bg-gradient-to-br ${s.bg}`}>
-            {s.media?.image && <img src={s.media.image} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover opacity-30" />}
+            {s.media?.video
+              ? <>
+                  <video src={s.media.video} poster={s.media.image} autoPlay loop muted playsInline preload="metadata" className="absolute inset-0 w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-black/10 pointer-events-none" />
+                </>
+              : s.media?.image && <img src={s.media.image} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover opacity-30" />}
             <div className="relative flex items-center gap-2">
               <div className="min-w-0 flex-1">
                 <span className="inline-block bg-amber-400 text-emerald-950 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full">{s.kicker}</span>
@@ -134,7 +138,7 @@ export function HomeScreen(p: HomeProps) {
       cta: 'Learn more',
       pose: 'megaphone',
       onClick: () => onSection('advertise'),
-      media: supportDetails.advert_image_url ? { image: supportDetails.advert_image_url } : undefined
+      media: (supportDetails.advert_video_url || supportDetails.advert_image_url) ? { image: supportDetails.advert_image_url || undefined, video: supportDetails.advert_video_url || undefined } : undefined
     });
   }
   slides.push(
@@ -164,6 +168,7 @@ export function HomeScreen(p: HomeProps) {
     { label: 'Rewards', icon: Gift, color: 'from-pink-400 to-rose-600', run: () => onSection('rewards') },
     { label: 'Refer & Earn', icon: Users, color: 'from-green-500 to-emerald-700', run: () => onSection('referrals') },
     { label: 'Advertise', icon: Megaphone, color: 'from-violet-500 to-purple-700', run: () => onSection('advertise') },
+    { label: 'Games', icon: Gamepad2, color: 'from-fuchsia-500 to-indigo-700', run: () => onSection('games') },
     {
       label: 'Support', icon: Headphones, color: 'from-teal-500 to-cyan-700',
       run: () => {

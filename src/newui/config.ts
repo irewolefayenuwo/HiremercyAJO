@@ -23,7 +23,7 @@ export const NOT_LIVE_NOTE = 'Not active yet - nothing will be charged or record
 
 export type SectionKey =
   | 'home' | 'ajo' | 'wallet' | 'oja' | 'bills'
-  | 'rewards' | 'referrals' | 'advertise' | 'profile';
+  | 'rewards' | 'referrals' | 'advertise' | 'profile' | 'games';
 
 /** Marketplace taxonomy (labels only; no products are implied). */
 export const OJA_CATEGORIES = ['All', 'Electronics', 'Fashion', 'Food', 'Phones', 'Home', 'Beauty', 'Services'] as const;

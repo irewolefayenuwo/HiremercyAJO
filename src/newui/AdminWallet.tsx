@@ -117,7 +117,15 @@ function Deposits({ toast }: { toast: Toast }) {
   const [rows, setRows] = useState<any[]>([]);
   const [status, setStatus] = useState('pending');
   const [ref, setRef] = useState<Record<string, string>>({});
-  const load = useCallback(async () => { const r = await rpc('admin_list_wallet_deposits', { p_status: status || null }, toast); if (r.ok) setRows(r.data || []); }, [status, toast]);
+  const [sug, setSug] = useState<Record<string, any>>({});
+  const load = useCallback(async () => {
+    const r = await rpc('admin_list_wallet_deposits', { p_status: status || null }, toast); if (r.ok) setRows(r.data || []);
+    // Read-only hints from the OPay email scan. They never credit anything.
+    const { data } = await supabase.rpc('admin_wallet_deposit_suggestions');
+    const m: Record<string, any> = {};
+    ((data || []) as any[]).forEach(x => { const cur = m[x.deposit_id]; if (!cur || x.name_overlap > cur.name_overlap) m[x.deposit_id] = x; });
+    setSug(m);
+  }, [status, toast]);
   useEffect(() => { load(); }, [load]);
   return (
     <div className="space-y-3">
@@ -129,6 +137,11 @@ function Deposits({ toast }: { toast: Toast }) {
           <p className="text-xs"><b>{naira(d.amount)}</b> · {d.customer_name} ({d.customer_phone}) · from {d.sender_name || '-'} / {d.sender_bank || '-'} · {d.reference} · {dt(d.created_at)} · <b className="uppercase">{d.status}</b>{d.bank_reference ? ` · bank ref ${d.bank_reference}` : ''}</p>
           {d.status === 'pending' && (
             <div className="mt-2 flex flex-wrap gap-2">
+              {sug[d.id] && (
+                <div className="w-full rounded-lg bg-emerald-50 border border-emerald-200 px-2.5 py-2 text-[11px] font-semibold text-emerald-900 flex flex-wrap items-center gap-2">
+                  <span>Possible match in your OPay emails: <b>{naira(sug[d.id].amount)}</b> from <b>{sug[d.id].sender_name || 'unknown'}</b> ({sug[d.id].name_overlap > 0 ? 'name matches' : 'name does NOT match - check carefully'}) · ref {sug[d.id].opay_reference}</span>
+                  <button className={btn2} onClick={() => setRef({ ...ref, [d.id]: sug[d.id].opay_reference })}>Use this reference</button>
+                </div>)}
               <input className={inp + ' !w-56'} placeholder="Bank statement reference" value={ref[d.id] || ''} onChange={e => setRef({ ...ref, [d.id]: e.target.value })} />
               <button className={btn} onClick={async () => { if (!window.confirm(`Credit ${naira(d.amount)} to ${d.customer_name}'s wallet? Confirm you saw this money in the bank account.`)) return; const r = await rpc('admin_verify_wallet_deposit', { p_id: d.id, p_bank_reference: ref[d.id] || '' }, toast, 'Deposit verified and wallet credited'); if (r.ok) load(); }}>Verify & credit</button>
               <button className={btn2} onClick={async () => { const why = window.prompt('Reason for rejecting this claim?'); if (!why) return; const r = await rpc('admin_reject_wallet_deposit', { p_id: d.id, p_reason: why }, toast, 'Claim rejected'); if (r.ok) load(); }}>Reject</button>

@@ -7,6 +7,7 @@ export interface AdminAlerts {
   oldest_deposit: string | null;
   orders_attention: number;
   oja_pending: number;
+  shop_pending_items?: number;
 }
 
 function beep() {
@@ -68,7 +69,7 @@ export function useAdminAlerts(enabled: boolean): { alerts: AdminAlerts | null; 
   return { alerts, refresh };
 }
 
-export function AdminAlertBanner({ alerts, onOpenWallet, onOpenOja }: { alerts: AdminAlerts | null; onOpenWallet: () => void; onOpenOja: () => void }) {
+export function AdminAlertBanner({ alerts, onOpenWallet, onOpenOja, onOpenShop }: { alerts: AdminAlerts | null; onOpenWallet: () => void; onOpenOja: () => void; onOpenShop?: () => void }) {
   const [perm, setPerm] = useState<string>(typeof Notification !== 'undefined' ? Notification.permission : 'unsupported');
   if (!alerts) return null;
   const items: React.ReactNode[] = [];
@@ -88,6 +89,10 @@ export function AdminAlertBanner({ alerts, onOpenWallet, onOpenOja }: { alerts: 
   if (alerts.oja_pending > 0) items.push(
     <button key="j" type="button" onClick={onOpenOja} className="w-full text-left rounded-2xl bg-orange-50 border border-orange-200 px-4 py-2.5 text-xs font-bold text-orange-800">
       {alerts.oja_pending} Gbagede OJA buy request{alerts.oja_pending > 1 ? 's' : ''} pending →
+    </button>);
+  if ((alerts.shop_pending_items || 0) > 0 && onOpenShop) items.push(
+    <button key="s" type="button" onClick={onOpenShop} className="w-full text-left rounded-2xl bg-violet-50 border border-violet-200 px-4 py-2.5 text-xs font-bold text-violet-800">
+      {alerts.shop_pending_items} My Shop product{alerts.shop_pending_items! > 1 ? 's' : ''} waiting for your review →
     </button>);
   const canAsk = perm === 'default';
   return (

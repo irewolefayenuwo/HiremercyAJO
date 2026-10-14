@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
-import { Megaphone, CheckCircle2, Phone, Mail, Sparkles } from 'lucide-react';
+import { Megaphone, CheckCircle2, Phone, Mail, Sparkles, Share2 } from 'lucide-react';
+import { shareAdvert } from './shareAdvert';
 import type { Profile, SupportSettings } from '../App';
 import { Mascot } from './Mascot';
 import { AD_PACKAGES, type AdPackage } from './config';
 import { Card, PrimaryButton, ScreenHeader, SecondaryButton, SectionTitle, Sheet, naira, whatsappUrl } from './ui';
 
-export function AdvertiseScreen({ customer, supportDetails }: { customer: Profile; supportDetails: SupportSettings }) {
+export function AdvertiseScreen({ customer, supportDetails, referralCode }: { customer: Profile; supportDetails: SupportSettings; referralCode?: string | null }) {
+  const [shareMsg, setShareMsg] = useState('');
+  const [sharing, setSharing] = useState(false);
   const [pkg, setPkg] = useState<AdPackage | null>(null);
   const [business, setBusiness] = useState('');
   const [phone, setPhone] = useState(customer.phone || '');
@@ -40,13 +43,22 @@ export function AdvertiseScreen({ customer, supportDetails }: { customer: Profil
       {supportDetails.advert_enabled && (
         <Card>
           <SectionTitle>Currently featured</SectionTitle>
-          <div className="flex items-start gap-3">
-            {supportDetails.advert_image_url && <img src={supportDetails.advert_image_url} alt="" loading="lazy" className="w-20 h-20 rounded-xl object-cover shrink-0" />}
-            <div className="min-w-0">
-              <p className="text-sm font-extrabold text-slate-900">{supportDetails.advert_title || 'Featured campaign'}</p>
-              {supportDetails.advert_description && <p className="text-xs text-slate-600 font-medium mt-1">{supportDetails.advert_description}</p>}
-            </div>
+          {supportDetails.advert_video_url ? (
+            <video src={supportDetails.advert_video_url} poster={supportDetails.advert_image_url || undefined} controls playsInline muted loop preload="metadata" className="w-full rounded-2xl max-h-72 bg-black mb-3" />
+          ) : supportDetails.advert_image_url ? (
+            <img src={supportDetails.advert_image_url} alt="" loading="lazy" className="w-full rounded-2xl max-h-64 object-cover mb-3" />
+          ) : null}
+          <p className="text-sm font-extrabold text-slate-900">{supportDetails.advert_title || 'Featured campaign'}</p>
+          {supportDetails.advert_description && <p className="text-xs text-slate-600 font-medium mt-1">{supportDetails.advert_description}</p>}
+          <div className="mt-3 flex items-center gap-3 flex-wrap">
+            <PrimaryButton disabled={sharing} onClick={async () => {
+              setSharing(true); setShareMsg('');
+              const r = await shareAdvert({ title: supportDetails.advert_title || 'Save daily with HireMercyAJO', text: supportDetails.advert_description, referralCode, key: 'main' });
+              setSharing(false); setShareMsg(r.note);
+            }}><Share2 className="w-4 h-4" /> Share this advert</PrimaryButton>
+            {shareMsg && <p className="text-[11px] font-bold text-emerald-700">{shareMsg}</p>}
           </div>
+          <p className="text-[11px] text-slate-500 font-medium mt-2">Your share includes your personal referral link, so friends who join through it count as your referrals.</p>
         </Card>
       )}
 

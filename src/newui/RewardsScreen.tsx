@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { CheckCircle2, Circle, Clock, Flame, Gift, Star, ChevronRight, Lock, Users, Smartphone, Wifi } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import type { Profile, Transaction } from '../App';
+import type { Profile, Transaction, SupportSettings } from '../App';
 import { Mascot } from './Mascot';
 import { Card, EmptyState, NotLive, Pill, ProgressBar, ScreenHeader, SectionTitle, naira } from './ui';
 import type { SectionKey } from './config';
 import { useStreak } from './useStreak';
 import { StreakStrip } from './StreakStrip';
+import { useRewards } from './useRewards';
+import { shareAdvert } from './shareAdvert';
 import { buildWelcomeSteps } from './rewardsLogic';
 import type { DashboardLite } from './useReferralDashboard';
 
@@ -14,12 +16,18 @@ interface LedgerRow { id: string; points: number; source: string; note: string |
 
 const SOURCE_LABEL: Record<string, string> = {
   referral_reward: 'Successful referral',
-  reward_reversal: 'Reward reversed'
+  reward_reversal: 'Reward reversed',
+  login_streak: 'Login streak reward',
+  contribution_reward: 'Contribution reward',
+  advert_share: 'Advert shared',
+  oja_visit: 'Visited Gbagede OJA',
+  redemption: 'Redeemed to wallet'
 };
 
 export function RewardsScreen({
-  customer, myTransactions, dash, onSection, onTab
+  customer, myTransactions, dash, onSection, onTab, supportDetails
 }: {
+  supportDetails: SupportSettings;
   customer: Profile;
   myTransactions: Transaction[];
   dash: DashboardLite | null;
@@ -28,6 +36,11 @@ export function RewardsScreen({
 }) {
   const [ledger, setLedger] = useState<LedgerRow[] | null>(null);
   const [ledgerFailed, setLedgerFailed] = useState(false);
+  const { rewards, reload: reloadRewards } = useRewards(customer.id);
+  const [busy, setBusy] = useState('');
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [redeemPts, setRedeemPts] = useState('');
+  const [ledgerTick, setLedgerTick] = useState(0);
 
   // Read-only: the points ledger is protected by RLS so a customer only ever receives their own rows.
   useEffect(() => {
@@ -47,18 +60,22 @@ export function RewardsScreen({
       }
     })();
     return () => { alive = false; };
-  }, [customer.id]);
+  }, [customer.id, ledgerTick]);
 
   const { streak, loaded: streakLoaded } = useStreak(customer.id);
   const steps = buildWelcomeSteps({
     bestStreak: streak?.longest || 0,
+    shared: !!rewards?.advert_share.ever,
+    visitedOja: !!rewards?.oja_visit.ever,
     customer,
     hasSuccessfulContribution: myTransactions.some(t => t.status !== 'Pending'),
     dash
   });
   const done = steps.filter(s => s.status === 'done').length;
   const bonus = Number(dash?.welcome_bonus_amount || 0);
-  const points = Number(dash?.points || 0);
+  const points = rewards ? rewards.balance : Number(dash?.points || 0);
+  const refresh = () => { reloadRewards(); setLedgerTick(t => t + 1); };
+  const flash = (ok: boolean, text: string) => setMsg({ ok, text });
   const fmtDate = (iso: string) => {
     const d = new Date(iso);
     return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -130,6 +147,7 @@ export function RewardsScreen({
 
       <Card>
         <SectionTitle>More ways to earn</SectionTitle>
+        {msg && <p className={`text-xs font-bold mb-2 ${msg.ok ? 'text-emerald-700' : 'text-red-600'}`}>{msg.text}</p>}
         <ul className="divide-y divide-slate-100">
           <li className="py-3 flex items-center gap-3">
             <span className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center"><Users className="w-5 h-5" /></span>
@@ -139,23 +157,67 @@ export function RewardsScreen({
             </div>
             <button type="button" onClick={() => onSection('referrals')} className="text-xs font-bold text-emerald-700 flex items-center gap-0.5">Open <ChevronRight className="w-3.5 h-3.5" /></button>
           </li>
-          {[
-            { t: 'Contribution rewards', d: 'Rewards for consistent contributions', i: Gift },
-            { t: 'Advert-sharing tasks', d: 'Share approved adverts to earn', i: Star },
-            { t: 'Gbagede OJA tasks', d: 'Marketplace visits and eligible tasks', i: Gift }
-          ].map(r => {
-            const Icon = r.i;
-            return (
-              <li key={r.t} className="py-3 flex items-center gap-3 opacity-80">
-                <span className="w-10 h-10 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center"><Icon className="w-5 h-5" /></span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-slate-700">{r.t}</p>
-                  <p className="text-[11px] text-slate-500 font-medium">{r.d}</p>
-                </div>
-                <Pill tone="slate">Soon</Pill>
-              </li>
-            );
-          })}
+
+          <li className={`py-3 flex items-center gap-3 ${rewards?.contribution.enabled ? '' : 'opacity-80'}`}>
+            <span className="w-10 h-10 rounded-xl bg-pink-50 text-pink-600 flex items-center justify-center"><Gift className="w-5 h-5" /></span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-slate-800">Contribution rewards</p>
+              <p className="text-[11px] text-slate-500 font-medium">
+                {rewards?.contribution.enabled
+                  ? `Earn ${rewards.contribution.points} points for every ${rewards.contribution.threshold} contribution days · ${rewards.contribution.toward_next}/${rewards.contribution.threshold} so far`
+                  : 'Rewards for consistent contributions'}
+              </p>
+            </div>
+            {rewards?.contribution.enabled
+              ? (rewards.contribution.claimable_blocks > 0
+                ? <button type="button" disabled={busy === 'c'} className="text-xs font-bold bg-emerald-700 text-white px-3 py-2 rounded-xl disabled:opacity-50"
+                    onClick={async () => {
+                      setBusy('c'); setMsg(null);
+                      const { data, error } = await supabase.rpc('claim_contribution_reward');
+                      setBusy('');
+                      if (error) flash(false, 'Nothing to claim right now.'); else flash(true, `You earned ${(data as any)?.awarded || 0} points!`);
+                      refresh();
+                    }}>Claim {rewards.contribution.claimable_blocks * rewards.contribution.points}</button>
+                : <Pill tone="green">Active</Pill>)
+              : <Pill tone="slate">Soon</Pill>}
+          </li>
+
+          <li className={`py-3 flex items-center gap-3 ${rewards?.advert_share.enabled ? '' : 'opacity-80'}`}>
+            <span className="w-10 h-10 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center"><Star className="w-5 h-5" /></span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-slate-800">Advert-sharing tasks</p>
+              <p className="text-[11px] text-slate-500 font-medium">
+                {rewards?.advert_share.enabled
+                  ? `Share our advert and earn ${rewards.advert_share.points} points (up to ${rewards.advert_share.daily_cap} a day) · ${rewards.advert_share.shares_today} today`
+                  : 'Share our advert with friends on WhatsApp, Facebook or Instagram'}
+              </p>
+            </div>
+            <button type="button" disabled={busy === 's'} className="text-xs font-bold bg-violet-600 text-white px-3 py-2 rounded-xl disabled:opacity-50"
+              onClick={async () => {
+                setBusy('s'); setMsg(null);
+                const r = await shareAdvert({
+                  title: supportDetails.advert_title || 'Save daily with HireMercyAJO',
+                  text: supportDetails.advert_description, referralCode: dash?.referral_code, key: 'main'
+                });
+                setBusy('');
+                flash(r.shared, r.note); refresh();
+              }}>Share now</button>
+          </li>
+
+          <li className={`py-3 flex items-center gap-3 ${rewards?.oja_visit.enabled ? '' : 'opacity-80'}`}>
+            <span className="w-10 h-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center"><Gift className="w-5 h-5" /></span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-slate-800">Gbagede OJA tasks</p>
+              <p className="text-[11px] text-slate-500 font-medium">
+                {rewards?.oja_visit.enabled
+                  ? `Visit Gbagede OJA daily and earn ${rewards.oja_visit.points} points${rewards.oja_visit.done_today ? ' · done today' : ''}`
+                  : 'Marketplace visits and eligible tasks'}
+              </p>
+            </div>
+            {rewards?.oja_visit.enabled && rewards.oja_visit.done_today
+              ? <Pill tone="green">Done</Pill>
+              : <button type="button" onClick={() => onSection('oja')} className="text-xs font-bold text-emerald-700 flex items-center gap-0.5">Open <ChevronRight className="w-3.5 h-3.5" /></button>}
+          </li>
         </ul>
       </Card>
 
@@ -184,18 +246,46 @@ export function RewardsScreen({
 
       <Card>
         <SectionTitle>Redeem points</SectionTitle>
-        <div className="grid grid-cols-2 gap-3">
-          {[{ t: 'Airtime', i: Smartphone }, { t: 'Data', i: Wifi }].map(r => {
-            const Icon = r.i;
-            return (
-              <div key={r.t} className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5 text-center">
-                <Icon className="w-6 h-6 mx-auto text-slate-400" />
-                <p className="text-sm font-bold text-slate-700 mt-1">{r.t}</p>
-                <p className="text-[11px] text-slate-500 font-medium flex items-center justify-center gap-1"><Lock className="w-3 h-3" /> Not available yet</p>
-              </div>
-            );
-          })}
-        </div>
+        {rewards?.redeem.enabled ? (
+          <div className="space-y-3">
+            <p className="text-xs text-slate-600 font-medium">
+              {rewards.redeem.points_per_naira} points = ₦1 in your wallet. Minimum {rewards.redeem.min_points} points. Then use your wallet to buy airtime or data.
+            </p>
+            <div className="flex gap-2">
+              <input value={redeemPts} onChange={e => setRedeemPts(e.target.value.replace(/\D/g, ''))} inputMode="numeric" placeholder={`Points (you have ${points})`}
+                className="flex-1 min-w-0 px-4 py-3 rounded-xl border border-slate-200 text-sm font-semibold outline-none focus:border-emerald-500" />
+              <button type="button" disabled={busy === 'r' || !Number(redeemPts)} className="px-4 py-3 rounded-xl bg-emerald-700 text-white text-sm font-bold disabled:opacity-50"
+                onClick={async () => {
+                  setBusy('r'); setMsg(null);
+                  const { data, error } = await supabase.rpc('redeem_points', { p_points: Number(redeemPts) });
+                  setBusy('');
+                  if (error) {
+                    const m = error.message || '';
+                    flash(false, m.includes('BELOW_MINIMUM') ? `Minimum is ${rewards.redeem.min_points} points.` : m.includes('INSUFFICIENT') ? 'Not enough points.' : m.includes('DAILY_LIMIT') ? 'Daily redeem limit reached. Try tomorrow.' : 'Could not redeem right now.');
+                  } else { flash(true, `₦${(data as any).naira} added to your wallet.`); setRedeemPts(''); }
+                  refresh();
+                }}>Redeem</button>
+            </div>
+            {Number(redeemPts) > 0 && <p className="text-[11px] text-slate-500 font-semibold">= ₦{Math.floor(Number(redeemPts) / rewards.redeem.points_per_naira)} (daily limit ₦{rewards.redeem.max_naira_per_day})</p>}
+            <div className="grid grid-cols-2 gap-3">
+              <button type="button" onClick={() => onSection('bills')} className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-center"><Smartphone className="w-6 h-6 mx-auto text-emerald-700" /><p className="text-xs font-bold mt-1">Buy airtime</p></button>
+              <button type="button" onClick={() => onSection('bills')} className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-center"><Wifi className="w-6 h-6 mx-auto text-emerald-700" /><p className="text-xs font-bold mt-1">Buy data</p></button>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            {[{ t: 'Airtime', i: Smartphone }, { t: 'Data', i: Wifi }].map(r => {
+              const Icon = r.i;
+              return (
+                <div key={r.t} className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5 text-center">
+                  <Icon className="w-6 h-6 mx-auto text-slate-400" />
+                  <p className="text-sm font-bold text-slate-700 mt-1">{r.t}</p>
+                  <p className="text-[11px] text-slate-500 font-medium flex items-center justify-center gap-1"><Lock className="w-3 h-3" /> Not available yet</p>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </Card>
 
       <div className="flex justify-center"><Mascot pose="wave" size={90} /></div>

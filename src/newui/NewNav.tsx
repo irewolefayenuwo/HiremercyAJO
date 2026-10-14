@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   LayoutDashboard, PiggyBank, Wallet, Store, Smartphone, Gift, Users, Megaphone, User as UserIcon,
-  MoreHorizontal, LogOut
+  MoreHorizontal, LogOut, Gamepad2
 } from 'lucide-react';
 import type { SectionKey } from './config';
 import { Sheet } from './ui';
@@ -17,6 +17,7 @@ export const SECTIONS: SectionDef[] = [
   { key: 'rewards', label: 'Rewards', short: 'Rewards', icon: Gift, hint: 'Challenges & points' },
   { key: 'referrals', label: 'Referrals', short: 'Refer', icon: Users, hint: 'Invite & earn' },
   { key: 'advertise', label: 'Advertise', short: 'Advertise', icon: Megaphone, hint: 'Promote your business' },
+  { key: 'games', label: 'Games', short: 'Games', icon: Gamepad2, hint: 'Play & win (coming soon)' },
   { key: 'profile', label: 'Profile', short: 'Profile', icon: UserIcon, hint: 'Account & settings' }
 ];
 

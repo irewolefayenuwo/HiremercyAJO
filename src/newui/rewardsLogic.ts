@@ -22,6 +22,8 @@ export function buildWelcomeSteps(args: {
   dash: DashboardLite | null;
   /** longest real login streak (days) recorded by the server */
   bestStreak?: number;
+  shared?: boolean;
+  visitedOja?: boolean;
 }): ChallengeStep[] {
   const { customer, hasSuccessfulContribution, dash } = args;
   const best = args.bestStreak || 0;
@@ -64,14 +66,16 @@ export function buildWelcomeSteps(args: {
     {
       key: 'share',
       title: 'Share an approved advert',
-      detail: 'Advert-sharing tasks are not switched on yet.',
-      status: 'soon'
+      detail: args.shared ? 'You have shared an advert. Thank you!' : 'Share our advert with friends from the Rewards screen.',
+      status: args.shared ? 'done' : 'todo',
+      go: args.shared ? undefined : { label: 'Share now', section: 'advertise' }
     },
     {
       key: 'oja',
       title: 'Visit Gbagede OJA',
-      detail: 'Marketplace tasks start when Gbagede OJA opens.',
-      status: 'soon'
+      detail: args.visitedOja ? 'You have visited Gbagede OJA.' : 'Open the marketplace and have a look around.',
+      status: args.visitedOja ? 'done' : 'todo',
+      go: args.visitedOja ? undefined : { label: 'Open Gbagede OJA', section: 'oja' }
     }
   ];
 }

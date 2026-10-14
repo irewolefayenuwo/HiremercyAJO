@@ -3,7 +3,12 @@ import { Search, Store, Package, ShoppingBag, Plus, Image as ImageIcon, X, Chevr
 import type { Profile, SupportSettings } from '../App';
 import { Mascot } from './Mascot';
 import { Card, EmptyState, NotLive, Pill, PrimaryButton, ScreenHeader, SecondaryButton, SectionTitle, naira, whatsappUrl } from './ui';
+import { supabase } from '../lib/supabase';
+import { shareAdvert } from './shareAdvert';
 import { OJA_CATEGORIES, type SectionKey } from './config';
+import { MyShopTab } from './MyShop';
+import { loadDirectory, type DirectoryShop } from './shopApi';
+import { BadgeCheck } from 'lucide-react';
 import { loadMyOjaRequests, loadOjaListings, placeOjaRequest, type OjaListing, type OjaRequest } from './ojaApi';
 
 export type OjaProduct = OjaListing;
@@ -47,9 +52,10 @@ export function ProductCard({ product, onOpen }: { product: OjaProduct; onOpen: 
   );
 }
 
-export function ProductDetails({ product, customer, supportDetails, onBack, onPlaced }: {
-  product: OjaProduct; customer: Profile; supportDetails: SupportSettings; onBack: () => void; onPlaced: () => void;
+export function ProductDetails({ product, customer, supportDetails, onBack, onPlaced, referralCode }: {
+  product: OjaProduct; customer: Profile; supportDetails: SupportSettings; onBack: () => void; onPlaced: () => void; referralCode?: string | null;
 }) {
+  const [shareNote, setShareNote] = useState('');
   const [img, setImg] = useState(0);
   const [qty, setQty] = useState(1);
   const [note, setNote] = useState('');
@@ -107,6 +113,14 @@ export function ProductDetails({ product, customer, supportDetails, onBack, onPl
         </div>
         {product.description && <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">{product.description}</p>}
       </Card>
+
+      <div className="flex items-center gap-3 flex-wrap">
+        <SecondaryButton onClick={async () => {
+          const r = await shareAdvert({ title: product.title, text: product.price != null ? `${product.title} - ${naira(unit)} on Gbagede OJA` : product.description || undefined, referralCode, key: product.id });
+          setShareNote(r.note);
+        }}>Share</SecondaryButton>
+        {shareNote && <p className="text-[11px] font-bold text-emerald-700">{shareNote}</p>}
+      </div>
 
       {isAd ? (
         <div className="space-y-2">
@@ -207,15 +221,17 @@ function SellerRequestForm({ customer, supportDetails }: { customer: Profile; su
   );
 }
 
-type OjaTab = 'shop' | 'orders' | 'sell';
+type OjaTab = 'shop' | 'orders' | 'myshop';
 
 export function OjaScreen({
-  customer, supportDetails, onSection
-}: { customer: Profile; supportDetails: SupportSettings; onSection: (s: SectionKey) => void }) {
+  customer, supportDetails, onSection, referralCode
+}: { customer: Profile; supportDetails: SupportSettings; onSection: (s: SectionKey) => void; referralCode?: string | null }) {
   const [listings, setListings] = useState<OjaListing[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [requests, setRequests] = useState<OjaRequest[]>([]);
-  const [tab, setTab] = useState<OjaTab>('shop');
+  const [tab, setTab] = useState<OjaTab>(() => { try { if (sessionStorage.getItem('hm_open_myshop')) { sessionStorage.removeItem('hm_open_myshop'); return 'myshop'; } } catch { /* ignore */ } return 'shop'; });
+  const [dir, setDir] = useState<DirectoryShop[]>([]);
+  useEffect(() => { loadDirectory().then(setDir).catch(() => undefined); }, []);
   const [query, setQuery] = useState('');
   const [cat, setCat] = useState<string>('All');
   const [orderFilter, setOrderFilter] = useState<'All' | OjaRequest['status']>('All');
@@ -226,6 +242,8 @@ export function OjaScreen({
     setListings(l); setRequests(r); setLoading(false);
   }, []);
   useEffect(() => { reload(); }, [reload]);
+  // Daily visit is recorded on the server; it only earns points if the admin has switched that task on.
+  useEffect(() => { Promise.resolve(supabase.rpc('record_oja_visit')).catch(() => undefined); }, []);
 
   const adverts = (listings || []).filter(l => l.kind === 'advert');
   const products = (listings || []).filter(l => l.kind === 'product');
@@ -235,7 +253,7 @@ export function OjaScreen({
   const rest = shown.filter(p => promoPct(p) === 0);
   const shownOrders = requests.filter(o => orderFilter === 'All' || o.status === orderFilter);
 
-  if (open) return <ProductDetails product={open} customer={customer} supportDetails={supportDetails} onBack={() => setOpen(null)} onPlaced={reload} />;
+  if (open) return <ProductDetails product={open} customer={customer} supportDetails={supportDetails} onBack={() => setOpen(null)} onPlaced={reload} referralCode={referralCode} />;
 
   return (
     <div className="space-y-4 fade-in max-w-3xl mx-auto">
@@ -261,7 +279,7 @@ export function OjaScreen({
       )}
 
       <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100 rounded-xl" role="tablist" aria-label="Marketplace sections">
-        {([['shop', 'Shop', ShoppingBag], ['orders', 'My Orders', Package], ['sell', 'Sell', Plus]] as const).map(([k, label, Icon]) => (
+        {([['shop', 'Shop', ShoppingBag], ['orders', 'My Orders', Package], ['myshop', 'My Shop', Store]] as const).map(([k, label, Icon]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
             className={`py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition ${tab === k ? 'bg-orange-500 text-white shadow-sm' : 'text-slate-600 hover:bg-white'}`}>
             <Icon className="w-3.5 h-3.5" /> {label}
@@ -271,6 +289,19 @@ export function OjaScreen({
 
       {tab === 'shop' && (
         <>
+          {dir.length > 0 && (
+            <div>
+              <p className="text-sm font-extrabold text-emerald-950 mb-2">Shops on HireMercyAJO</p>
+              <div className="hm-scroll-x gap-3 -mx-1 px-1">
+                {dir.map(d => (
+                  <a key={d.slug} href={`/?shop=${d.slug}`} target="_blank" rel="noopener noreferrer" className="shrink-0 w-36 rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="h-20 bg-gradient-to-br from-emerald-700 to-teal-600 relative">{(d.cover || d.logo_url) && <img src={(d.cover || d.logo_url)!} alt="" loading="lazy" className="w-full h-full object-cover" />}</div>
+                    <div className="p-2"><p className="text-xs font-black text-slate-800 truncate flex items-center gap-1">{d.name}{d.verified && <BadgeCheck className="w-3.5 h-3.5 text-sky-500 shrink-0" />}</p><p className="text-[10px] font-semibold text-slate-500 truncate">{d.item_count} products{d.location ? ` · ${d.location}` : ''}</p></div>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
           {adverts.length > 0 && (
             <div className="hm-scroll-x gap-3 -mx-1 px-1">
               {adverts.map(a => (
@@ -307,8 +338,8 @@ export function OjaScreen({
                 {shown.length === 0 ? (
                   <Card>
                     <EmptyState pose="megaphone" title={products.length === 0 ? 'No products yet' : 'No matching products'}
-                      text={products.length === 0 ? 'New products will appear here soon. Want to sell? Tap below.' : 'Try another category or search.'}
-                      action={products.length === 0 ? <SecondaryButton onClick={() => setTab('sell')}>I want to sell</SecondaryButton> : undefined} />
+                      text={products.length === 0 ? 'New products will appear here soon. Want to sell? Open My Shop.' : 'Try another category or search.'}
+                      action={products.length === 0 ? <SecondaryButton onClick={() => setTab('myshop')}>Open my shop</SecondaryButton> : undefined} />
                   </Card>
                 ) : rest.length > 0 && (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{rest.map(p => <ProductCard key={p.id} product={p} onOpen={setOpen} />)}</div>
@@ -351,23 +382,7 @@ export function OjaScreen({
         </Card>
       )}
 
-      {tab === 'sell' && (
-        <div className="space-y-4">
-          <Card>
-            <SectionTitle>Sell on Gbagede OJA</SectionTitle>
-            <SellerRequestForm customer={customer} supportDetails={supportDetails} />
-          </Card>
-          <div className="rounded-3xl bg-gradient-to-r from-violet-600 to-purple-700 text-white p-4 flex items-center gap-3">
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-extrabold">Boost your sales</p>
-              <p className="text-[11px] text-white/80 font-medium">See advertising packages for sellers.</p>
-            </div>
-            <button type="button" onClick={() => onSection('advertise')} className="shrink-0 bg-white text-purple-700 text-xs font-bold px-3.5 py-2.5 rounded-xl flex items-center gap-1">
-              View <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-      )}
+      {tab === 'myshop' && <MyShopTab customerId={customer.id} whatsapp={customer.phone} referralCode={referralCode} onSection={onSection} />}
     </div>
   );
 }
