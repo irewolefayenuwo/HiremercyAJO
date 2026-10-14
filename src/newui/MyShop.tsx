@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Check, Crown, Sparkles, Share2, Copy, ExternalLink, Plus, Image as ImageIcon, Trash2, Eye, Loader2, Gift, Tag, Store, Pencil, X, BarChart3, BadgeCheck, Wallet } from 'lucide-react';
+import { Check, Crown, Sparkles, Share2, Copy, ExternalLink, Plus, Image as ImageIcon, Trash2, Eye, Loader2, Gift, Store, Pencil, X, BadgeCheck, Wallet } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Card, Pill, PrimaryButton, SecondaryButton, Sheet, SectionTitle, naira, copyText, whatsappUrl } from './ui';
 import { newIdempotencyKey } from './vtuApi';
@@ -382,7 +382,7 @@ export function MyShopTab({ customerId, whatsapp, referralCode, onSection }: { c
                 <SecondaryButton onClick={async () => { await copyText(link); setFlash('Link copied'); }}><Copy className="w-4 h-4" />Copy</SecondaryButton>
                 <SecondaryButton onClick={() => window.open(link, '_blank')}><ExternalLink className="w-4 h-4" />View</SecondaryButton>
               </div>
-              {sub.analytics && <div className="mt-3 grid grid-cols-2 gap-2"><div className="rounded-xl bg-emerald-50 p-3 text-center"><p className="text-lg font-black text-emerald-800 flex items-center justify-center gap-1"><Eye className="w-4 h-4" />{sh.views}</p><p className="text-[10px] font-bold text-slate-500">Shop views</p></div><div className="rounded-xl bg-amber-50 p-3 text-center"><p className="text-lg font-black text-amber-800 flex items-center justify-center gap-1"><BarChart3 className="w-4 h-4" />{sh.shares}</p><p className="text-[10px] font-bold text-slate-500">Shares</p></div></div>}
+              {sub.analytics && <div className="mt-3 grid grid-cols-2 gap-2"><div className="rounded-xl bg-emerald-50 p-3 text-center"><p className="text-lg font-black text-emerald-800 flex items-center justify-center gap-1"><Eye className="w-4 h-4" />{sh.views}</p><p className="text-[10px] font-bold text-slate-500">Shop views</p></div><div className="rounded-xl bg-amber-50 p-3 text-center"><p className="text-lg font-black text-amber-800 flex items-center justify-center gap-1"><Share2 className="w-4 h-4" />{sh.shares}</p><p className="text-[10px] font-bold text-slate-500">Shares</p></div></div>}
             </Card>
           )}
           <Card>

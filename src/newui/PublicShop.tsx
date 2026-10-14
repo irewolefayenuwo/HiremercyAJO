@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BadgeCheck, MapPin, MessageCircle, Phone, Share2, Store, Loader2, Instagram, Facebook, Globe, X as XIcon } from 'lucide-react';
+import { BadgeCheck, MapPin, MessageCircle, Phone, Share2, Store, Loader2, Globe, X as XIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { naira, whatsappUrl, copyText } from './ui';
 
@@ -44,7 +44,7 @@ export function PublicShopPage({ slug }: { slug: string }) {
     try { if ((navigator as any).share) await (navigator as any).share({ title: s.name, text: s.tagline || s.name, url }); else { await copyText(url); alert('Link copied'); } } catch { /* cancelled */ }
   };
   const ask = (i: PubItem) => whatsappUrl(s.whatsapp || undefined, `Hello ${s.name}, I am interested in "${i.title}"${i.price ? ` (${naira(i.promo_price ?? i.price)})` : ''}. Is it available?`);
-  const soc: [string, any][] = [['instagram', Instagram], ['facebook', Facebook], ['website', Globe], ['tiktok', Globe], ['x', Globe]];
+  const soc: [string, any][] = [['instagram', Globe], ['facebook', Globe], ['website', Globe], ['tiktok', Globe], ['x', Globe]];
   return (
     <div className="min-h-screen bg-slate-50 pb-24">
       {s.announcement && <div className="text-center text-xs font-bold text-white px-3 py-2" style={{ background: color }}>{s.announcement}</div>}
