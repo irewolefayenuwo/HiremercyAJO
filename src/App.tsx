@@ -15,7 +15,7 @@ import {
   Mascot, AuthHero, HomeScreen, WalletScreen, OjaScreen, BillsScreen, RewardsScreen, AdvertiseScreen, ProfileScreen,
   NewBottomNav, NewDesktopNav, sectionForTab, tabForSection, useReferralDashboard, type SectionKey,
   AdminWalletPanel, PromotionsPanel, AdminOjaPanel, StreakAdminPanel, RewardsAdminPanel, useAdminAlerts, AdminAlertBanner,
-  ShopAdminPanel, BonusAdminPanel, GamesAdminPanel, PopupsAdminPanel, BonusBanner, GamesScreen, PopupHost, PublicShopPage, shopSlugFromUrl
+  ShopAdminPanel, ShareAdvertsAdminPanel, BonusAdminPanel, GamesAdminPanel, PopupsAdminPanel, BonusBanner, GamesScreen, PopupHost, PublicShopPage, shopSlugFromUrl
 } from './newui';
 
 // --- TS Type Definitions matched to Supabase SQL ---
@@ -6730,6 +6730,9 @@ function AdminDashboard({
           </div>
           <div className="md:col-span-2">
             <RewardsAdminPanel toast={(m, t) => triggerToast?.(m, t)} />
+          </div>
+          <div className="md:col-span-2">
+            <ShareAdvertsAdminPanel toast={(m, t) => triggerToast?.(m, t)} />
           </div>
           <div className="md:col-span-2" id="admin-shop-panel">
             <ShopAdminPanel toast={(m, t) => triggerToast?.(m, t)} />
