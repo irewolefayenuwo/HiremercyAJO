@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Megaphone, CheckCircle2, Phone, Mail, Sparkles, Share2 } from 'lucide-react';
 import { shareAdvert } from './shareAdvert';
+import { TodaysShareAdverts } from './ShareAdverts';
 import type { Profile, SupportSettings } from '../App';
 import { Mascot } from './Mascot';
 import { AD_PACKAGES, type AdPackage } from './config';
@@ -39,6 +40,8 @@ export function AdvertiseScreen({ customer, supportDetails, referralCode }: { cu
   return (
     <div className="space-y-4 fade-in max-w-3xl mx-auto">
       <ScreenHeader title="Advertise your business" subtitle="Reach HireMercyAJO customers" tone="gold" pose="megaphone" />
+
+      <TodaysShareAdverts referralCode={referralCode} />
 
       {supportDetails.advert_enabled && (
         <Card>

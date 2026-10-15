@@ -9,6 +9,7 @@ import { useStreak } from './useStreak';
 import { StreakStrip } from './StreakStrip';
 import { useRewards } from './useRewards';
 import { shareAdvert } from './shareAdvert';
+import { TodaysShareAdverts } from './ShareAdverts';
 import { buildWelcomeSteps } from './rewardsLogic';
 import type { DashboardLite } from './useReferralDashboard';
 
@@ -144,6 +145,8 @@ export function RewardsScreen({
         </SectionTitle>
         <StreakStrip streak={streak} loaded={streakLoaded} />
       </Card>
+
+      <TodaysShareAdverts referralCode={dash?.referral_code} compact onChanged={refresh} />
 
       <Card>
         <SectionTitle>More ways to earn</SectionTitle>

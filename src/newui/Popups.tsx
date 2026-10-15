@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { X, ImageIcon, Loader2 } from 'lucide-react';
+import { X, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { uploadImage } from './shopApi';
 import type { SectionKey } from './config';

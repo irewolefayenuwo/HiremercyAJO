@@ -98,7 +98,7 @@ export async function quote(pkg: string, months: number, coupon: string): Promis
 export const shopUrl = (slug: string) => `${window.location.origin}/?shop=${encodeURIComponent(slug)}`;
 
 /** Shrinks a photo in the browser and uploads it to a public bucket under <uid>/. Returns its public URL. */
-export async function uploadImage(bucket: 'shops' | 'popups', folder: string, file: File, maxSide = 1100): Promise<string> {
+export async function uploadImage(bucket: 'shops' | 'popups' | 'adverts', folder: string, file: File, maxSide = 1100): Promise<string> {
   if (!/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error('Choose a JPG, PNG or WebP picture.');
   const blob = await shrink(file, maxSide);
   const path = `${folder}${folder ? '/' : ''}${Date.now()}-${Math.random().toString(16).slice(2, 8)}.jpg`;
@@ -124,4 +124,15 @@ function shrink(file: File, maxSide: number): Promise<Blob> {
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read the picture.')); };
     img.src = url;
   });
+}
+
+/** Uploads an advert video (mp4/webm/mov, up to 40 MB) straight to the adverts bucket. Returns its public URL. */
+export async function uploadVideo(bucket: 'adverts', folder: string, file: File): Promise<string> {
+  if (!/^video\/(mp4|webm|quicktime)$/.test(file.type)) throw new Error('Choose an MP4, WebM or MOV video.');
+  if (file.size > 40 * 1024 * 1024) throw new Error('Video is too large. Keep it under 40 MB.');
+  const ext = file.type === 'video/webm' ? 'webm' : file.type === 'video/quicktime' ? 'mov' : 'mp4';
+  const path = `${folder}${folder ? '/' : ''}${Date.now()}-${Math.random().toString(16).slice(2, 8)}.${ext}`;
+  const { error } = await supabase.storage.from(bucket).upload(path, file, { contentType: file.type, upsert: false });
+  if (error) throw new Error(/size|large|exceed/i.test(error.message) ? 'Video is too large for your storage limit.' : 'Upload failed. Please try again.');
+  return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
 }
