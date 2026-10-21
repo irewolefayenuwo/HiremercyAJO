@@ -26,3 +26,4 @@ export { ShopAdminPanel } from './AdminShop';
 export { BonusBanner, GamesScreen, BonusAdminPanel, GamesAdminPanel } from './BonusGames';
 export { PopupHost, PopupsAdminPanel } from './Popups';
 export { TodaysShareAdverts, ShareAdvertsAdminPanel } from './ShareAdverts';
+export { WalletFundingAdminPanel } from './AdminWalletFunding';

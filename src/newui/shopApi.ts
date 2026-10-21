@@ -66,7 +66,8 @@ const ERR: Record<string, string> = {
   INSUFFICIENT_BALANCE: 'Your wallet balance is too low. Fund your wallet first.',
   ALREADY_CLAIMED: 'You have already claimed this bonus.',
   NOT_ELIGIBLE: 'This bonus is not available for your account.',
-  BUDGET_EXHAUSTED: 'This bonus has run out. Thank you for your interest.'
+  BUDGET_EXHAUSTED: 'This bonus has run out. Thank you for your interest.',
+  TASKS_INCOMPLETE: 'Finish all the tasks first, then claim your bonus.'
 };
 export function friendlyError(e: any, fallback = 'Something went wrong. Please try again.'): string {
   const msg = String(e?.message || e || '');

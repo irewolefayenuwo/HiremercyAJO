@@ -26,13 +26,17 @@ export function WalletScreen({ customer, supportDetails, onTab }: { customer: Pr
   const [sender, setSender] = useState(customer.name || '');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [fund, setFund] = useState<{ bank_name: string; account_name: string; account_number: string; automatic: boolean } | null>(null);
+  const [showNotice, setShowNotice] = useState(false);
 
   const load = useCallback(async () => {
-    const [w, t, d] = await Promise.all([
+    const [w, t, d, f] = await Promise.all([
       supabase.rpc('get_my_wallet'),
       supabase.from('wallet_transactions').select('id, reference, kind, direction, amount, balance_after, description, created_at').order('created_at', { ascending: false }).limit(40),
-      supabase.from('wallet_deposit_requests').select('id, reference, amount, status, reject_reason, created_at').order('created_at', { ascending: false }).limit(10)
+      supabase.from('wallet_deposit_requests').select('id, reference, amount, status, reject_reason, created_at').order('created_at', { ascending: false }).limit(10),
+      supabase.rpc('get_wallet_funding_account')
     ]);
+    setFund(!f.error && f.data ? (f.data as any) : null);
     if (w.error) { setState('off'); return; }
     setBalance(Number((w.data as any)?.balance || 0));
     setTxs((t.data || []) as Tx[]);
@@ -54,7 +58,12 @@ export function WalletScreen({ customer, supportDetails, onTab }: { customer: Pr
     setAmount(''); load();
   };
 
-  const bankRows = [
+  // The dedicated wallet account (set by the admin) wins. Only if none is configured do we fall back to the old behaviour.
+  const bankRows = fund ? [
+    { label: 'Bank name', value: fund.bank_name || '' },
+    { label: 'Account name', value: fund.account_name || '' },
+    { label: 'Account number', value: fund.account_number || '' }
+  ] : [
     { label: 'Bank name', value: supportDetails.admin_bank_name || '' },
     { label: 'Account name', value: supportDetails.admin_account_name || '' },
     { label: 'Account number', value: supportDetails.admin_account_number || '' }
@@ -91,6 +100,33 @@ export function WalletScreen({ customer, supportDetails, onTab }: { customer: Pr
                 ))}
               </div>
             ) : <NotLive title="Bank details not set">HireMercyAJO has not added its account details yet. Please contact support.</NotLive>}
+            {fund ? (
+              <>
+                <div className="mt-3 rounded-2xl bg-amber-50 border border-amber-200 p-3 text-[11px] font-semibold text-amber-900">
+                  This account is only for wallet funding. Do not use it for Ajo contributions - use Deposit Funds for those.
+                </div>
+                <ol className="mt-3 space-y-1.5 text-[11px] font-semibold text-slate-600 list-decimal pl-5">
+                  <li>Transfer any amount (minimum ₦100) to the account above from your bank app. Use your own account - we match the name on the transfer.</li>
+                  <li>{fund.automatic ? 'We detect the transfer automatically, usually within a few minutes. You do not need to submit anything.' : 'We confirm the transfer in our bank account, then add it to your wallet. You do not need to submit anything.'}</li>
+                  <li>Open this screen again or tap Refresh to see your new balance.</li>
+                </ol>
+                <button type="button" onClick={load} className="mt-3 text-xs font-bold text-emerald-800 underline">Refresh balance</button>
+                <div className="mt-4 border-t border-slate-100 pt-3">
+                  <button type="button" onClick={() => setShowNotice(v => !v)} className="text-xs font-bold text-slate-600 underline">{showNotice ? 'Hide' : 'My transfer has not appeared after 30 minutes'}</button>
+                  {showNotice && (
+                    <form onSubmit={submit} className="space-y-3 mt-3">
+                      <input value={amount} onChange={e => setAmount(e.target.value.replace(/\D/g, ''))} inputMode="numeric" placeholder="Amount you transferred (₦)" className={inputCls} />
+                      <input value={bank} onChange={e => setBank(e.target.value)} placeholder="Bank you sent from" className={inputCls} />
+                      <input value={sender} onChange={e => setSender(e.target.value)} placeholder="Name on the sending account" className={inputCls} />
+                      {msg && <p className={`text-[11px] font-semibold ${msg.ok ? 'text-emerald-700' : 'text-red-600'}`}>{msg.text}</p>}
+                      <PrimaryButton type="submit" disabled={busy} className="w-full">{busy ? 'Sending...' : 'Tell us about my transfer'}</PrimaryButton>
+                      <p className="text-[10px] text-slate-400 font-medium">This only alerts us. Your wallet is credited when the transfer is confirmed in our bank account, and never twice.</p>
+                    </form>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
             <ol className="mt-4 space-y-1.5 text-[11px] font-semibold text-slate-600 list-decimal pl-5">
               <li>Transfer the amount to the account above from your bank app.</li>
               <li>Fill in the notice below so we can find your transfer.</li>
@@ -103,6 +139,8 @@ export function WalletScreen({ customer, supportDetails, onTab }: { customer: Pr
               {msg && <p className={`text-[11px] font-semibold ${msg.ok ? 'text-emerald-700' : 'text-red-600'}`}>{msg.text}</p>}
               <PrimaryButton type="submit" disabled={busy || !hasBank} className="w-full">{busy ? 'Sending...' : 'I have made the transfer'}</PrimaryButton>
             </form>
+              </>
+            )}
           </Card>
 
           {deps.length > 0 && (
