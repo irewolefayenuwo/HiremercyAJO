@@ -40,6 +40,7 @@ export interface Profile {
   virtual_account_number?: string;
   virtual_account_bank?: string;
   referral_code?: string;
+  avatar_url?: string;
 }
 
 export interface Loan {
@@ -8095,14 +8096,14 @@ function AdminReferralPanel({ profiles, triggerToast: toast }: { profiles: Profi
 function CustomerDashboard({ 
   customer, transactions, markedDays, supportDetails, onAddPayoutRequest, payoutRequests, savedMonths, cycleArchives, onAddCustomerPendingTransaction, onUpdateCustomerSettings,
   activeLoan, myLoans, myLoanRequests, onRequestLoan, profiles,
-  myMonthlySavingsPlan, myMonthlySavingsMonths, creditBalance, onSelfEnrollMonthly, myBalanceAdjustments, broadcastMessages, notifications, onLogout
+  myMonthlySavingsPlan, myMonthlySavingsMonths, creditBalance, onSelfEnrollMonthly, myBalanceAdjustments, broadcastMessages, notifications, onLogout, onProfileSaved, branchName
 }: { 
   customer: Profile, transactions: Transaction[], markedDays: MarkedDay[], supportDetails: SupportSettings, payoutRequests: PayoutRequest[], savedMonths: SavedMonth[], cycleArchives: any[], onAddPayoutRequest: (bank: string, acctNum: string, acctName: string, contributionIds: string[]) => void, broadcastMessages?: BroadcastMessage[],
   onAddCustomerPendingTransaction: (amount: number, method: 'Cash' | 'Bank Transfer' | 'Mobile Money') => void, onUpdateCustomerSettings: (phone: string, dailyAmount: number, email: string) => void,
   activeLoan: Loan | null, myLoans: Loan[], myLoanRequests: LoanRequest[], onRequestLoan: (customerId: string) => void, profiles: Profile[],
   myMonthlySavingsPlan: MonthlySavingsPlan | null, myMonthlySavingsMonths: MonthlySavingsMonth[], creditBalance: CustomerCreditBalance | null,
   onSelfEnrollMonthly: (amount: number) => void, myBalanceAdjustments: BalanceAdjustment[],
-  notifications?: Notification[], onLogout?: () => void
+  notifications?: Notification[], onLogout?: () => void, onProfileSaved?: () => void, branchName?: string
 }) {
   const [customerTab, setCustomerTab] = useState<'home' | 'wallet' | 'oja' | 'bills' | 'rewards' | 'advertise' | 'profile' | 'games' | 'tracker' | 'transactions' | 'deposit' | 'settings' | 'history' | 'monthly-savings' | 'referral'>('home');
   // Read-only referral/reward summary shared by the new Home, Rewards and Profile screens
@@ -8403,7 +8404,7 @@ function CustomerDashboard({
       )}
       {(customerTab === 'home' || customerTab === 'wallet') && <BonusBanner onSection={goSection} onClaimed={() => setBonusTick(t => t + 1)} />}
       {customerTab === 'games' && <GamesScreen onSection={goSection} />}
-      {customerTab === 'wallet' && <WalletScreen key={bonusTick} customer={customer} supportDetails={supportDetails} onTab={goTab} />}
+      {customerTab === 'wallet' && <WalletScreen key={bonusTick} customer={customer} supportDetails={supportDetails} onTab={goTab} onSection={goSection} referralCode={refDash.data?.referral_code} unread={(notifications || []).filter(n => !n.is_read).length} />}
       {customerTab === 'oja' && <OjaScreen customer={customer} supportDetails={supportDetails} onSection={goSection} referralCode={refDash.data?.referral_code} />}
       {customerTab === 'bills' && <BillsScreen defaultPhone={customer.phone} />}
       {customerTab === 'rewards' && (
@@ -8412,7 +8413,7 @@ function CustomerDashboard({
       {customerTab === 'advertise' && <AdvertiseScreen customer={customer} supportDetails={supportDetails} referralCode={refDash.data?.referral_code} />}
       {customerTab === 'profile' && (
         <ProfileScreen customer={customer} dash={refDash.data} myTransactions={myTransactions} supportDetails={supportDetails}
-          onTab={goTab} onSection={goSection} onLogout={onLogout} />
+          onTab={goTab} onSection={goSection} onLogout={onLogout} onProfileSaved={onProfileSaved} branchName={branchName} />
       )}
 
       {customerTab === 'history' && (() => {
@@ -9438,6 +9439,15 @@ function AppMain() {
   });
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  // The new Home/Wallet header band has its own bell: it asks this component to open the notifications panel.
+  const showNotifRef = useRef(false);
+  const markNotifReadRef = useRef<() => void>(() => undefined);
+  showNotifRef.current = showNotifications;
+  useEffect(() => {
+    const toggle = () => { if (!showNotifRef.current) markNotifReadRef.current(); setShowNotifications(!showNotifRef.current); };
+    window.addEventListener('hm-bell', toggle);
+    return () => window.removeEventListener('hm-bell', toggle);
+  }, []);
   const [withdrawalRequests, setWithdrawalRequests] = useState<WithdrawalRequest[]>([]);
   const [currentDayKey, setCurrentDayKey] = useState(getWATDateKey());
 
@@ -10476,6 +10486,7 @@ function AppMain() {
     
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
   };
+  markNotifReadRef.current = () => { void handleMarkNotificationsRead(); };
 
   const handleLogin = async (phone: string, pass: string) => {
     setIsLoading(true);
@@ -12152,9 +12163,10 @@ function AppMain() {
       )}
 
       {/* Header bar */}
-      <header className="bg-gradient-to-r from-emerald-800 to-emerald-950 text-white shadow-md py-3.5 px-4 sm:px-6 border-b-4 border-amber-500 sticky top-0 z-40">
+      <header className="hm-app-header bg-gradient-to-r from-emerald-800 to-emerald-950 text-white shadow-md py-3.5 px-4 sm:px-6 border-b-4 border-amber-500 sticky top-0 z-40">
+        <style>{`@media (max-width:639px){body.hm-home-band header.hm-app-header{padding:0;border:0;box-shadow:none;background:transparent;position:static;min-height:0}body.hm-home-band header.hm-app-header .hm-hide-in-band{display:none}body.hm-home-band main{padding-top:0}}`}</style>
         <div className="max-w-7xl mx-auto flex flex-row justify-between items-center gap-3 sm:gap-4">
-          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="hm-hide-in-band flex items-center gap-2.5 sm:gap-3 min-w-0">
             <div className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-2xl sm:rounded-3xl bg-gradient-to-br from-amber-400 via-amber-300 to-emerald-900 shadow-lg border border-emerald-700">
               <span className="text-sm sm:text-lg font-extrabold uppercase tracking-[0.25em] sm:tracking-[0.35em] text-white">HI</span>
             </div>
@@ -12184,7 +12196,7 @@ function AppMain() {
                     setShowNotifications(!showNotifications);
                     if (!showNotifications) handleMarkNotificationsRead();
                   }}
-                  className="p-2 sm:p-2.5 bg-emerald-900 hover:bg-emerald-800 rounded-xl text-amber-400 relative transition-all duration-200"
+                  className="hm-hide-in-band p-2 sm:p-2.5 bg-emerald-900 hover:bg-emerald-800 rounded-xl text-amber-400 relative transition-all duration-200"
                   title="Notifications & Activity Logs"
                 >
                   <Bell className="w-5 h-5" />
@@ -12261,7 +12273,7 @@ function AppMain() {
               
               <button 
                 onClick={handleLogout} 
-                className="p-2 sm:p-2.5 bg-emerald-900 hover:bg-emerald-800 border border-emerald-700 rounded-xl text-amber-400 hover:text-amber-300 transition-all duration-200"
+                className="hm-hide-in-band p-2 sm:p-2.5 bg-emerald-900 hover:bg-emerald-800 border border-emerald-700 rounded-xl text-amber-400 hover:text-amber-300 transition-all duration-200"
               >
                 <LogOut className="w-5 h-5" />
               </button>
@@ -12411,6 +12423,8 @@ function AppMain() {
                 myBalanceAdjustments={balanceAdjustments[currentUser.id] || []}
                 notifications={notifications}
                 onLogout={handleLogout}
+                onProfileSaved={() => { void fetchCurrentUserProfile(currentUser.id); }}
+                branchName={branches.find(b => b.id === currentUser.branch_id)?.name}
               />
             )}
           </div>
