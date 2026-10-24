@@ -66,8 +66,7 @@ const ERR: Record<string, string> = {
   INSUFFICIENT_BALANCE: 'Your wallet balance is too low. Fund your wallet first.',
   ALREADY_CLAIMED: 'You have already claimed this bonus.',
   NOT_ELIGIBLE: 'This bonus is not available for your account.',
-  BUDGET_EXHAUSTED: 'This bonus has run out. Thank you for your interest.',
-  TASKS_INCOMPLETE: 'Finish all the tasks first, then claim your bonus.'
+  BUDGET_EXHAUSTED: 'This bonus has run out. Thank you for your interest.'
 };
 export function friendlyError(e: any, fallback = 'Something went wrong. Please try again.'): string {
   const msg = String(e?.message || e || '');
@@ -99,7 +98,7 @@ export async function quote(pkg: string, months: number, coupon: string): Promis
 export const shopUrl = (slug: string) => `${window.location.origin}/?shop=${encodeURIComponent(slug)}`;
 
 /** Shrinks a photo in the browser and uploads it to a public bucket under <uid>/. Returns its public URL. */
-export async function uploadImage(bucket: 'shops' | 'popups' | 'adverts', folder: string, file: File, maxSide = 1100): Promise<string> {
+export async function uploadImage(bucket: 'shops' | 'popups' | 'adverts' | 'avatars', folder: string, file: File, maxSide = 1100): Promise<string> {
   if (!/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error('Choose a JPG, PNG or WebP picture.');
   const blob = await shrink(file, maxSide);
   const path = `${folder}${folder ? '/' : ''}${Date.now()}-${Math.random().toString(16).slice(2, 8)}.jpg`;

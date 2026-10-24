@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
+import { AjoWalletAdminCard } from './AjoWalletPay';
 type Toast = (m: string, t?: 'success' | 'error') => void;
 const naira = (n: any) => `₦${Number(n || 0).toLocaleString()}`;
 const dt = (s?: string | null) => (s ? new Date(s).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-');
@@ -80,7 +81,13 @@ export function WalletFundingAdminPanel({ toast, profiles }: { toast: Toast; pro
   });
   const call = async (action: string, extra: Record<string, unknown> = {}) => {
     const { data, error } = await supabase.functions.invoke('wallet-email-check', { body: { action, ...extra } });
-    if (error) { toast('Could not reach the wallet email function. Is it deployed?', 'error'); return null; }
+    if (error) {
+      let why = '';
+      try { const ctx = (error as any).context; if (ctx && typeof ctx.json === 'function') { const j = await ctx.json(); why = String(j?.error || j?.message || ''); } else if (ctx && typeof ctx.text === 'function') { why = String(await ctx.text()).slice(0, 160); } } catch { /* ignore */ }
+      const status = (error as any).context?.status;
+      toast(`Wallet email function problem${status ? ` (code ${status})` : ''}: ${why || String(error.message || error).slice(0, 160)}`, 'error');
+      return null;
+    }
     return data as any;
   };
   const testConn = () => run('test', async () => {
@@ -127,6 +134,7 @@ export function WalletFundingAdminPanel({ toast, profiles }: { toast: Toast; pro
 
   return (
     <div className="space-y-4">
+      <AjoWalletAdminCard toast={toast} />
       <div>
         <h3 className="text-lg font-black text-emerald-950">WALLET ACCOUNT SETUP</h3>
         <p className="text-xs text-slate-500 font-medium">The bank account used only for wallet funding (never the Ajo account). Email passwords are never entered here.</p>

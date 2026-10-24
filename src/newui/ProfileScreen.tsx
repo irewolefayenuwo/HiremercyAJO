@@ -1,12 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
-  User as UserIcon, Phone, Mail, PiggyBank, Wallet, Users, Gift, Receipt, ShieldCheck, LogOut, ChevronRight, Headphones
+  User as UserIcon, Camera, Phone, Mail, PiggyBank, Wallet, Users, Gift, Receipt, ShieldCheck, LogOut, ChevronRight, Headphones
 } from 'lucide-react';
 import type { Profile, Transaction, SupportSettings } from '../App';
 import { Card, Pill, SectionTitle, naira, whatsappUrl } from './ui';
 import type { SectionKey } from './config';
 import { useLiveFlags } from './liveFlags';
 import type { DashboardLite } from './useReferralDashboard';
+import { supabase } from '../lib/supabase';
+import { uploadImage } from './shopApi';
 
 function Row({ icon: Icon, label, value, onClick, tone = 'green' }: {
   icon: any; label: string; value?: React.ReactNode; onClick?: () => void; tone?: 'green' | 'red';
@@ -31,7 +33,7 @@ function Row({ icon: Icon, label, value, onClick, tone = 'green' }: {
  * existing Settings screen so account handling is not duplicated.
  */
 export function ProfileScreen({
-  customer, dash, myTransactions, supportDetails, onTab, onSection, onLogout
+  customer, dash, myTransactions, supportDetails, onTab, onSection, onLogout, onProfileSaved, branchName
 }: {
   customer: Profile;
   dash: DashboardLite | null;
@@ -40,7 +42,38 @@ export function ProfileScreen({
   onTab: (tab: string) => void;
   onSection: (s: SectionKey) => void;
   onLogout?: () => void;
+  onProfileSaved?: () => void;
+  branchName?: string;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(customer.name || '');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const avatar = (customer as any).avatar_url as string | undefined;
+  const NAME_ERR: Record<string, string> = { INVALID_NAME: 'Use 2 to 60 letters only (spaces, . - \' allowed).', INVALID_AVATAR: 'That picture could not be used. Try another.' };
+  const fail = (m?: string) => NAME_ERR[Object.keys(NAME_ERR).find(k => (m || '').includes(k)) || ''] || 'Could not save. Please try again.';
+  const saveName = async () => {
+    const v = name.trim();
+    if (v.length < 2) { setNote({ ok: false, text: 'Please enter your full name.' }); return; }
+    setBusy(true); setNote(null);
+    const { error } = await supabase.rpc('update_my_profile', { p_name: v });
+    setBusy(false);
+    if (error) { setNote({ ok: false, text: fail(error.message) }); return; }
+    setEditing(false); setNote({ ok: true, text: 'Saved.' }); onProfileSaved?.();
+  };
+  const pickPhoto = async (f?: File | null) => {
+    if (!f) return;
+    setBusy(true); setNote(null);
+    try {
+      const { data: u } = await supabase.auth.getUser();
+      const uid = u.user?.id; if (!uid) throw new Error('Please sign in again.');
+      const url = await uploadImage('avatars', uid, f, 400);
+      const { error } = await supabase.rpc('update_my_profile', { p_avatar_url: url });
+      if (error) throw new Error(fail(error.message));
+      setNote({ ok: true, text: 'Photo updated.' }); onProfileSaved?.();
+    } catch (e: any) { setNote({ ok: false, text: e?.message || 'Upload failed.' }); }
+    setBusy(false);
+  };
   const live = useLiveFlags();
   const initials = (customer.name || '?').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
   const bonus = Number(dash?.welcome_bonus_amount || 0);
@@ -51,7 +84,13 @@ export function ProfileScreen({
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-900 via-emerald-800 to-emerald-600 text-white shadow-md p-5">
         <div className="absolute -right-10 -top-12 w-44 h-44 rounded-full bg-amber-300/20 blur-2xl pointer-events-none" />
         <div className="relative flex items-center gap-4">
-          <span className="w-16 h-16 rounded-full bg-gradient-to-br from-amber-300 to-amber-500 text-emerald-950 text-xl font-black flex items-center justify-center ring-4 ring-white/30 shrink-0">{initials}</span>
+          <label className="relative w-16 h-16 shrink-0 cursor-pointer" aria-label="Change profile photo">
+            {avatar
+              ? <img src={avatar} alt="" className="w-16 h-16 rounded-full object-cover ring-4 ring-white/30" />
+              : <span className="w-16 h-16 rounded-full bg-gradient-to-br from-amber-300 to-amber-500 text-emerald-950 text-xl font-black flex items-center justify-center ring-4 ring-white/30">{initials}</span>}
+            <span className="absolute -right-1 -bottom-1 w-6 h-6 rounded-full bg-white text-emerald-700 flex items-center justify-center shadow"><Camera className="w-3.5 h-3.5" /></span>
+            <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={busy} onChange={e => { void pickPhoto(e.target.files?.[0]); e.target.value = ''; }} />
+          </label>
           <div className="min-w-0">
             <h2 className="text-xl font-black truncate">{customer.name}</h2>
             <p className="text-xs text-emerald-100 font-medium truncate">{customer.phone}</p>
@@ -66,8 +105,19 @@ export function ProfileScreen({
       <Card>
         <SectionTitle>Personal information</SectionTitle>
         <div className="divide-y divide-slate-100">
-          <Row icon={UserIcon} label="Full name" value={customer.name} />
-          <Row icon={Phone} label="Phone number" value={customer.phone} />
+          {editing ? (
+            <div className="py-3 px-1 space-y-2">
+              <label className="text-xs font-bold text-slate-800" htmlFor="pf-name">Full name</label>
+              <input id="pf-name" value={name} onChange={e => setName(e.target.value)} maxLength={60} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold outline-none focus:border-emerald-500" />
+              <div className="flex gap-2">
+                <button type="button" disabled={busy} onClick={() => void saveName()} className="px-4 py-2 rounded-xl bg-emerald-700 text-white text-xs font-bold disabled:opacity-50">{busy ? 'Saving…' : 'Save'}</button>
+                <button type="button" onClick={() => { setEditing(false); setName(customer.name || ''); setNote(null); }} className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700">Cancel</button>
+              </div>
+            </div>
+          ) : <Row icon={UserIcon} label="Full name" value={customer.name || 'Not added yet'} onClick={() => { setName(customer.name || ''); setEditing(true); }} />}
+          {note && <p className={`text-xs font-bold px-1 py-2 ${note.ok ? 'text-emerald-700' : 'text-red-600'}`}>{note.text}</p>}
+          {branchName && <Row icon={ShieldCheck} label="Branch" value={branchName} />}
+          <Row icon={Phone} label="Phone number (your login)" value={customer.phone || 'Not added yet'} />
           <Row icon={Mail} label="Email" value={customer.email || 'Not added yet'} />
           <Row icon={ShieldCheck} label="Edit details & change password" value="Opens your account settings" onClick={() => onTab('settings')} />
         </div>

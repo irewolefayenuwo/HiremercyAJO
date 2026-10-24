@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   LayoutDashboard, PiggyBank, Wallet, Store, Smartphone, Gift, Users, Megaphone, User as UserIcon,
   MoreHorizontal, LogOut, Gamepad2
@@ -10,14 +10,14 @@ interface SectionDef { key: SectionKey; label: string; short: string; icon: any;
 
 export const SECTIONS: SectionDef[] = [
   { key: 'home', label: 'Home', short: 'Home', icon: LayoutDashboard, hint: 'Your dashboard' },
-  { key: 'ajo', label: 'Ajo', short: 'Ajo', icon: PiggyBank, hint: 'Daily savings & tracker' },
+  { key: 'ajo', label: 'AJO', short: 'AJO', icon: PiggyBank, hint: 'Daily savings & tracker' },
   { key: 'wallet', label: 'Wallet', short: 'Wallet', icon: Wallet, hint: 'Fund & pay from wallet' },
   { key: 'oja', label: 'Gbagede OJA', short: 'OJA', icon: Store, hint: 'Buy & sell marketplace' },
   { key: 'bills', label: 'Bills & Top-up', short: 'Bills', icon: Smartphone, hint: 'Airtime, data, TV, power' },
   { key: 'rewards', label: 'Rewards', short: 'Rewards', icon: Gift, hint: 'Challenges & points' },
   { key: 'referrals', label: 'Referrals', short: 'Refer', icon: Users, hint: 'Invite & earn' },
   { key: 'advertise', label: 'Advertise', short: 'Advertise', icon: Megaphone, hint: 'Promote your business' },
-  { key: 'games', label: 'Games', short: 'Games', icon: Gamepad2, hint: 'Play & win (coming soon)' },
+  { key: 'games', label: 'Play & Earn', short: 'Play & Earn', icon: Gamepad2, hint: 'Play games & earn rewards' },
   { key: 'profile', label: 'Profile', short: 'Profile', icon: UserIcon, hint: 'Account & settings' }
 ];
 
@@ -38,39 +38,28 @@ export function tabForSection(s: SectionKey): string {
   return s;
 }
 
-const PRIMARY: SectionKey[] = ['home', 'ajo', 'rewards', 'oja'];
+const PRIMARY: SectionKey[] = ['home', 'ajo', 'wallet', 'games', 'oja'];
 
 export function NewBottomNav({
   active, onSelect, onLogout
 }: { active: SectionKey; onSelect: (s: SectionKey) => void; onLogout?: () => void }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const moreActive = !PRIMARY.includes(active);
-  const items = [
-    SECTIONS.find(s => s.key === 'home')!,
-    SECTIONS.find(s => s.key === 'ajo')!,
-    SECTIONS.find(s => s.key === 'rewards')!,
-    SECTIONS.find(s => s.key === 'oja')!
-  ];
-  const btn = (s: SectionDef, center = false) => {
+  const items = PRIMARY.map(k => SECTIONS.find(s => s.key === k)!);
+  useEffect(() => {
+    const open = () => setMoreOpen(true);
+    window.addEventListener('hm-open-more', open);
+    return () => window.removeEventListener('hm-open-more', open);
+  }, []);
+  const btn = (s: SectionDef) => {
     const Icon = s.icon;
     const on = active === s.key;
-    if (center) {
-      return (
-        <button key={s.key} type="button" onClick={() => onSelect(s.key)} aria-label={s.label} aria-current={on ? 'page' : undefined}
-          className="flex flex-col items-center -mt-6">
-          <span className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg border-4 border-white transition ${on ? 'bg-gradient-to-br from-emerald-600 to-emerald-800 text-white' : 'bg-gradient-to-br from-emerald-500 to-emerald-700 text-white'}`}>
-            <Icon className="w-6 h-6" />
-          </span>
-          <span className={`text-[10px] font-bold mt-0.5 ${on ? 'text-emerald-700' : 'text-slate-500'}`}>{s.short}</span>
-        </button>
-      );
-    }
     return (
       <button key={s.key} type="button" onClick={() => onSelect(s.key)} aria-label={s.label} aria-current={on ? 'page' : undefined}
-        className="flex flex-col items-center gap-0.5 px-2 py-1 min-w-[56px]">
-        <Icon className={`w-5 h-5 ${on ? 'text-emerald-700' : 'text-slate-400'}`} />
-        <span className={`text-[10px] font-bold ${on ? 'text-emerald-700' : 'text-slate-500'}`}>{s.short}</span>
-        <span className={`h-1 w-4 rounded-full ${on ? 'bg-emerald-600' : 'bg-transparent'}`} />
+        className="flex flex-col items-center gap-[2px] px-1.5 pt-1.5 pb-1 min-w-[54px] rounded-2xl transition active:bg-emerald-50">
+        <Icon className={`w-[22px] h-[22px] ${on ? 'text-emerald-700' : 'text-slate-500'}`} />
+        <span className={`text-[10px] font-bold whitespace-nowrap ${on ? 'text-emerald-700' : 'text-slate-500'}`}>{s.short}</span>
+        <span className={`h-[2px] w-7 rounded-full ${on ? 'bg-emerald-700' : 'bg-transparent'}`} />
       </button>
     );
   };
@@ -81,15 +70,11 @@ export function NewBottomNav({
     <>
       <nav className="sm:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-emerald-100 shadow-[0_-4px_16px_rgba(6,78,59,0.10)] px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] flex items-end justify-around"
         aria-label="Main navigation">
-        {btn(items[0])}
-        {btn(items[1])}
-        {btn(items[2], true)}
-        {btn(items[3])}
+        {items.map(i => btn(i))}
         <button type="button" onClick={() => setMoreOpen(true)} aria-label="More"
-          className="flex flex-col items-center gap-0.5 px-2 py-1 min-w-[56px]">
-          <MoreHorizontal className={`w-5 h-5 ${moreActive ? 'text-emerald-700' : 'text-slate-400'}`} />
-          <span className={`text-[10px] font-bold ${moreActive ? 'text-emerald-700' : 'text-slate-500'}`}>More</span>
-          <span className={`h-1 w-4 rounded-full ${moreActive ? 'bg-emerald-600' : 'bg-transparent'}`} />
+          className={`flex flex-col items-center gap-0.5 px-1.5 py-1.5 min-w-[54px] rounded-2xl ${moreActive ? 'bg-emerald-100' : ''}`}>
+          <MoreHorizontal className={`w-6 h-6 ${moreActive ? 'text-emerald-700' : 'text-slate-500'}`} />
+          <span className={`text-[11px] font-bold ${moreActive ? 'text-emerald-800' : 'text-slate-500'}`}>More</span>
         </button>
       </nav>
 

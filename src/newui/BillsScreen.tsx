@@ -218,7 +218,15 @@ function BillForm({ service, onBack, defaultPhone, onChanged }: { service: Servi
 }
 
 export function BillsScreen({ defaultPhone }: { defaultPhone: string }) {
-  const [service, setService] = useState<ServiceId | null>(null);
+  // The Home quick-service buttons pass the chosen service through sessionStorage (one use).
+  const [service, setService] = useState<ServiceId | null>(() => {
+    try {
+      const v = sessionStorage.getItem('hm_bills_service'); sessionStorage.removeItem('hm_bills_service');
+      if (v === 'airtime' || v === 'data' || v === 'electricity') return v as ServiceId;
+      if (v === 'tv') return 'dstv';
+    } catch { /* ignore */ }
+    return null;
+  });
   const [cfg, setCfg] = useState<PublicSettings | null | undefined>(undefined);
   const [orders, setOrders] = useState<OrderRow[] | null>(null);
   const [refreshing, setRefreshing] = useState<string | null>(null);

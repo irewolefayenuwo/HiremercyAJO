@@ -1,13 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Wallet, PiggyBank, Smartphone, Store, Gift, Users, Megaphone, Headphones, Flame, Bell,
-  ChevronRight, Target, Receipt, Lock, Gamepad2 } from 'lucide-react';
+  Wallet, PiggyBank, Smartphone, Store, Gift, Users, Megaphone, Headphones, Bell,
+  ChevronRight, ArrowRight, Receipt, Lock, Gamepad2, Eye, EyeOff, CalendarDays, Coins, Sprout, Zap, Tv, Phone, Star, Globe } from 'lucide-react';
 import type { Profile, Transaction, Notification, SupportSettings } from '../App';
 import { Mascot, type MascotPose } from './Mascot';
-import { Card, EmptyState, Pill, ProgressBar, SectionTitle, firstName, greeting, naira, whatsappUrl } from './ui';
+import { Card, EmptyState, Pill, ProgressBar, SectionTitle, naira, whatsappUrl } from './ui';
+import { AppBand, SavingsArt, LogoMark } from './HomeParts';
+import { useHideBalance, MASK } from './useHideBalance';
 import type { SectionKey } from './config';
 import { useLiveFlags } from './liveFlags';
 import { useStreak } from './useStreak';
+import { supabase } from '../lib/supabase';
+import { BonusClaimModal, runPromoAction } from './Popups';
 import { StreakStrip } from './StreakStrip';
 import { buildWelcomeSteps } from './rewardsLogic';
 import type { DashboardLite } from './useReferralDashboard';
@@ -39,6 +43,24 @@ interface Slide {
   pose: MascotPose;
   onClick: () => void;
   media?: { image?: string; video?: string };
+  img?: string; imgBg?: string; label?: string;
+}
+
+// Admin-configured banner slides: fetched once per 10 minutes and cached (no polling).
+let bannerCache: { at: number; rows: any[] } | null = null;
+function useAdminBanners() {
+  const [rows, setRows] = useState<any[]>(bannerCache?.rows || []);
+  useEffect(() => {
+    if (bannerCache && Date.now() - bannerCache.at < 600000) return;
+    let dead = false;
+    Promise.resolve(supabase.rpc('get_active_banners')).then(({ data, error }) => {
+      if (dead || error) return;
+      bannerCache = { at: Date.now(), rows: (data || []) as any[] };
+      setRows(bannerCache.rows);
+    }).catch(() => undefined);
+    return () => { dead = true; };
+  }, []);
+  return rows;
 }
 
 function PromoCarousel({ slides }: { slides: Slide[] }) {
@@ -68,39 +90,50 @@ function PromoCarousel({ slides }: { slides: Slide[] }) {
 
   return (
     <div>
-      <div ref={ref} className="hm-scroll-x gap-3 -mx-1 px-1"
+      <div ref={ref} className="hm-scroll-x gap-2 snap-x snap-mandatory overscroll-x-contain"
         onScroll={e => {
           const el = e.currentTarget;
           setIdx(Math.min(slides.length - 1, Math.round(el.scrollLeft / (stepOf() || 1))));
         }}
         onTouchStart={() => { pausedUntil.current = Date.now() + 12000; }}
         onMouseDown={() => { pausedUntil.current = Date.now() + 12000; }}>
-        {slides.map(s => (
+        {slides.map(s => s.img ? (
+          <button key={s.id} type="button" onClick={s.onClick} aria-label={s.label || 'Promotion'}
+            className="relative overflow-hidden rounded-[10px] shadow-md w-full shrink-0 snap-start h-[52px] flex items-center justify-center" style={{ background: s.imgBg || '#ffffff' }}>
+            <img src={s.img} alt={s.label || ''} loading="lazy" decoding="async" className="max-w-full max-h-full object-contain" />
+          </button>
+        ) : s.id === 'brand' ? (
           <button key={s.id} type="button" onClick={s.onClick}
-            className={`relative overflow-hidden text-left rounded-3xl text-white shadow-md w-[88%] sm:w-[calc(50%-6px)] min-h-[150px] p-4 bg-gradient-to-br ${s.bg}`}>
-            {s.media?.video
-              ? <>
-                  <video src={s.media.video} poster={s.media.image} autoPlay loop muted playsInline preload="metadata" className="absolute inset-0 w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-black/10 pointer-events-none" />
-                </>
-              : s.media?.image && <img src={s.media.image} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover opacity-30" />}
-            <div className="relative flex items-center gap-2">
-              <div className="min-w-0 flex-1">
-                <span className="inline-block bg-amber-400 text-emerald-950 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full">{s.kicker}</span>
-                <p className="text-base font-extrabold leading-snug mt-2 line-clamp-2">{s.title}</p>
-                <p className="text-xs text-white/85 font-medium mt-1 line-clamp-2">{s.text}</p>
-                <span className="inline-flex items-center gap-1 mt-3 bg-white/20 border border-white/25 text-xs font-bold px-3 py-1.5 rounded-xl">
-                  {s.cta} <ChevronRight className="w-3.5 h-3.5" />
-                </span>
-              </div>
-              {!s.media?.video && <div className="shrink-0 -mb-4"><Mascot pose={s.pose} size={92} /></div>}
+            className="relative overflow-hidden text-left rounded-[10px] text-white shadow-md w-full shrink-0 snap-start h-[52px] bg-gradient-to-r from-[#0a5f26] via-[#0e7a2c] to-[#0a6a28]">
+            <div className="absolute left-0 top-0 h-full w-[58px] bg-[radial-gradient(circle_at_30%_70%,rgba(163,230,53,0.45),transparent_70%)]" />
+            <div className="absolute left-1 bottom-0"><Mascot pose="point" size={46} /></div>
+            <div className="absolute left-[60px] top-[8px]">
+              <p className="text-[11.5px] leading-[1.15] font-black">Together We Save,<br />Together We <span className="text-lime-400">Grow!</span></p>
+              <p className="text-[7px] font-medium text-emerald-50 mt-0.5 whitespace-nowrap">Your AJO today, a better tomorrow.</p>
             </div>
+            <SavingsArt className="absolute left-[188px] top-[6px] w-[40px] h-[40px]" />
+            <span className="absolute left-[238px] top-[9px]"><LogoMark size={32} /></span>
+            <span className="absolute left-[276px] top-[6px] text-[9.5px] leading-[1.1] italic font-semibold" style={{ fontFamily: 'cursive' }}>More<br />Than Just<br />Savings</span>
+            <ChevronRight className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5" />
+          </button>
+        ) : (
+          <button key={s.id} type="button" onClick={s.onClick}
+            className={`relative overflow-hidden text-left rounded-[10px] text-white shadow-md w-full shrink-0 snap-start h-[52px] px-3 bg-gradient-to-r ${s.bg}`}>
+            {s.media?.image && <img src={s.media.image} alt="" loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover opacity-30" />}
+            <div className="relative h-full flex items-center gap-2 pr-6">
+              <div className="min-w-0 flex-1">
+                <span className="inline-block bg-amber-400 text-emerald-950 text-[7px] font-black uppercase tracking-wider px-1.5 py-[1px] rounded-full">{s.kicker}</span>
+                <p className="text-[10.5px] font-extrabold leading-tight mt-0.5 truncate">{s.title}</p>
+                <p className="text-[7.5px] text-white/85 font-medium leading-tight truncate">{s.text}</p>
+              </div>
+            </div>
+            <ChevronRight className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5" />
           </button>
         ))}
       </div>
-      <div className="flex justify-center gap-1.5 mt-2.5" aria-hidden="true">
+      <div className="flex justify-center gap-1 -mt-3 relative z-10 pointer-events-none" aria-hidden="true">
         {slides.map((s, i) => (
-          <span key={s.id} className={`h-1.5 rounded-full transition-all ${i === idx ? 'w-5 bg-emerald-600' : 'w-1.5 bg-emerald-200'}`} />
+          <span key={s.id} className={`h-1.5 rounded-full transition-all ${i === idx ? 'w-1.5 bg-white' : 'w-1.5 bg-white/45'}`} />
         ))}
       </div>
     </div>
@@ -108,8 +141,12 @@ function PromoCarousel({ slides }: { slides: Slide[] }) {
 }
 
 export function HomeScreen(p: HomeProps) {
-  const { customer, totalSaved, dayCount, paidToday, myTransactions, notifications, supportDetails, dash, onSection, onTab } = p;
-  const name = firstName(customer.name);
+  const { customer, totalSaved, dayCount, myTransactions, notifications, supportDetails, dash, onSection, onTab } = p;
+  const { hidden, toggle } = useHideBalance();
+  const done = Math.max(0, Math.min(dayCount, CYCLE_DAYS));
+  const afterDay32 = Number(customer.daily_amount || 0) * CYCLE_DAYS;
+  const unread = (notifications || []).filter(n => !n.is_read).length;
+  const openBills = (svc: string) => { try { if (svc) sessionStorage.setItem('hm_bills_service', svc); else sessionStorage.removeItem('hm_bills_service'); } catch { /* ignore */ } onSection('bills'); };
   const { streak, loaded: streakLoaded } = useStreak(customer.id);
   const live = useLiveFlags();
   const hasSuccessful = myTransactions.some(t => t.status !== 'Pending');
@@ -127,7 +164,13 @@ export function HomeScreen(p: HomeProps) {
     return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
   };
 
-  const slides: Slide[] = [];
+  const adminBanners = useAdminBanners();
+  const [bonusId, setBonusId] = useState<string | null>(null);
+  const slides: Slide[] = [{
+    id: 'brand', bg: 'from-emerald-900 to-emerald-700', kicker: 'HireMercyAJO',
+    title: 'Together We Save, Together We Grow!', text: 'Your AJO today, a better tomorrow.',
+    cta: 'View my savings', pose: 'point', onClick: () => onTab('tracker')
+  }];
   if (supportDetails.advert_enabled) {
     slides.push({
       id: 'advert',
@@ -141,6 +184,13 @@ export function HomeScreen(p: HomeProps) {
       media: (supportDetails.advert_video_url || supportDetails.advert_image_url) ? { image: supportDetails.advert_image_url || undefined, video: supportDetails.advert_video_url || undefined } : undefined
     });
   }
+  adminBanners.slice().reverse().forEach(b => {
+    if (!b.image_url) return;
+    slides.unshift({
+      id: `ab-${b.id}`, bg: '', kicker: '', title: b.title || '', text: '', cta: '', pose: 'point', img: b.image_url, imgBg: b.bg_color, label: b.title || 'Promotion',
+      onClick: () => runPromoAction(b, onSection, setBonusId)
+    });
+  });
   slides.push(
     {
       id: 'refer', bg: 'from-emerald-800 to-green-600', kicker: 'Refer & earn',
@@ -180,62 +230,129 @@ export function HomeScreen(p: HomeProps) {
   ];
 
   return (
-    <div className="space-y-4 fade-in max-w-3xl mx-auto">
-      {/* Greeting */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-900 via-emerald-800 to-emerald-600 text-white shadow-md">
-        <div className="absolute -right-10 -top-12 w-44 h-44 rounded-full bg-amber-300/20 blur-2xl pointer-events-none" />
-        <div className="relative flex items-center gap-2 pl-5 pr-3 pt-4 pb-2">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-emerald-100">{greeting()},</p>
-            <h2 className="text-2xl font-black leading-tight truncate">{name}</h2>
-            <p className="text-xs text-emerald-100 font-medium mt-1.5">
-              {paidToday ? "Today's contribution is in. Well done!" : 'Ready to make today\'s contribution?'}
-            </p>
-          </div>
-          <div className="shrink-0 -mb-2"><Mascot pose={paidToday ? 'celebrate' : 'wave'} size={118} /></div>
-        </div>
-      </div>
+    <div className="space-y-3 fade-in max-w-3xl mx-auto max-sm:-mx-[3px]">
+      <AppBand name={customer.name} avatarUrl={(customer as any).avatar_url} unread={unread} variant="home" />
 
-      {/* Wallet and Ajo are deliberately separate */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-800 to-emerald-950 text-white p-5 shadow-md hm-shine">
-          <div className="flex items-center justify-between">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1.5"><Wallet className="w-4 h-4" /> Wallet Balance</p>
-            {live.loaded && !live.wallet && <Pill tone="gold">Coming soon</Pill>}
+      {/* MY AJO SAVINGS */}
+      <div className="relative overflow-hidden rounded-[18px] text-white shadow-md h-[118px] bg-gradient-to-br from-[#0b7a2d] via-[#128f2f] to-[#0a6a28]">
+        <div className="absolute right-0 top-0 w-2/3 h-full bg-[radial-gradient(ellipse_at_85%_10%,rgba(163,230,53,0.40),transparent_62%)] pointer-events-none" />
+        <div className="absolute left-0 bottom-0 w-1/2 h-1/2 bg-[radial-gradient(ellipse_at_10%_100%,rgba(0,0,0,0.20),transparent_70%)] pointer-events-none" />
+        <div className="relative h-full pl-2 pr-[148px] pt-[7px]">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="w-10 h-10 rounded-full bg-gradient-to-br from-lime-400 to-green-600 flex items-center justify-center shrink-0 shadow"><Sprout className="w-5 h-5" /></span>
+            <div className="min-w-0">
+              <p className="text-[13px] leading-tight font-black whitespace-nowrap">My AJO Savings</p>
+              <p className="text-[8px] text-emerald-50 font-medium leading-tight mt-0.5 truncate">Save together, get your payout.</p>
+            </div>
           </div>
-          <p className="text-3xl font-black mt-2">{!live.loaded ? '...' : live.wallet ? naira(live.balance) : 'Not active yet'}</p>
-          <p className="text-[11px] text-emerald-100 font-medium mt-1">
-            {live.wallet ? 'Separate from your Ajo savings. Use it for airtime, data and bills.' : 'Your wallet and its dedicated account number will appear here once it is switched on.'}
-          </p>
-          <button type="button" onClick={() => onSection('wallet')}
-            className="mt-4 inline-flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-emerald-950 font-bold text-xs px-4 py-2.5 rounded-xl transition active:scale-[0.98]">
-            {live.wallet ? 'Fund Wallet' : 'About the wallet'} <ChevronRight className="w-3.5 h-3.5" />
+          <div className="absolute left-2 bottom-[10px] flex items-center">
+            <CalendarDays className="w-[16px] h-[16px] shrink-0 mr-1" />
+            <div className="min-w-0"><p className="text-[7.5px] text-emerald-50 font-medium leading-tight whitespace-nowrap">Daily Contribution</p><p className="text-[12px] font-black leading-tight tabular-nums whitespace-nowrap">{hidden ? MASK : naira(customer.daily_amount)}</p></div>
+            <span className="w-px h-[24px] bg-white/30 mx-2" />
+            <Coins className="w-[16px] h-[16px] shrink-0 mr-1" />
+            <div className="min-w-0"><p className="text-[7.5px] text-emerald-50 font-medium leading-tight whitespace-nowrap">Total Saved</p><p className="text-[12px] font-black leading-tight tabular-nums whitespace-nowrap">{hidden ? MASK : naira(totalSaved)}</p></div>
+          </div>
+        </div>
+        <SavingsArt className="absolute right-[146px] bottom-[-2px] w-[80px] h-[80px] pointer-events-none" />
+        <button type="button" onClick={() => onTab('tracker')} className="absolute right-[7px] top-[7px] inline-flex items-center gap-0.5 bg-white text-emerald-900 text-[8px] font-black px-2 h-[16px] rounded-full">View Details <ArrowRight className="w-2.5 h-2.5" /></button>
+        <div className="absolute right-[6px] top-[28px] bottom-[6px] w-[137px] rounded-[10px] bg-white text-slate-800 shadow-sm flex flex-col divide-y divide-emerald-100 overflow-hidden">
+          <button type="button" onClick={() => onTab('tracker')} className="flex-1 min-h-0 w-full text-left px-1.5 flex items-center gap-1.5">
+            <span className="w-4 h-4 text-emerald-700 shrink-0"><CalendarDays className="w-4 h-4" /></span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[8px] font-black text-emerald-950 leading-tight">32-Day Tracker</span>
+              <span className="block mt-[3px] h-[4px] rounded-full bg-emerald-100 overflow-hidden"><span className="block h-full rounded-full bg-gradient-to-r from-emerald-600 to-lime-500" style={{ width: `${Math.round(done / CYCLE_DAYS * 100)}%` }} /></span>
+              <span className="block text-[7px] font-semibold text-emerald-700 mt-[3px] leading-none">{done}/{CYCLE_DAYS} days completed</span>
+            </span>
+            <ChevronRight className="w-3 h-3 text-emerald-700 shrink-0" />
+          </button>
+          <button type="button" onClick={() => onTab('tracker')} className="flex-1 min-h-0 w-full text-left px-1.5 flex items-center gap-1.5">
+            <span className="w-4 h-4 text-emerald-700 shrink-0"><Coins className="w-4 h-4" /></span>
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-1"><span className="text-[8px] font-black text-emerald-950 leading-tight whitespace-nowrap">Payout Status</span>
+                <span className="text-[6.5px] font-black px-1 py-[1px] rounded-full bg-emerald-600 text-white leading-tight">{done >= CYCLE_DAYS ? 'Ready' : 'Pending'}</span></span>
+              <span className="block text-[7px] font-semibold text-slate-600 leading-tight mt-[2px] whitespace-nowrap">Expected: {hidden ? MASK : naira(afterDay32)}</span>
+              <span className="block text-[7px] font-semibold text-slate-500 leading-tight whitespace-nowrap">After Day {CYCLE_DAYS}</span>
+            </span>
+            <ChevronRight className="w-3 h-3 text-emerald-700 shrink-0" />
           </button>
         </div>
+      </div>
 
-        <div className="rounded-3xl bg-white border border-emerald-100 shadow-sm p-5">
-          <div className="flex items-center justify-between">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 flex items-center gap-1.5"><PiggyBank className="w-4 h-4" /> Ajo Savings</p>
-            <Pill tone="green">Separate from wallet</Pill>
-          </div>
-          <p className="text-3xl font-black text-emerald-900 mt-2">{naira(totalSaved)}</p>
-          <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 mt-1">
-            <span className="flex items-center gap-1"><Target className="w-3 h-3" /> {naira(customer.daily_amount)} per day</span>
-            <span>Day {Math.min(dayCount, CYCLE_DAYS)}/{CYCLE_DAYS}</span>
-          </div>
-          <div className="mt-2"><ProgressBar value={dayCount} max={CYCLE_DAYS} /></div>
-          <div className="grid grid-cols-2 gap-2 mt-4">
-            <button type="button" onClick={() => onTab('deposit')}
-              className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs py-2.5 rounded-xl transition active:scale-[0.98]">
-              Contribute Now
+      {/* QUICK SERVICES */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <p className="flex items-center gap-1.5 text-[10px] font-black text-emerald-950"><span className="w-4 h-4 rounded-full bg-emerald-700 text-white flex items-center justify-center"><Zap className="w-2.5 h-2.5" /></span> Quick Services</p>
+          <button type="button" onClick={() => openBills('')} className="text-[7.7px] font-bold text-emerald-700 inline-flex items-center gap-1">More Services <ArrowRight className="w-2.5 h-2.5" /></button>
+        </div>
+        <div className="grid grid-cols-4 gap-2">
+          {([
+            { k: 'airtime', t: 'Buy Airtime', s: 'Top up instantly', Icon: Phone, bg: 'from-emerald-50 to-emerald-100/70 border-emerald-200', ic: 'bg-green-600', ch: 'text-emerald-600' },
+            { k: 'data', t: 'Buy Data', s: 'Stay connected', Icon: Globe, bg: 'from-sky-50 to-sky-100/70 border-sky-200', ic: 'bg-blue-600', ch: 'text-blue-500' },
+            { k: 'electricity', t: 'Pay Electricity', s: 'Keep your lights on', Icon: Zap, bg: 'from-amber-50 to-orange-100/70 border-amber-200', ic: 'bg-amber-500', ch: 'text-amber-500' },
+            { k: 'tv', t: 'TV Subscription', s: 'Entertainment for all', Icon: Tv, bg: 'from-violet-50 to-violet-100/70 border-violet-200', ic: 'bg-violet-600', ch: 'text-violet-500' }
+          ]).map(q => (
+            <button key={q.k} type="button" onClick={() => openBills(q.k)} className={`relative text-left rounded-[10px] bg-gradient-to-br ${q.bg} border h-[72px] px-[7px] pt-[6px] active:scale-[0.97] transition min-w-0 overflow-hidden`}>
+              <span className={`w-[30px] h-[30px] rounded-full ${q.ic} text-white flex items-center justify-center shadow-sm`}><q.Icon className="w-4 h-4" /></span>
+              <span className="block mt-[5px] text-[8.3px] font-black text-slate-900 leading-tight whitespace-nowrap">{q.t}</span>
+              <span className="block text-[6.3px] font-medium text-slate-500 leading-tight whitespace-nowrap pr-2">{q.s}</span>
+              <ChevronRight className={`w-2.5 h-2.5 absolute right-1 bottom-[6px] ${q.ch}`} />
             </button>
-            <button type="button" onClick={() => onTab('tracker')}
-              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs py-2.5 rounded-xl transition active:scale-[0.98]">
-              My Tracker
-            </button>
-          </div>
+          ))}
         </div>
       </div>
+
+      {/* MY WALLET */}
+      <div className="relative rounded-[14px] bg-white border border-emerald-100 shadow-sm h-[96px]">
+        <div className="absolute left-2 top-[8px] flex items-center gap-2">
+          <span className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-500 to-green-800 text-white flex items-center justify-center shrink-0 shadow"><Wallet className="w-[18px] h-[18px]" /></span>
+          <div className="min-w-0"><p className="text-[10.5px] leading-tight font-black text-emerald-950">My Wallet</p><p className="text-[7px] text-slate-500 font-medium leading-tight mt-0.5">Fund, pay bills and more.</p></div>
+        </div>
+        <div className="absolute left-[9px] bottom-[8px] w-[246px] h-[40px] rounded-[8px] bg-emerald-50/80 border border-emerald-100 flex items-center pl-2 pr-1.5">
+          <button type="button" onClick={toggle} aria-pressed={hidden} aria-label={hidden ? 'Show balance' : 'Hide balance'} className="w-5 h-5 shrink-0 text-emerald-900 flex items-center justify-center active:scale-95 transition">
+            {hidden ? <EyeOff className="w-[17px] h-[17px]" /> : <Eye className="w-[17px] h-[17px]" />}
+          </button>
+          <span className="w-px h-6 bg-emerald-200 mx-2" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[7px] font-semibold text-slate-700 leading-tight">Wallet Balance</p>
+            <p className="text-[12.5px] font-black text-emerald-950 leading-tight tabular-nums whitespace-nowrap">{!live.loaded ? '...' : live.wallet ? (hidden ? MASK : `₦${Number(live.balance || 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`) : 'Not active'}</p>
+          </div>
+          <button type="button" onClick={() => onSection('wallet')} className="shrink-0 inline-flex items-center gap-1 bg-gradient-to-r from-emerald-800 to-emerald-600 text-white text-[7.5px] font-black px-2.5 h-[21px] rounded-full">Fund Wallet <ArrowRight className="w-2.5 h-2.5" /></button>
+        </div>
+        <button type="button" onClick={() => openBills('')} className="absolute right-[18px] top-[18px] w-[104px] h-[66px] rounded-[8px] bg-emerald-50/60 border border-emerald-100 grid grid-cols-2 text-[6.8px] font-medium text-slate-700" aria-label="Wallet services">
+          {([['Airtime', Smartphone], ['Data', Globe], ['Electricity', Zap], ['TV', Tv]] as any[]).map(([l, I], i) => (
+            <span key={l} className={`flex flex-col items-center justify-center gap-0.5 ${i < 2 ? 'border-b border-emerald-100' : ''} ${i % 2 === 0 ? 'border-r border-emerald-100' : ''}`}><I className="w-[15px] h-[15px] text-emerald-900" />{l}</span>
+          ))}
+        </button>
+        <ChevronRight className="w-3 h-3 text-emerald-700 absolute right-[5px] top-1/2 -translate-y-1/2 pointer-events-none" />
+      </div>
+
+      {/* EXPLORE MORE */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <p className="flex items-center gap-1.5 text-[10px] font-black text-emerald-950"><span className="w-4 h-4 rounded-full bg-emerald-700 text-white flex items-center justify-center"><Star className="w-2.5 h-2.5" /></span> Explore More</p>
+          <button type="button" onClick={() => onSection('rewards')} className="text-[7.7px] font-bold text-emerald-700 inline-flex items-center gap-1">More <ArrowRight className="w-2.5 h-2.5" /></button>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {([
+            { t: 'Play & Earn', s: 'Play games, complete tasks and earn rewards.', Icon: Gamepad2, bg: 'from-violet-50 to-violet-100/70 border-violet-200', ic: 'bg-violet-600', ch: 'text-violet-500', run: () => onSection('games') },
+            { t: 'Gbagede OJA', s: 'Buy and advertise your products.', Icon: Store, bg: 'from-orange-50 to-orange-100/70 border-orange-200', ic: 'bg-orange-500', ch: 'text-orange-500', run: () => onSection('oja') },
+            { t: 'Refer & Earn', s: 'Invite your friends and earn 10% on each referral.', Icon: Users, bg: 'from-sky-50 to-sky-100/70 border-sky-200', ic: 'bg-blue-600', ch: 'text-blue-500', run: () => onSection('referrals') }
+          ]).map(x => (
+            <button key={x.t} type="button" onClick={x.run} className={`relative text-left rounded-[10px] bg-gradient-to-br ${x.bg} border h-[52px] pl-[6px] pr-[15px] flex items-center gap-1 active:scale-[0.97] transition min-w-0 overflow-hidden`}>
+              <span className={`w-[30px] h-[30px] rounded-full ${x.ic} text-white flex items-center justify-center shadow-sm shrink-0`}><x.Icon className="w-4 h-4" /></span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[8.3px] font-black text-slate-900 leading-tight whitespace-nowrap">{x.t}</span>
+                <span className="block text-[6px] font-medium text-slate-600 leading-[1.25] mt-0.5 line-clamp-2 tracking-tight">{x.s}</span>
+              </span>
+              <ChevronRight className={`w-2.5 h-2.5 absolute right-1 top-1/2 -translate-y-1/2 ${x.ch}`} />
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* PROMOTIONS (admin-configured banners + built-ins) */}
+      <PromoCarousel slides={slides} />
+      {bonusId && <BonusClaimModal id={bonusId} onClose={() => setBonusId(null)} onSection={onSection} />}
 
       {/* Quick actions */}
       <Card>
@@ -277,12 +394,6 @@ export function HomeScreen(p: HomeProps) {
             See all steps <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </Card>
-      </div>
-
-      {/* Promotions */}
-      <div>
-        <SectionTitle>Promotions</SectionTitle>
-        <PromoCarousel slides={slides} />
       </div>
 
       {/* Recent activity & notifications */}
