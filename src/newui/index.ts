@@ -27,3 +27,4 @@ export { BonusBanner, GamesScreen, BonusAdminPanel, GamesAdminPanel } from './Bo
 export { PopupHost, PopupsAdminPanel } from './Popups';
 export { TodaysShareAdverts, ShareAdvertsAdminPanel } from './ShareAdverts';
 export { WalletFundingAdminPanel } from './AdminWalletFunding';
+export { StatementScreen } from './StatementScreen';
