@@ -13,7 +13,7 @@ import { type Session, type AuthChangeEvent } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
 import {
   Mascot, AuthHero, HomeScreen, WalletScreen, OjaScreen, BillsScreen, RewardsScreen, AdvertiseScreen, ProfileScreen,
-  NewBottomNav, NewDesktopNav, sectionForTab, tabForSection, useReferralDashboard, type SectionKey,
+  NewBottomNav, NewDesktopNav, StatementScreen, sectionForTab, tabForSection, useReferralDashboard, type SectionKey,
   AdminWalletPanel, PromotionsPanel, WalletFundingAdminPanel, AdminOjaPanel, StreakAdminPanel, RewardsAdminPanel, useAdminAlerts, AdminAlertBanner, beepAlert,
   ShopAdminPanel, ShareAdvertsAdminPanel, BonusAdminPanel, GamesAdminPanel, PopupsAdminPanel, BonusBanner, GamesScreen, PopupHost, PublicShopPage, shopSlugFromUrl
 } from './newui';
@@ -8882,61 +8882,7 @@ function CustomerDashboard({
       })()}
 
       {/* Statement History Tab */}
-      {customerTab === 'transactions' && (
-        <div className="bg-white p-5 sm:p-6 rounded-3xl border border-emerald-100 shadow-xs animate-fade-in space-y-4">
-          <div>
-            <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5 font-bold font-bold">
-              <FileText className="w-5 h-5 text-emerald-700" />
-              Statement History Ledger
-            </h3>
-            <p className="text-xs text-slate-500 font-medium font-bold">Review your past contribution deposits, including both pending approvals and confirmed payouts.</p>
-          </div>
-          <div className="overflow-x-auto text-slate-800 font-medium">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-emerald-50/50 text-emerald-900 font-extrabold border-b border-emerald-200">
-                  <th className="p-3">Date</th>
-                  <th className="p-3">Payment Channel</th>
-                  <th className="p-3">Amount Deposited</th>
-                  <th className="p-3">Days Marked</th>
-                  <th className="p-3 text-right">Approval Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-emerald-50 bg-white">
-                {myTransactions.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="p-4 text-center text-slate-400">No previous deposit receipts found.</td>
-                  </tr>
-                ) : (
-                  myTransactions.map(t => (
-                    <tr key={t.id} className="hover:bg-emerald-50/20 transition">
-                      <td className="p-3 text-slate-500">{t.date}</td>
-                      <td className="p-3 font-semibold text-slate-700">{t.payment_method}</td>
-                      <td className="p-3 font-bold text-emerald-800">₦{t.amount.toLocaleString()}</td>
-                      <td className="p-3">
-                        {t.status === 'Successful' ? (
-                          <span className="bg-amber-100 text-amber-950 font-black px-2 py-0.5 rounded">
-                            Days {t.start_day} - {t.end_day} ({t.days_covered} Days)
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 italic font-bold text-[10px]">Processing approval...</span>
-                        )}
-                      </td>
-                      <td className="p-3 text-right">
-                        <span className={`px-2.5 py-0.5 rounded-full font-black text-[9px] uppercase ${
-                          t.status === 'Pending' ? 'bg-amber-100 text-amber-800 animate-pulse' : 'bg-emerald-100 text-emerald-800'
-                        }`}>
-                          {t.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+      {customerTab === 'transactions' && <StatementScreen />}
 
       {/* Deposit Funds / Add Funds Tab */}
       {customerTab === 'deposit' && (
@@ -11147,10 +11093,22 @@ function AppMain() {
 
     const settledMonths = (savedMonths[req.customer_id] || []).filter(m => contributionIds.includes(m.id));
 
-    const { error: updateError } = await supabase
-      .from('payout_requests')
-      .update({ status: 'Successful', processed_at: new Date().toISOString() })
-      .eq('id', reqId);
+    // ONE atomic database call: marks the request Successful, writes the
+    // payout_history archive and clears the settled contributions together.
+    // Before this, three separate calls could half-succeed (request marked
+    // paid but archive/contribution step failing silently). Safe to click twice.
+    const archiveRows = contributionIds.length > 0
+      ? (settledMonths.length > 0 ? settledMonths : contributionIds.map(id => ({ id }))).map((m: any) => ({
+          contribution_id: m.id,
+          month_label: m.month_label || req.month_paid || getNigerianMonthName(),
+          total_amount: m.total_amount ?? req.amount,
+          payout_amount: m.total_amount != null && m.total_days != null
+            ? Math.max(0, m.total_amount - monthHistoricalDailyRate(m))
+            : req.payout_amount
+        }))
+      : [];
+
+    const { error: updateError } = await supabase.rpc('admin_complete_payout', { p_request_id: reqId, p_archive: archiveRows });
 
     if (updateError) {
       triggerToast(`Approval failed: ${updateError.message}`, 'error');
@@ -11159,39 +11117,6 @@ function AppMain() {
     }
 
     if (contributionIds.length > 0) {
-      // Archive each settled saved month into payout_history...
-      const archiveRows = (settledMonths.length > 0 ? settledMonths : contributionIds.map(id => ({ id }))).map((m: any) => ({
-        customer_id: req.customer_id,
-        contribution_id: m.id,
-        payout_request_id: reqId,
-        month_label: m.month_label || req.month_paid || getNigerianMonthName(),
-        total_amount: m.total_amount ?? req.amount,
-        payout_amount: m.total_amount != null && m.total_days != null
-          ? Math.max(0, m.total_amount - monthHistoricalDailyRate(m))
-          : req.payout_amount,
-        bank_name: req.bank_name,
-        account_number: req.account_number,
-        account_name: req.account_name,
-        // Charge applies once to the whole request (same as bank_name/account_number
-        // above), snapshotted exactly as it was on the request - never recalculated
-        // from the current system_settings value.
-        charge_amount: req.charge_amount ?? 0,
-        charge_label: req.charge_label ?? null,
-        net_amount: req.net_amount ?? req.payout_amount,
-        approved_at: new Date().toISOString()
-      }));
-
-      const { error: archiveError } = await supabase.from('payout_history').insert(archiveRows);
-      if (archiveError) {
-        console.warn('Failed to write payout_history archive:', archiveError.message);
-      }
-
-      // ...then remove those settled records from the active/saved ledger.
-      const { error: deleteError } = await supabase.from('contributions').delete().in('id', contributionIds);
-      if (deleteError) {
-        console.warn('Failed to clear contributions ledger:', deleteError.message);
-      }
-
       setSavedMonths(prev => ({
         ...prev,
         [req.customer_id]: (prev[req.customer_id] || []).filter(m => !contributionIds.includes(m.id))
