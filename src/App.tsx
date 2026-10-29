@@ -14,7 +14,7 @@ import { supabase } from './lib/supabase';
 import {
   Mascot, AuthHero, HomeScreen, WalletScreen, OjaScreen, BillsScreen, RewardsScreen, AdvertiseScreen, ProfileScreen,
   NewBottomNav, NewDesktopNav, sectionForTab, tabForSection, useReferralDashboard, type SectionKey,
-  AdminWalletPanel, PromotionsPanel, WalletFundingAdminPanel, AdminOjaPanel, StreakAdminPanel, RewardsAdminPanel, useAdminAlerts, AdminAlertBanner,
+  AdminWalletPanel, PromotionsPanel, WalletFundingAdminPanel, AdminOjaPanel, StreakAdminPanel, RewardsAdminPanel, useAdminAlerts, AdminAlertBanner, beepAlert,
   ShopAdminPanel, ShareAdvertsAdminPanel, BonusAdminPanel, GamesAdminPanel, PopupsAdminPanel, BonusBanner, GamesScreen, PopupHost, PublicShopPage, shopSlugFromUrl
 } from './newui';
 
@@ -1793,6 +1793,17 @@ function AdminDashboard({
 }) {
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const { alerts: adminAlerts } = useAdminAlerts(true);
+  // Pending payout requests: payoutRequests is already kept live by the app's realtime channel, so no extra database calls.
+  const pendingPayoutList = useMemo(() => payoutRequests.filter(p => p.status === 'Pending'), [payoutRequests]);
+  const pendingPayouts = useMemo(() => ({ count: pendingPayoutList.length, amount: pendingPayoutList.reduce((a, p) => a + Number(p.payout_amount || p.amount || 0), 0) }), [pendingPayoutList]);
+  const prevPendingPayouts = useRef<number | null>(null);
+  useEffect(() => {
+    if (prevPendingPayouts.current !== null && pendingPayouts.count > prevPendingPayouts.current) {
+      beepAlert();
+      try { if ('Notification' in window && Notification.permission === 'granted') new Notification('New payout request', { body: `${pendingPayouts.count} payout request(s) waiting for approval` }); } catch { /* optional */ }
+    }
+    prevPendingPayouts.current = pendingPayouts.count;
+  }, [pendingPayouts.count]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [saverPreviewSearch, setSaverPreviewSearch] = useState('');
   const [loanSubView, setLoanSubView] = useState<'pending' | 'active' | 'completed' | 'history'>('pending');
@@ -3135,6 +3146,7 @@ function AdminDashboard({
             >
               <Icon className="w-4.5 h-4.5 shrink-0" />
               <span className="truncate">{label}</span>
+              {key === 'payouts' && pendingPayouts.count > 0 && <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-black flex items-center justify-center">{pendingPayouts.count}</span>}
             </button>
           ))}
 
@@ -3160,6 +3172,7 @@ function AdminDashboard({
       <AdminAlertBanner alerts={adminAlerts}
         onOpenWallet={() => { setActiveTab('settings'); setTimeout(() => document.getElementById('admin-wallet-panel')?.scrollIntoView({ behavior: 'smooth' }), 300); }}
         onOpenOja={() => setActiveTab('oja')}
+        pendingPayouts={pendingPayouts} onOpenPayouts={() => setActiveTab('payouts')}
         onOpenShop={() => { setActiveTab('settings'); setTimeout(() => document.getElementById('admin-shop-panel')?.scrollIntoView({ behavior: 'smooth' }), 300); }} />
       <div className="flex flex-col gap-4 card-green">
         <div className="hidden lg:flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -3202,6 +3215,7 @@ function AdminDashboard({
               }`}
             >
               {tab === 'cashsheet' ? 'Cash Sheet' : tab === 'loans' ? 'Loan Management' : tab === 'monthly-savings' ? 'Monthly Savings' : tab === 'oja' ? 'Gbagede OJA' : tab}
+              {tab === 'payouts' && pendingPayouts.count > 0 && <span className="ml-1.5 inline-flex min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-black items-center justify-center align-middle">{pendingPayouts.count}</span>}
             </button>
           ))}
         </div>
