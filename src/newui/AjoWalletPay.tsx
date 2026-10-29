@@ -91,17 +91,22 @@ export function AjoWalletPay({ onPaid }: { onPaid?: () => void }) {
             <PrimaryButton onClick={() => void openQuote()} disabled={busy} className="ml-auto">Pay from Wallet</PrimaryButton>
           </div>
 
-          {st.auto_available && (
-            <div className="mt-3 flex items-center gap-3">
-              <div className="min-w-0 flex-1">
-                <p className="font-black text-emerald-950 text-[12px]">Automatically Deduct My Daily AJO Contribution</p>
-                <p className="text-[10px] text-slate-500 font-medium">Daily amount: {naira(st.daily_amount)}{st.auto_enabled ? ` · Next deduction: ${st.next_deduction_date}` : ''}{st.skip_sundays ? ' · Not on Sundays' : ''}</p>
-              </div>
-              <Switch on={st.auto_enabled} disabled={busy} label="Automatic deduction" onChange={v => (v ? setAskConsent(true) : void setPrefs(true, false))} />
-            </div>
-          )}
         </>
       )}
+      <div className="mt-3 rounded-2xl border border-emerald-100 p-3">
+        {st.auto_available ? (
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="font-black text-emerald-950 text-[12px]">Automatically Deduct My Daily AJO Contribution</p>
+              <p className="text-[10px] text-slate-500 font-medium">Daily amount: {naira(st.daily_amount)}{st.auto_enabled ? ` · Next deduction: ${st.next_deduction_date}` : ''}{st.skip_sundays ? ' · Not on Sundays' : ''}</p>
+              <p className="text-[10px] text-slate-500 font-medium mt-0.5">{st.auto_enabled ? 'ON. We take only what is due. If your wallet is too low we take nothing and message you.' : 'OFF. Turn on to have your daily AJO paid from your wallet automatically. You can turn it off any time.'}</p>
+            </div>
+            <Switch on={st.auto_enabled} disabled={busy} label="Automatic deduction" onChange={v => (v ? setAskConsent(true) : void setPrefs(st.wallet_pay_enabled, false))} />
+          </div>
+        ) : (
+          <p className="text-[11px] text-slate-500 font-medium">Automatic daily deduction is not available yet. You can still pay from your wallet yourself above.</p>
+        )}
+      </div>
       {msg && <p className={`mt-3 text-xs font-bold rounded-xl px-3 py-2 ${msg.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700'}`}>{msg.text}</p>}
 
       {quote && (

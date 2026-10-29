@@ -18,7 +18,7 @@ export { AdminWalletPanel, PromotionsPanel } from './AdminWallet';
 export { AdminOjaPanel } from './AdminOja';
 export { useLiveFlags } from './liveFlags';
 export { StreakAdminPanel } from './AdminStreak';
-export { useAdminAlerts, AdminAlertBanner } from './AdminAlerts';
+export { useAdminAlerts, AdminAlertBanner, beep as beepAlert } from './AdminAlerts';
 export { RewardsAdminPanel } from './AdminRewards';
 export { MyShopTab } from './MyShop';
 export { PublicShopPage, shopSlugFromUrl } from './PublicShop';

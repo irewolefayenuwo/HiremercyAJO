@@ -10,7 +10,7 @@ export interface AdminAlerts {
   shop_pending_items?: number;
 }
 
-function beep() {
+export function beep() {
   try {
     const AC = (window as any).AudioContext || (window as any).webkitAudioContext;
     if (!AC) return;
@@ -69,10 +69,20 @@ export function useAdminAlerts(enabled: boolean): { alerts: AdminAlerts | null; 
   return { alerts, refresh };
 }
 
-export function AdminAlertBanner({ alerts, onOpenWallet, onOpenOja, onOpenShop }: { alerts: AdminAlerts | null; onOpenWallet: () => void; onOpenOja: () => void; onOpenShop?: () => void }) {
+export function AdminAlertBanner({ alerts, onOpenWallet, onOpenOja, onOpenShop, pendingPayouts, onOpenPayouts }: { alerts: AdminAlerts | null; onOpenWallet: () => void; onOpenOja: () => void; onOpenShop?: () => void; pendingPayouts?: { count: number; amount: number }; onOpenPayouts?: () => void }) {
   const [perm, setPerm] = useState<string>(typeof Notification !== 'undefined' ? Notification.permission : 'unsupported');
-  if (!alerts) return null;
   const items: React.ReactNode[] = [];
+  if (pendingPayouts && pendingPayouts.count > 0 && onOpenPayouts) items.push(
+    <button key="p" type="button" onClick={onOpenPayouts} className="w-full text-left flex items-center gap-3 rounded-2xl bg-emerald-50 border-2 border-emerald-300 px-4 py-3">
+      <span className="text-xl">🏦</span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-black text-emerald-900">{pendingPayouts.count} payout request{pendingPayouts.count > 1 ? 's' : ''} pending - ₦{pendingPayouts.amount.toLocaleString()}</span>
+        <span className="block text-[11px] font-semibold text-emerald-800">Tap here to review and approve.</span>
+      </span>
+      <span className="text-xs font-bold text-emerald-900">Review →</span>
+    </button>);
+  if (!alerts && items.length === 0) return null;
+  if (!alerts) return <div className="space-y-2">{items}</div>;
   if (alerts.pending_deposits > 0) items.push(
     <button key="d" type="button" onClick={onOpenWallet} className="w-full text-left flex items-center gap-3 rounded-2xl bg-amber-50 border-2 border-amber-300 px-4 py-3 animate-pulse">
       <span className="text-xl">💰</span>
