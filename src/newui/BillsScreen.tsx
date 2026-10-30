@@ -4,6 +4,9 @@ import { supabase } from '../lib/supabase';
 import { Card, EmptyState, NotLive, Pill, PrimaryButton, ScreenHeader, SecondaryButton, SectionTitle, naira } from './ui';
 import { AIRTIME_NETWORKS, QUICK_AMOUNTS, TV_PROVIDERS } from './config';
 import { loadPublicSettings, newIdempotencyKey, STATUS_LABEL, vtuCall, type PublicSettings } from './vtuApi';
+import { BettingIcon } from './BettingIcon';
+import { BettingScreen } from './BettingScreen';
+import { loadBettingPublic, type BettingPublic } from './bettingApi';
 
 type ServiceId = 'airtime' | 'data' | 'electricity' | 'dstv' | 'gotv' | 'startimes';
 const SERVICES: { id: ServiceId; kind: 'airtime' | 'data' | 'electricity' | 'tv'; label: string; sub: string; icon: any; color: string }[] = [
@@ -230,6 +233,8 @@ export function BillsScreen({ defaultPhone }: { defaultPhone: string }) {
   const [cfg, setCfg] = useState<PublicSettings | null | undefined>(undefined);
   const [orders, setOrders] = useState<OrderRow[] | null>(null);
   const [refreshing, setRefreshing] = useState<string | null>(null);
+  const [showBetting, setShowBetting] = useState(false);
+  const [bet, setBet] = useState<BettingPublic | null | undefined>(undefined);
 
   const loadOrders = useCallback(async () => {
     const { data, error } = await supabase.from('vtu_orders')
@@ -237,12 +242,13 @@ export function BillsScreen({ defaultPhone }: { defaultPhone: string }) {
       .order('created_at', { ascending: false }).limit(15);
     setOrders(error ? null : (data || []) as OrderRow[]);
   }, []);
-  useEffect(() => { loadPublicSettings().then(setCfg); loadOrders(); }, [loadOrders]);
+  useEffect(() => { loadPublicSettings().then(setCfg); loadOrders(); loadBettingPublic().then(setBet); }, [loadOrders]);
 
   const recheck = async (id: string) => { setRefreshing(id); await vtuCall({ action: 'status', order_id: id }); await loadOrders(); setRefreshing(null); };
   const enabled = (kind: string) => !!cfg?.provider_enabled && !!cfg.services?.[kind]?.enabled;
 
   if (service) return <BillForm service={service} onBack={() => { setService(null); loadOrders(); }} defaultPhone={defaultPhone} onChanged={loadOrders} />;
+  if (showBetting) return <BettingScreen onBack={() => { setShowBetting(false); loadOrders(); }} onChanged={loadOrders} />;
   return (
     <div className="space-y-4 fade-in max-w-3xl mx-auto">
       <ScreenHeader title="Bills & Top-up" subtitle="Pay from your wallet balance" pose="point" tone="blue" />
@@ -258,6 +264,12 @@ export function BillsScreen({ defaultPhone }: { defaultPhone: string }) {
               <p className="text-[11px] text-slate-500 font-medium flex items-center gap-1">{on ? s.sub : 'Not available yet'} {on && <ChevronRight className="w-3 h-3" />}</p>
             </button>);
         })}
+        <button type="button" disabled={!bet?.enabled} onClick={() => setShowBetting(true)}
+          className="text-left bg-white rounded-3xl border border-emerald-100 shadow-sm p-4 transition hover:shadow-md active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed">
+          <BettingIcon animate={!!bet?.enabled} />
+          <p className="text-sm font-extrabold text-emerald-950 mt-3">Betting</p>
+          <p className="text-[11px] text-slate-500 font-medium flex items-center gap-1">{bet?.enabled ? 'Fund your betting account' : 'Not available yet'} {bet?.enabled && <ChevronRight className="w-3 h-3" />}</p>
+        </button>
       </div>
       <Card>
         <SectionTitle>Recent bill payments</SectionTitle>
