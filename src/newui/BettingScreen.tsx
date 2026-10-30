@@ -3,7 +3,7 @@ import { Check, ChevronRight, Clock, Loader2, Search, ShieldCheck, Star, X } fro
 import { Card, NotLive, PrimaryButton, ScreenHeader, SecondaryButton, SectionTitle, naira } from './ui';
 import { QUICK_AMOUNTS } from './config';
 import { newIdempotencyKey } from './vtuApi';
-import { bettingCall, loadBettingPublic, loadFavs, saveFavs, type BettingProvider, type BettingPublic } from './bettingApi';
+import { bettingCall, loadBettingPublic, loadFavs, saveFavs, providerLogoUrl, type BettingProvider, type BettingPublic } from './bettingApi';
 import { BettingBall } from './BettingIcon';
 
 interface OrderRow {
@@ -25,12 +25,14 @@ function Field({ label, children, hint, error }: { label: string; children: Reac
 }
 
 /** Company logo with a neat lettered fallback when no logo is set or the image fails to load. */
-function Logo({ p, size = 44 }: { p: Pick<BettingProvider, 'name' | 'logo_url'>; size?: number }) {
+function Logo({ p, size = 44 }: { p: Pick<BettingProvider, 'name' | 'logo_url' | 'service_id'>; size?: number }) {
   const [bad, setBad] = useState(false);
   const style = { width: size, height: size };
-  if (p.logo_url && !bad) {
-    return <img src={p.logo_url} alt="" loading="lazy" onError={() => setBad(true)} style={style}
-      className="rounded-full object-contain bg-white border border-slate-200 shrink-0" />;
+  const src = providerLogoUrl(p.service_id, p.logo_url);
+  if (src && !bad) {
+    // a tiny image is a "no icon found" placeholder, so use the lettered badge instead
+    return <img src={src} alt="" loading="lazy" onError={() => setBad(true)} onLoad={e => { if (e.currentTarget.naturalWidth < 24) setBad(true); }} style={style}
+      className="rounded-full object-contain bg-white border border-slate-200 p-1 shrink-0" />;
   }
   return <span style={style} className="rounded-full bg-gradient-to-br from-emerald-700 to-emerald-900 text-white flex items-center justify-center text-sm font-black shrink-0" aria-hidden="true">
     {p.name.slice(0, 2)}</span>;

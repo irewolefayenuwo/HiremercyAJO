@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { bettingCall } from './bettingApi';
+import { bettingCall, providerLogoUrl } from './bettingApi';
 
 type Toast = (m: string, t?: 'success' | 'error') => void;
 const naira = (n: any) => `₦${Number(n || 0).toLocaleString()}`;
@@ -11,9 +11,9 @@ const btn = 'px-3 py-2 rounded-lg text-xs font-bold bg-emerald-700 text-white ho
 const btn2 = 'px-3 py-2 rounded-lg text-xs font-bold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50';
 
 const FRIENDLY: Record<string, string> = {
-  NO_PROVIDER_READY: 'Test at least one betting company first (press Test on a company below).',
+  NO_PROVIDER_READY: 'Turn on at least one betting company first (press Turn on below).',
   MASTER_OFF: 'The main VTU.ng switch is off. Turn it on first in Wallet > Services & pricing.',
-  NOT_VERIFIED: 'Test this company first.',
+  NOT_VERIFIED: 'This company needs a service ID before it can be turned on.',
   PROVIDER_NOT_SUPPORTED: 'This company needs a confirmed VTU.ng service ID and must be marked as supported.',
   FORBIDDEN: 'Only admins can do this.'
 };
@@ -77,14 +77,14 @@ function Setup({ toast }: { toast: Toast }) {
 
   const setMode = async (m: 'off' | 'test' | 'live') => {
     if (m === mode) return;
-    if (m === 'live' && !window.confirm('Go LIVE? All customers will see Betting and the companies marked READY.')) return;
+    if (m === 'live' && !window.confirm('Go LIVE? All customers will see Betting and the companies that are ON.')) return;
     const r = await rpc('admin_betting_set_mode', { p_mode: m }, toast, m === 'off' ? 'Betting is OFF' : m === 'test' ? 'TEST mode: only admins can use Betting' : 'Betting is LIVE for customers');
     if (r.ok) load();
   };
 
   const note = mode === 'off' ? 'Betting is OFF. Nobody can use it.'
     : mode === 'test' ? 'TEST MODE. Only admins can see and use Betting. Customers cannot see it.'
-      : 'LIVE. Customers can see Betting and every company marked READY.';
+      : 'LIVE. Customers can see Betting and every company that is ON.';
   const tone = mode === 'live' ? 'border-emerald-400 bg-emerald-50' : mode === 'test' ? 'border-amber-300 bg-amber-50' : 'border-slate-300 bg-slate-50';
   const Step = ({ ok, children }: { ok: boolean; children: React.ReactNode }) => (
     <li className={ok ? 'text-emerald-800' : 'text-slate-600'}><b>{ok ? '✓' : '○'}</b> {children}</li>);
@@ -100,14 +100,14 @@ function Setup({ toast }: { toast: Toast }) {
         </div>
         <ol className="text-[11px] mt-3 space-y-0.5">
           <Step ok={master === true}>VTU.ng main switch is on {master === false && '(turn it on in Wallet > Services & pricing)'}</Step>
-          <Step ok={ready > 0}>At least one company is tested and READY ({ready} ready)</Step>
+          <Step ok={ready > 0}>At least one company is switched ON ({ready} on)</Step>
           <Step ok={mode !== 'off'}>Tap TEST, try a small payment yourself, then tap LIVE</Step>
         </ol>
       </div>
 
       <div className={box}>
         <p className="text-sm font-black">Betting companies</p>
-        <p className="text-[11px] text-slate-500 mt-0.5">Press <b>Test</b> on a company, type a real account ID for it, and press <b>Test now</b>. No money moves. If it works, the company becomes READY and is shown to customers automatically.</p>
+        <p className="text-[11px] text-slate-500 mt-0.5">Switch each company <b>ON</b> or <b>OFF</b>. Companies that are ON are shown to customers when Betting is LIVE. No testing is needed: before any money is taken, the customer&rsquo;s account is checked with the betting company, so a wrong ID never costs the customer anything. Logos appear automatically.</p>
       </div>
       {ov.providers.map(p => <ProviderRow key={p.id} p={p} open={open === p.id} onToggle={() => setOpen(open === p.id ? null : p.id)} toast={toast} reload={load} />)}
       <AddProvider toast={toast} reload={load} />
@@ -119,14 +119,18 @@ function Setup({ toast }: { toast: Toast }) {
 function Chip({ p }: { p: Provider }) {
   const c = (cls: string, t: string) => <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${cls}`}>{t}</span>;
   if (!p.api_supported) return c('bg-slate-200 text-slate-600', 'NOT AVAILABLE YET');
-  if (p.visible && p.last_check_status === 'ok') return c('bg-emerald-600 text-white', 'READY');
-  if (p.last_check_status === 'ok') return c('bg-sky-100 text-sky-800', 'TESTED - HIDDEN');
-  if (p.last_check_status === 'failed') return c('bg-red-100 text-red-700', 'TEST FAILED');
-  return c('bg-amber-100 text-amber-800', 'NOT TESTED');
+  if (p.visible) return c('bg-emerald-600 text-white', 'ON');
+  return c('bg-slate-200 text-slate-700', 'OFF');
+}
+
+function AdminLogo({ p, logo }: { p: Provider; logo?: string | null }) {
+  const [bad, setBad] = useState(false);
+  const src = providerLogoUrl(p.service_id || p.id, logo ?? p.logo_url);
+  if (src && !bad) return <img src={src} alt="" onError={() => setBad(true)} onLoad={e => { if (e.currentTarget.naturalWidth < 24) setBad(true); }} className="w-9 h-9 rounded-full object-contain border border-slate-200 bg-white p-1" />;
+  return <span className="w-9 h-9 rounded-full bg-emerald-800 text-white text-[11px] font-black flex items-center justify-center">{p.name.slice(0, 2)}</span>;
 }
 
 function ProviderRow({ p, open, onToggle, toast, reload }: { p: Provider; open: boolean; onToggle: () => void; toast: Toast; reload: () => void }) {
-  const [box1, setBox1] = useState<'test' | 'more' | null>(null);
   const [acct, setAcct] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
@@ -134,18 +138,7 @@ function ProviderRow({ p, open, onToggle, toast, reload }: { p: Provider; open: 
   const [f, setF] = useState<any>(mk(p));
   useEffect(() => { setF(mk(p)); }, [p]);
   const set = (k: string, v: any) => setF({ ...f, [k]: v });
-  const show = open ? box1 : null;
-
-  const test = async () => {
-    setBusy(true); setMsg('');
-    const r = await bettingCall<{ status: string; note: string; name: string | null }>({ action: 'admin_check_provider', id: p.id, customer_id: acct.trim() });
-    setBusy(false);
-    if (!r.ok) { setMsg(r.message || 'The test could not run.'); toast(r.message || 'Test failed', 'error'); return; }
-    const d: any = r.data;
-    if (d.status === 'ok') { setMsg(`It works!${d.name ? ` Account name: ${d.name}.` : ''} ${p.name} is now READY.`); toast(`${p.name} is READY`, 'success'); }
-    else { setMsg(`Not working yet. VTU.ng said: ${d.note}. Check the account ID and try again.`); toast(`${p.name} test failed`, 'error'); }
-    reload();
-  };
+  const canSwitch = p.api_supported && !!p.service_id;
 
   const save = async (patch: Record<string, unknown> = {}, ok?: string) => {
     const g: any = { ...f, ...patch };
@@ -156,6 +149,17 @@ function ProviderRow({ p, open, onToggle, toast, reload }: { p: Provider; open: 
       p_min: g.min_amount === '' ? null : Number(g.min_amount), p_max: g.max_amount === '' ? null : Number(g.max_amount), p_info: String(g.info || '').trim() || null
     }, toast, ok ?? `${g.name} saved`);
     setBusy(false); if (r.ok) reload();
+  };
+
+  // Optional: ask VTU.ng to look up one real account. Not needed to switch a company on.
+  const test = async () => {
+    setBusy(true); setMsg('');
+    const r = await bettingCall<{ status: string; note: string; name: string | null }>({ action: 'admin_check_provider', id: p.id, customer_id: acct.trim() });
+    setBusy(false);
+    if (!r.ok) { setMsg(r.message || 'The check could not run.'); return; }
+    const d: any = r.data;
+    setMsg(d.status === 'ok' ? `It works!${d.name ? ` Account name: ${d.name}.` : ''}` : `VTU.ng said: ${d.note}. (This does not switch the company off.)`);
+    reload();
   };
 
   const upload = async (file?: File) => {
@@ -174,30 +178,17 @@ function ProviderRow({ p, open, onToggle, toast, reload }: { p: Provider; open: 
   return (
     <div className={box}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        {p.logo_url ? <img src={p.logo_url} alt="" className="w-9 h-9 rounded-full object-contain border border-slate-200 bg-white" />
-          : <span className="w-9 h-9 rounded-full bg-emerald-800 text-white text-[11px] font-black flex items-center justify-center">{p.name.slice(0, 2)}</span>}
+        <AdminLogo p={p} />
         <b className="text-sm">{p.name}</b><Chip p={p} />
         <div className="ml-auto flex gap-2">
-          {p.api_supported && <button className={btn} onClick={() => { if (show === 'test') onToggle(); else { if (!open) onToggle(); setBox1('test'); } }}>Test</button>}
-          {p.last_check_status === 'ok' && <button className={btn2} disabled={busy} onClick={() => save({ visible: !p.visible }, p.visible ? `${p.name} hidden` : `${p.name} is READY`)}>{p.visible ? 'Hide' : 'Show'}</button>}
-          <button className={btn2} onClick={() => { if (show === 'more') onToggle(); else { if (!open) onToggle(); setBox1('more'); } }}>More</button>
+          {canSwitch && <button className={p.visible ? btn2 : btn} disabled={busy} onClick={() => save({ visible: !p.visible }, p.visible ? `${p.name} is OFF` : `${p.name} is ON`)}>{p.visible ? 'Turn off' : 'Turn on'}</button>}
+          <button className={btn2} onClick={onToggle}>{open ? 'Close' : 'More'}</button>
         </div>
       </div>
 
-      {show === 'test' && (
-        <div className="mt-3 rounded-lg border border-slate-200 p-3 space-y-2 text-[11px] font-semibold text-slate-600">
-          <p>Type a real {p.name} account ID (usually the phone number or username you use on {p.name}):</p>
-          <div className="flex flex-wrap gap-2">
-            <input className={inp + ' flex-1 min-w-[10rem]'} inputMode="text" placeholder={`${p.name} account ID`} value={acct} onChange={e => setAcct(e.target.value.replace(/\s/g, ''))} />
-            <button className={btn} disabled={busy || acct.trim().length < 3} onClick={test}>{busy ? 'Testing...' : 'Test now'}</button>
-          </div>
-          {msg && <p className={`font-bold ${msg.startsWith('It works') ? 'text-emerald-700' : 'text-red-600'}`}>{msg}</p>}
-          {!msg && p.last_check_note && <p className="font-medium text-slate-500">Last result: {p.last_check_note}</p>}
-        </div>)}
-
-      {show === 'more' && (
+      {open && (
         <div className="mt-3 space-y-3 text-[11px] font-bold text-slate-600">
-          {!p.api_supported && <p className="rounded-lg bg-amber-50 border border-amber-200 p-2 text-amber-900 font-semibold">This company is not connected to a VTU.ng service yet. When you confirm one, type its exact service ID, tick &ldquo;Supported&rdquo;, Save, then Test it.</p>}
+          {!p.api_supported && <p className="rounded-lg bg-amber-50 border border-amber-200 p-2 text-amber-900 font-semibold">This company is not connected to a VTU.ng service yet. When you confirm one, type its exact service ID, tick &ldquo;Supported&rdquo;, Save, then press Turn on.</p>}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <label>Name shown<input className={inp} value={f.name} onChange={e => set('name', e.target.value)} /></label>
             <label>VTU.ng service ID (exact spelling)<input className={inp} value={f.service_id} onChange={e => set('service_id', e.target.value)} /></label>
@@ -211,10 +202,20 @@ function ProviderRow({ p, open, onToggle, toast, reload }: { p: Provider; open: 
             <label className="flex items-center gap-2"><input type="checkbox" checked={!!f.api_supported} onChange={e => set('api_supported', e.target.checked)} /> Supported</label>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span>Logo (PNG/JPG/WebP, under 300 KB)</span>
+            <span>Logo is automatic. Only upload to replace it (PNG/JPG/WebP, under 300 KB)</span>
             <input type="file" accept="image/png,image/jpeg,image/webp" onChange={e => upload(e.target.files?.[0])} disabled={busy} />
             <input className={inp + ' flex-1 min-w-[10rem]'} placeholder="or paste an https:// logo link" value={f.logo_url} onChange={e => set('logo_url', e.target.value)} />
           </div>
+          {canSwitch && (
+            <div className="rounded-lg border border-slate-200 p-3 space-y-2">
+              <p className="text-slate-800">Optional check (not needed): look up one real {p.name} account</p>
+              <div className="flex flex-wrap gap-2">
+                <input className={inp + ' flex-1 min-w-[10rem]'} placeholder={`A real ${p.name} account ID`} value={acct} onChange={e => setAcct(e.target.value.replace(/\s/g, ''))} />
+                <button className={btn2} disabled={busy || acct.trim().length < 3} onClick={test}>{busy ? 'Checking...' : 'Check'}</button>
+              </div>
+              {msg && <p className={`font-bold ${msg.startsWith('It works') ? 'text-emerald-700' : 'text-slate-700'}`}>{msg}</p>}
+              {!msg && p.last_check_note && <p className="font-medium text-slate-500">Last result: {p.last_check_note}</p>}
+            </div>)}
           <button className={btn} disabled={busy} onClick={() => save()}>Save {f.name}</button>
         </div>)}
     </div>

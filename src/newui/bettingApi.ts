@@ -60,3 +60,17 @@ export function loadFavs(): string[] {
 export function saveFavs(ids: string[]) {
   try { localStorage.setItem(FAV_KEY, JSON.stringify(ids.slice(0, 50))); } catch { /* storage unavailable */ }
 }
+
+// Each company's own website icon is shown automatically, so no logo uploads are needed.
+// A logo uploaded in Admin (More > Logo) always wins. If an icon cannot load, a lettered badge is shown instead.
+const DOMAINS: Record<string, string> = {
+  '1xbet': '1xbet.com', bangbet: 'bangbet.com', bet9ja: 'bet9ja.com', betking: 'betking.com', betland: 'betland.com',
+  betlion: 'betlion.ng', betway: 'betway.com', cloudbet: 'cloudbet.com', livescorebet: 'livescorebet.com',
+  merrybet: 'merrybet.com', naijabet: 'naijabet.com', nairabet: 'nairabet.com', sportybet: 'sportybet.com',
+  supabet: 'supabet.ng', 'football-com': 'football.com', msport: 'msport.com'
+};
+export function providerLogoUrl(key?: string | null, uploaded?: string | null): string | null {
+  if (uploaded) return uploaded;
+  const d = key ? DOMAINS[key.toLowerCase()] : undefined;
+  return d ? `https://www.google.com/s2/favicons?domain=${d}&sz=128` : null;
+}
