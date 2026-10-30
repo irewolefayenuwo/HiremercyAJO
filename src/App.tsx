@@ -14,7 +14,7 @@ import { supabase } from './lib/supabase';
 import {
   Mascot, AuthHero, HomeScreen, WalletScreen, OjaScreen, BillsScreen, RewardsScreen, AdvertiseScreen, ProfileScreen,
   NewBottomNav, NewDesktopNav, StatementScreen, sectionForTab, tabForSection, useReferralDashboard, type SectionKey,
-  AdminWalletPanel, PromotionsPanel, WalletFundingAdminPanel, AdminOjaPanel, StreakAdminPanel, RewardsAdminPanel, useAdminAlerts, AdminAlertBanner, beepAlert,
+  BettingAdminPanel, AdminWalletPanel, PromotionsPanel, WalletFundingAdminPanel, AdminOjaPanel, StreakAdminPanel, RewardsAdminPanel, useAdminAlerts, AdminAlertBanner, beepAlert,
   ShopAdminPanel, ShareAdvertsAdminPanel, BonusAdminPanel, GamesAdminPanel, PopupsAdminPanel, BonusBanner, GamesScreen, PopupHost, PublicShopPage, shopSlugFromUrl
 } from './newui';
 
@@ -6739,6 +6739,9 @@ function AdminDashboard({
           </div>
           <div className="md:col-span-2">
             <div id="admin-wallet-panel"><AdminWalletPanel toast={(m, t) => triggerToast?.(m, t)} startTab={adminAlerts && adminAlerts.pending_deposits > 0 ? 'deposits' : 'orders'} /></div>
+          </div>
+          <div className="md:col-span-2" id="admin-betting-panel-wrap">
+            <BettingAdminPanel toast={(m, t) => triggerToast?.(m, t)} />
           </div>
           <div className="md:col-span-2">
             <PromotionsPanel toast={(m, t) => triggerToast?.(m, t)} />
