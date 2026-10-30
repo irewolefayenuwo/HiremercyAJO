@@ -8,6 +8,9 @@ const CSS = `
 @media (prefers-reduced-motion: reduce){.hm-bet-pulse{animation:none}}
 `;
 
+/** Injects the pulse keyframes (used by the Betting tile on Home). */
+export function BettingPulseStyle() { return <style>{CSS}</style>; }
+
 export function BettingBall({ className = 'w-6 h-6' }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

@@ -224,7 +224,7 @@ export function BillsScreen({ defaultPhone }: { defaultPhone: string }) {
   // The Home quick-service buttons pass the chosen service through sessionStorage (one use).
   const [service, setService] = useState<ServiceId | null>(() => {
     try {
-      const v = sessionStorage.getItem('hm_bills_service'); sessionStorage.removeItem('hm_bills_service');
+      const v = sessionStorage.getItem('hm_bills_service'); if (v !== 'betting') sessionStorage.removeItem('hm_bills_service');
       if (v === 'airtime' || v === 'data' || v === 'electricity') return v as ServiceId;
       if (v === 'tv') return 'dstv';
     } catch { /* ignore */ }
@@ -233,7 +233,9 @@ export function BillsScreen({ defaultPhone }: { defaultPhone: string }) {
   const [cfg, setCfg] = useState<PublicSettings | null | undefined>(undefined);
   const [orders, setOrders] = useState<OrderRow[] | null>(null);
   const [refreshing, setRefreshing] = useState<string | null>(null);
-  const [showBetting, setShowBetting] = useState(false);
+  // Home's Betting icon sends 'betting' through sessionStorage; read it without consuming (safe under React StrictMode), clear it after mount.
+  const [showBetting, setShowBetting] = useState<boolean>(() => { try { return sessionStorage.getItem('hm_bills_service') === 'betting'; } catch { return false; } });
+  useEffect(() => { try { if (sessionStorage.getItem('hm_bills_service') === 'betting') sessionStorage.removeItem('hm_bills_service'); } catch { /* ignore */ } }, []);
   const [bet, setBet] = useState<BettingPublic | null | undefined>(undefined);
 
   const loadOrders = useCallback(async () => {

@@ -15,6 +15,8 @@ import { BonusClaimModal, runPromoAction } from './Popups';
 import { StreakStrip } from './StreakStrip';
 import { buildWelcomeSteps } from './rewardsLogic';
 import type { DashboardLite } from './useReferralDashboard';
+import { BettingBall, BettingPulseStyle } from './BettingIcon';
+import { loadBettingPublic } from './bettingApi';
 
 export interface HomeProps {
   customer: Profile;
@@ -149,6 +151,9 @@ export function HomeScreen(p: HomeProps) {
   const openBills = (svc: string) => { try { if (svc) sessionStorage.setItem('hm_bills_service', svc); else sessionStorage.removeItem('hm_bills_service'); } catch { /* ignore */ } onSection('bills'); };
   const { streak, loaded: streakLoaded } = useStreak(customer.id);
   const live = useLiveFlags();
+  // Betting shows on Home only when it is switched on for this person (customers: LIVE; admins: TEST or LIVE).
+  const [betOn, setBetOn] = useState(false);
+  useEffect(() => { let alive = true; loadBettingPublic().then(v => { if (alive) setBetOn(!!v?.enabled); }); return () => { alive = false; }; }, []);
   const hasSuccessful = myTransactions.some(t => t.status !== 'Pending');
   const steps = buildWelcomeSteps({ customer, hasSuccessfulContribution: hasSuccessful, dash, bestStreak: streak?.longest || 0 });
   const doneSteps = steps.filter(s => s.status === 'done').length;
@@ -210,7 +215,7 @@ export function HomeScreen(p: HomeProps) {
     }
   );
 
-  const actions: { label: string; icon: any; color: string; soon?: boolean; run: () => void }[] = [
+  const actions: { label: string; icon: any; color: string; soon?: boolean; pulse?: boolean; run: () => void }[] = [
     { label: 'Fund Wallet', icon: Wallet, color: 'from-emerald-500 to-emerald-700', soon: live.loaded && !live.wallet, run: () => onSection('wallet') },
     { label: 'Pay Contribution', icon: PiggyBank, color: 'from-amber-400 to-amber-600', run: () => onTab('deposit') },
     { label: 'Buy Airtime', icon: Smartphone, color: 'from-sky-500 to-blue-700', soon: live.loaded && !live.bills, run: () => onSection('bills') },
@@ -226,7 +231,8 @@ export function HomeScreen(p: HomeProps) {
         if (url) window.open(url, '_blank', 'noopener,noreferrer');
         else if (supportDetails.support_phone) window.location.href = `tel:${supportDetails.support_phone}`;
       }
-    }
+    },
+    ...(betOn ? [{ label: 'Betting', icon: BettingBall, color: 'from-green-600 to-emerald-800', pulse: true, soon: live.loaded && !live.bills, run: () => { try { sessionStorage.setItem('hm_bills_service', 'betting'); } catch { /* ignore */ } onSection('bills'); } }] : [])
   ];
 
   return (
@@ -254,7 +260,7 @@ export function HomeScreen(p: HomeProps) {
           </div>
         </div>
         <SavingsArt className="absolute right-[146px] bottom-[-2px] w-[80px] h-[80px] pointer-events-none" />
-        <button type="button" onClick={() => onTab('tracker')} className="absolute right-[7px] top-[7px] inline-flex items-center gap-0.5 bg-white text-emerald-900 text-[8px] font-black px-2 h-[16px] rounded-full">View Details <ArrowRight className="w-2.5 h-2.5" /></button>
+        <button type="button" onClick={() => onTab('tracker')} className="absolute right-[6px] top-[3px] inline-flex items-center gap-1 bg-white text-emerald-900 text-[11px] font-black px-3 h-[22px] rounded-full shadow-md ring-1 ring-white/70 active:scale-95 transition">View Details <ArrowRight className="w-3.5 h-3.5" /></button>
         <div className="absolute right-[6px] top-[28px] bottom-[6px] w-[137px] rounded-[10px] bg-white text-slate-800 shadow-sm flex flex-col divide-y divide-emerald-100 overflow-hidden">
           <button type="button" onClick={() => onTab('tracker')} className="flex-1 min-h-0 w-full text-left px-1.5 flex items-center gap-1.5">
             <span className="w-4 h-4 text-emerald-700 shrink-0"><CalendarDays className="w-4 h-4" /></span>
@@ -357,12 +363,13 @@ export function HomeScreen(p: HomeProps) {
       {/* Quick actions */}
       <Card>
         <SectionTitle>Quick actions</SectionTitle>
+        {betOn && <BettingPulseStyle />}
         <div className="grid grid-cols-4 gap-x-2 gap-y-4">
           {actions.map(a => {
             const Icon = a.icon;
             return (
               <button key={a.label} type="button" onClick={a.run} className="flex flex-col items-center gap-1.5 group relative">
-                <span className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${a.color} text-white flex items-center justify-center shadow-sm transition group-active:scale-95`}>
+                <span className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${a.color} text-white flex items-center justify-center shadow-sm transition group-active:scale-95 ${a.pulse ? 'hm-bet-pulse' : ''}`}>
                   <Icon className="w-5 h-5" />
                 </span>
                 {a.soon && <span className="absolute -top-1.5 right-0 bg-amber-400 text-emerald-950 text-[8px] font-black px-1.5 py-0.5 rounded-full">SOON</span>}
