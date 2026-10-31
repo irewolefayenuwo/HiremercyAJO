@@ -29,3 +29,5 @@ export { TodaysShareAdverts, ShareAdvertsAdminPanel } from './ShareAdverts';
 export { WalletFundingAdminPanel } from './AdminWalletFunding';
 export { StatementScreen } from './StatementScreen';
 export { BettingAdminPanel } from './AdminBetting';
+export { GamingCentre } from './GamingCentre';
+export { GameManagementPanel } from './AdminGames';
