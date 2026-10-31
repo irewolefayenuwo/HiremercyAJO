@@ -3,9 +3,9 @@ import { Check, ChevronRight, Clock, Crown, Eye, EyeOff, Loader2, Lock, ShieldCh
 import { Card, NotLive, PrimaryButton, ScreenHeader, SecondaryButton, SectionTitle, naira } from './ui';
 import { BrainChallenge } from './BrainChallenge';
 import {
-  CoinOrder, CoinPackage, GameDef, GameState, KIND_LABEL, LedgerRow, Plan, gameRpc, loadGameState, newKey
+       type CoinOrder, type CoinPackage, type GameDef, type GameState, KIND_LABEL, type LedgerRow, type Plan, gameRpc, loadGameState, newKey
 } from './gameApi';
-import { ArtKind, CoinIcon, GameArt, GameStyles, IconMusic, IconSound } from './GameArt';
+import { type ArtKind, CoinIcon, GameArt, GameStyles, IconMusic, IconSound } from './GameArt';
 import { getSoundPrefs, setSoundPref } from './gameSound';
 
 type View =
