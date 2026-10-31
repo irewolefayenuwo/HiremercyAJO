@@ -1,7 +1,7 @@
 import React, { useEffect, useReducer, useRef, useState } from 'react';
 import { Check, Loader2, X } from 'lucide-react';
 import { brainReducer, climberMode, initialBrain } from './brainLogic';
-import { BrainAnswer, BrainPayload, gameRpc, invalidateGameState, newKey } from './gameApi';
+import { type BrainAnswer, type BrainPayload, gameRpc, invalidateGameState, newKey } from './gameApi';
 import { getSoundPrefs, setSoundPref, silenceAll, sfx } from './gameSound';
 import { CauldronScene, CoinIcon, Confetti, GameStyles, IconMusic, IconSound } from './GameArt';
 
