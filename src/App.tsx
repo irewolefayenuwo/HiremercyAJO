@@ -9,13 +9,14 @@ import {
   Copy, Share2, Check, ExternalLink, Megaphone,
   Gift, Link2, Send, MessageCircle, MoreHorizontal
 } from 'lucide-react';
+import { Gamepad2 as GameMgmtIcon } from 'lucide-react';
 import { type Session, type AuthChangeEvent } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
 import {
   Mascot, AuthHero, HomeScreen, WalletScreen, OjaScreen, BillsScreen, RewardsScreen, AdvertiseScreen, ProfileScreen,
   NewBottomNav, NewDesktopNav, StatementScreen, sectionForTab, tabForSection, useReferralDashboard, type SectionKey,
-  BettingAdminPanel, AdminWalletPanel, PromotionsPanel, WalletFundingAdminPanel, AdminOjaPanel, StreakAdminPanel, RewardsAdminPanel, useAdminAlerts, AdminAlertBanner, beepAlert,
-  ShopAdminPanel, ShareAdvertsAdminPanel, BonusAdminPanel, GamesAdminPanel, PopupsAdminPanel, BonusBanner, GamesScreen, PopupHost, PublicShopPage, shopSlugFromUrl
+  GamingCentre, GameManagementPanel, BettingAdminPanel, AdminWalletPanel, PromotionsPanel, WalletFundingAdminPanel, AdminOjaPanel, StreakAdminPanel, RewardsAdminPanel, useAdminAlerts, AdminAlertBanner, beepAlert,
+  ShopAdminPanel, ShareAdvertsAdminPanel, BonusAdminPanel, GamesAdminPanel, PopupsAdminPanel, BonusBanner, PopupHost, PublicShopPage, shopSlugFromUrl
 } from './newui';
 
 // --- TS Type Definitions matched to Supabase SQL ---
@@ -703,7 +704,7 @@ const nigerianBanks = [
   'United Bank for Africa (UBA)', 'Unity Bank', 'Wema Bank', 'Zenith Bank'
 ];
 
-type AdminTab = 'overview' | 'customers' | 'branches' | 'staff' | 'payouts' | 'records' | 'transactions' | 'settings' | 'reports' | 'cashsheet' | 'loans' | 'monthly-savings' | 'oja';
+type AdminTab = 'overview' | 'customers' | 'branches' | 'staff' | 'payouts' | 'records' | 'transactions' | 'settings' | 'reports' | 'cashsheet' | 'loans' | 'monthly-savings' | 'oja' | 'games';
 
 export interface CashReconciliation {
   id: string;
@@ -3080,6 +3081,7 @@ function AdminDashboard({
     { key: 'loans', label: 'Loan Management', icon: HandCoins },
     { key: 'monthly-savings', label: 'Monthly Savings', icon: CalendarRange },
     { key: 'oja', label: 'Gbagede OJA', icon: Megaphone },
+    { key: 'games', label: 'Game Management', icon: GameMgmtIcon },
     { key: 'customers', label: 'Customers', icon: Users },
     { key: 'branches', label: 'Branches', icon: Building2 },
     { key: 'staff', label: 'Staff', icon: UserIcon },
@@ -3204,7 +3206,7 @@ function AdminDashboard({
           </button>
         </div>
         <div className="lg:hidden flex gap-2 overflow-x-auto -mx-1 px-1 pb-1">
-          {(['overview', 'customers', 'branches', 'staff', 'payouts', 'records', 'transactions', 'cashsheet', 'loans', 'monthly-savings', 'oja', 'settings', 'reports'] as const).map(tab => (
+          {(['overview', 'customers', 'branches', 'staff', 'payouts', 'records', 'transactions', 'cashsheet', 'loans', 'monthly-savings', 'oja', 'games', 'settings', 'reports'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -3214,7 +3216,7 @@ function AdminDashboard({
                   : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
               }`}
             >
-              {tab === 'cashsheet' ? 'Cash Sheet' : tab === 'loans' ? 'Loan Management' : tab === 'monthly-savings' ? 'Monthly Savings' : tab === 'oja' ? 'Gbagede OJA' : tab}
+              {tab === 'cashsheet' ? 'Cash Sheet' : tab === 'loans' ? 'Loan Management' : tab === 'monthly-savings' ? 'Monthly Savings' : tab === 'oja' ? 'Gbagede OJA' : tab === 'games' ? 'Game Management' : tab}
               {tab === 'payouts' && pendingPayouts.count > 0 && <span className="ml-1.5 inline-flex min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-black items-center justify-center align-middle">{pendingPayouts.count}</span>}
             </button>
           ))}
@@ -5685,6 +5687,11 @@ function AdminDashboard({
       {/* Gbagede OJA marketplace management */}
       {activeTab === 'oja' && (
         <AdminOjaPanel toast={(m, t) => triggerToast?.(m, t)} />
+      )}
+
+      {/* Game Management: its own main section (not inside Settings) */}
+      {activeTab === 'games' && (
+        <GameManagementPanel toast={(m, t) => triggerToast?.(m, t)} />
       )}
 
       {/* Monthly Savings Management tab */}
@@ -8420,7 +8427,7 @@ function CustomerDashboard({
           dash={refDash.data} onSection={goSection} onTab={goTab} />
       )}
       {(customerTab === 'home' || customerTab === 'wallet') && <BonusBanner onSection={goSection} onClaimed={() => setBonusTick(t => t + 1)} />}
-      {customerTab === 'games' && <GamesScreen onSection={goSection} />}
+      {customerTab === 'games' && <GamingCentre onSection={goSection} />}
       {customerTab === 'wallet' && <WalletScreen key={bonusTick} customer={customer} supportDetails={supportDetails} onTab={goTab} onSection={goSection} referralCode={refDash.data?.referral_code} unread={(notifications || []).filter(n => !n.is_read).length} />}
       {customerTab === 'oja' && <OjaScreen customer={customer} supportDetails={supportDetails} onSection={goSection} referralCode={refDash.data?.referral_code} />}
       {customerTab === 'bills' && <BillsScreen defaultPhone={customer.phone} />}
