@@ -685,6 +685,38 @@ const periodLabelFromKey = (periodKey?: string) => {
   return `${months[m - 1] || ''} ${y}`.trim();
 };
 
+// Works out which SAVINGS month(s) a payout_history row belongs to, from its
+// month_label - e.g. "October 2026", "October Collected (early payout -
+// 21/32 days)" or "Loan Disbursement - October 2026". A payout belongs to the
+// month the customer SAVED in, not the day it was paid: October savings paid
+// out on 1 November still count against October, so a new month does not
+// start with the previous month's payouts already deducted.
+// If a label lists several months ("August 2026, September 2026") the payout
+// is split evenly between them. If no month can be read from the label, it
+// falls back to the month the payout was approved in (the old behaviour).
+const PAYOUT_MONTH_NAMES = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+const payoutPeriodShares = (p: { month_label?: string | null; approved_at?: string | null; payout_amount?: number | string | null }): { key: string; amount: number }[] => {
+  const amount = Number(p.payout_amount || 0);
+  const approvedKey = p.approved_at ? String(p.approved_at).slice(0, 7) : '';
+  const approvedYear = approvedKey ? Number(approvedKey.slice(0, 4)) : 0;
+  const approvedMonth = approvedKey ? Number(approvedKey.slice(5, 7)) : 0;
+  const re = /\b(january|february|march|april|may|june|july|august|september|october|november|december)\b(?:\s+(\d{4}))?/gi;
+  const keys: string[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(p.month_label || '')) !== null) {
+    const month = PAYOUT_MONTH_NAMES.indexOf(match[1].toLowerCase()) + 1;
+    let year = match[2] ? Number(match[2]) : approvedYear;
+    // No year in the label (e.g. "December Collected ...") - use the approval
+    // year, rolling back one year if the month is far ahead of it.
+    if (!match[2] && approvedMonth && month > approvedMonth + 6) year -= 1;
+    if (!year) continue;
+    const key = `${year}-${String(month).padStart(2, '0')}`;
+    if (!keys.includes(key)) keys.push(key);
+  }
+  if (keys.length === 0) return approvedKey ? [{ key: approvedKey, amount }] : [];
+  return keys.map(key => ({ key, amount: amount / keys.length }));
+};
+
 // Reads the first present key from a list of candidate field names - used when
 // pulling from tables (like `cycle_archives`) whose exact column names we're
 // normalizing defensively rather than assuming.
@@ -767,6 +799,19 @@ const sumCurrencyValues = (values: number[]) => {
 // historical per-day rate for that month without needing any new column.
 const monthHistoricalDailyRate = (m: { total_amount: number; total_days: number }) =>
   m.total_days > 0 ? Math.round(m.total_amount / m.total_days) : 0;
+
+// The withdrawal / stamp-duty charge only applies to payouts of this amount
+// or more (measured on the payout AFTER the company fee is deducted). Smaller
+// payouts are charge-free. Used by both the customer's preview and the
+// request that gets saved, so the two can never disagree.
+const WITHDRAWAL_CHARGE_MIN_PAYOUT = 10000;
+const withdrawalChargeFor = (
+  payoutAmount: number,
+  settings: { withdrawal_charge_enabled?: boolean; withdrawal_charge_amount?: number }
+) =>
+  settings.withdrawal_charge_enabled && payoutAmount >= WITHDRAWAL_CHARGE_MIN_PAYOUT
+    ? Math.max(0, settings.withdrawal_charge_amount || 0)
+    : 0;
 
 // Single source of truth for the loan formula, per business rule:
 // Maximum Loan = Daily Contribution x 30, Repayment = Daily Contribution x 32.
@@ -1990,6 +2035,11 @@ function AdminDashboard({
   // initialization".
   const customers = profiles.filter(p => p.role === 'Customer').sort((a, b) => a.name.localeCompare(b.name));
 
+  const payoutForPeriod = (periodKey: string) =>
+    sumCurrencyValues(
+      payoutHistory.flatMap(p => payoutPeriodShares(p).filter(sh => sh.key === periodKey).map(sh => sh.amount))
+    );
+
   const computeMonthMetrics = (periodKey: string) => {
     const [y, m] = periodKey.split('-').map(Number);
 
@@ -2041,13 +2091,9 @@ function AdminDashboard({
       }).map(e => Number(e.amount || 0))
     );
     const expenses = cashSheetExpenses + notepadExpenses;
-    const payout = sumCurrencyValues(
-      payoutHistory.filter(p => {
-        if (!p.approved_at) return false;
-        const [py, pm] = p.approved_at.split('-').map(Number);
-        return py === y && pm === m;
-      }).map(p => Number(p.payout_amount || 0))
-    );
+    // Payouts are counted in the SAVINGS month they belong to (read from the
+    // payout's month_label), not the calendar day they were approved on.
+    const payout = payoutForPeriod(periodKey);
     return { contributions, profit, expenses, payout, remaining: contributions - payout };
   };
 
@@ -2076,12 +2122,9 @@ function AdminDashboard({
   }).sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
 
   // --- Total Payout drilldown data (Reports tab, current month) ---
-  const currentMonthPayoutRecords = payoutHistory.filter(p => {
-    if (!p.approved_at) return false;
-    const [py, pm] = p.approved_at.split('-').map(Number);
-    const [cy, cm] = currentPeriodKey.split('-').map(Number);
-    return py === cy && pm === cm;
-  });
+  const currentMonthPayoutRecords = payoutHistory.filter(p =>
+    payoutPeriodShares(p).some(sh => sh.key === currentPeriodKey)
+  );
   const paidCustomerIdsThisMonth = Array.from(new Set(currentMonthPayoutRecords.map(p => p.customer_id)));
   const paidOnLoanIds = paidCustomerIdsThisMonth.filter(id => loans.some(l => l.customer_id === id && l.status === 'Active Loan'));
   const paidNotOnLoanIds = paidCustomerIdsThisMonth.filter(id => !paidOnLoanIds.includes(id));
@@ -6352,7 +6395,7 @@ function AdminDashboard({
                   </div>
                 </div>
                 <p className="text-[11px] text-slate-500 font-medium mt-2">
-                  Current: {withdrawalChargeEnabled ? <strong className="text-emerald-800">₦{Number(withdrawalChargeAmount || 0).toLocaleString()} - {withdrawalChargeLabel || 'Withdrawal Charge'}</strong> : <strong className="text-slate-400">No charge applied</strong>}
+                  Current: {withdrawalChargeEnabled ? <strong className="text-emerald-800">₦{Number(withdrawalChargeAmount || 0).toLocaleString()} - {withdrawalChargeLabel || 'Withdrawal Charge'} (only on payouts of ₦{WITHDRAWAL_CHARGE_MIN_PAYOUT.toLocaleString()} and above)</strong> : <strong className="text-slate-400">No charge applied</strong>}
                 </p>
               </div>
 
@@ -8236,7 +8279,7 @@ function CustomerDashboard({
   // before they submit, and snapshotted onto the request at submission time
   // (see handleCreatePayoutRequest) - never recalculated from a later setting.
   const withdrawalChargeLabel = supportDetails.withdrawal_charge_label || 'Stamp Duty / Withdrawal Charge';
-  const withdrawalChargeAmount = supportDetails.withdrawal_charge_enabled ? Math.max(0, supportDetails.withdrawal_charge_amount || 0) : 0;
+  const withdrawalChargeAmount = withdrawalChargeFor(expectedPayoutAmount, supportDetails);
   const expectedNetAmount = useMemo(() => {
     return Math.max(0, expectedPayoutAmount - withdrawalChargeAmount);
   }, [expectedPayoutAmount, withdrawalChargeAmount]);
@@ -11006,7 +11049,7 @@ function AppMain() {
     // this request. If the admin changes the amount/label tomorrow, this
     // request (and its eventual payout_history archive row) keeps today's
     // value - never recalculated from the live setting.
-    const chargeAmount = supportDetails.withdrawal_charge_enabled ? Math.max(0, supportDetails.withdrawal_charge_amount || 0) : 0;
+    const chargeAmount = withdrawalChargeFor(payoutAmount, supportDetails);
     const chargeLabel = supportDetails.withdrawal_charge_label || 'Stamp Duty / Withdrawal Charge';
     const netAmount = Math.max(0, payoutAmount - chargeAmount);
 
