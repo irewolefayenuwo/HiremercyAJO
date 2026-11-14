@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { KIND_LABEL, friendly, newKey, parseQuestionLines } from './gameApi';
+import { friendly, parseQuestionLines } from './gameApi';
+import { AuditLogs, CoinPackages, CoinSources, EconomyReports, EconomyTransactions, GameAccess, MembershipBenefits, MembershipCategories, WithdrawalSettings } from './AdminGameEconomy';
 
 type Toast = (m: string, t?: 'success' | 'error') => void;
 const naira = (n: any) => `₦${Number(n || 0).toLocaleString()}`;
@@ -30,9 +31,10 @@ function Toggle({ on, onChange, label, hint, disabled }: { on: boolean; onChange
 }
 
 const SECTIONS = [
-  ['overview', 'Overview'], ['games', 'Individual Game Controls'], ['packages', 'Coin Packages and Pricing'], ['questions', 'Questions and Categories'],
-  ['rewards', 'Game Rewards'], ['membership', 'Premium Membership'], ['transactions', 'Customer Game Transactions'],
-  ['reports', 'Game Activity and Reports'], ['promotions', 'Promotions'], ['security', 'Security and Audit Logs']
+  ['overview', 'Overview'], ['games', 'Game Controls'], ['questions', 'Questions and Categories'], ['packages', 'Coin Packages'],
+  ['rewards', 'Earned Coin Rewards'], ['mcat', 'Membership Categories'], ['mben', 'Membership Benefits'], ['access', 'Game Access'],
+  ['withdrawal', 'Withdrawal Settings'], ['transactions', 'Customer Transactions'], ['reports', 'Reports and Analytics'],
+  ['promotions', 'Promotions'], ['audit', 'Audit Logs']
 ] as const;
 type Sec = typeof SECTIONS[number][0];
 
@@ -59,18 +61,21 @@ export function GameManagementPanel({ toast }: { toast: Toast }) {
               className={`shrink-0 text-left px-3 py-2.5 rounded-xl text-xs font-bold ${sec === k ? 'bg-emerald-700 text-white' : 'bg-white border border-slate-200 text-slate-700 hover:bg-emerald-50'}`}>{l}</button>))}
         </nav>
         <div className="flex-1 min-w-0 space-y-4">
-          {failed && <p className={`${box} text-xs text-red-600 font-semibold`}>Could not load Game Management. The gaming database update (GAMES_01 and GAMES_02) may not be installed yet, or you are not an admin.</p>}
+          {failed && <p className={`${box} text-xs text-red-600 font-semibold`}>Could not load Game Management. The gaming database updates (GAMES_01 to GAMES2_03) may not be installed yet, or you are not an admin.</p>}
           {!failed && !cfg && <p className="text-xs text-slate-500">Loading...</p>}
           {cfg && sec === 'overview' && <Overview cfg={cfg} reload={load} toast={toast} />}
           {cfg && sec === 'games' && <Games cfg={cfg} reload={load} toast={toast} />}
-          {sec === 'packages' && cfg && <Packages toast={toast} />}
           {cfg && sec === 'questions' && <Questions cfg={cfg} reload={load} toast={toast} />}
-          {cfg && sec === 'rewards' && <Rewards cfg={cfg} reload={load} toast={toast} />}
-          {cfg && sec === 'membership' && <Membership cfg={cfg} toast={toast} />}
-          {cfg && sec === 'transactions' && <Transactions toast={toast} />}
-          {cfg && sec === 'reports' && <Reports toast={toast} />}
+          {cfg && sec === 'packages' && <CoinPackages toast={toast} />}
+          {cfg && sec === 'rewards' && (<><Rewards cfg={cfg} reload={load} toast={toast} /><CoinSources toast={toast} /></>)}
+          {cfg && sec === 'mcat' && <MembershipCategories toast={toast} />}
+          {cfg && sec === 'mben' && <MembershipBenefits toast={toast} />}
+          {cfg && sec === 'access' && <GameAccess toast={toast} />}
+          {cfg && sec === 'withdrawal' && <WithdrawalSettings toast={toast} />}
+          {cfg && sec === 'transactions' && <EconomyTransactions toast={toast} />}
+          {cfg && sec === 'reports' && (<><EconomyReports toast={toast} /><Reports toast={toast} /></>)}
           {cfg && sec === 'promotions' && <Promotions cfg={cfg} toast={toast} />}
-          {cfg && sec === 'security' && <Security toast={toast} />}
+          {cfg && sec === 'audit' && <AuditLogs toast={toast} />}
         </div>
       </div>
     </div>
@@ -100,9 +105,9 @@ function Overview({ cfg, reload, toast }: { cfg: Cfg; reload: () => void; toast:
         <div className="divide-y divide-slate-100 mt-1">
           <Toggle on={!!s.master_enabled} label="Master switch: all games" hint="Turn OFF to disable every game at once." onChange={v => sw('master_enabled', v, 'Gaming Centre', 'Switch ON the Gaming Centre for ALL customers?')} />
           <Toggle on={!!s.paid_play_enabled} label="Paid gameplay" hint="OFF = every game is free to enter. ON = customers spend game coins to enter." onChange={v => sw('paid_play_enabled', v, 'Paid gameplay', 'Customers will start spending game coins to enter games. Continue?')} />
-          <Toggle on={!!s.coin_purchases_enabled} label="Coin purchases" hint="Lets customers place coin orders. Coins are credited only after YOU confirm the payment." onChange={v => sw('coin_purchases_enabled', v, 'Coin purchases', 'Only switch this on once you have a verified way to confirm payments and you have checked that your payment provider allows gaming use. Continue?')} />
+          <Toggle on={!!s.coin_purchases_enabled} label="Coin purchases" hint="Customers buy coins instantly from their wallet: the price is deducted and the coins are added in one step. Admins can always test this, even when it is OFF." onChange={v => sw('coin_purchases_enabled', v, 'Coin purchases', 'Customers will be able to spend real wallet money on game coins. Make sure your packages, prices and bonuses are correct and that you have taken any advice you need. Continue?')} />
           <Toggle on={!!s.rewards_enabled} label="Coin rewards" hint="OFF = games still work but pay no coins." onChange={v => sw('rewards_enabled', v, 'Rewards')} />
-          <Toggle on={!!s.membership_enabled} label="Premium membership sales" hint="Subscription payments are not connected yet. Keep OFF; you can still grant access by hand." onChange={v => sw('membership_enabled', v, 'Membership sales')} />
+          <Toggle on={!!s.membership_enabled} label="Premium membership sales" hint="Customers can buy or renew memberships from their wallet. Turn OFF to stop new sales (existing members keep their benefits until expiry). Admins can always test." onChange={v => sw('membership_enabled', v, 'Membership sales')} />
         </div>
       </div>
       <div className={`${box} grid sm:grid-cols-2 gap-3`}>
@@ -156,40 +161,6 @@ function GameCard({ g, cats, reload, toast }: { g: any; cats: any[]; reload: () 
       </div>)}
       <button className={btn + ' mt-3'} onClick={save}>Save {g.name}</button>
     </div>
-  );
-}
-
-// ======================================================= 3. Coin packages and pricing
-function Packages({ toast }: { toast: Toast }) {
-  const [rows, setRows] = useState<any[]>([]);
-  const [edit, setEdit] = useState<any | null>(null);
-  const load = useCallback(async () => { const r = await call<any[]>('admin_game_list_packages', undefined, toast); if (r.ok) setRows(r.data || []); }, [toast]);
-  useEffect(() => { load(); }, [load]);
-  const blank = { name: '', coins: 100, bonus_coins: 0, price_naira: 100, badge: '', active: true, sort_order: rows.length };
-  const save = async () => {
-    const r = await call('admin_game_save_package', { p: { ...edit, coins: Number(edit.coins), bonus_coins: Number(edit.bonus_coins), price_naira: Number(edit.price_naira), sort_order: Number(edit.sort_order) } }, toast, 'Package saved');
-    if (r.ok) { setEdit(null); load(); }
-  };
-  return (
-    <>
-      <div className={box}><p className="text-sm font-black">Coin packages</p><p className="text-[11px] text-slate-500 font-medium">Customers see active packages when coin purchases are switched on. Prices are in naira. Packages are hidden (not deleted) when you turn them off.</p>
-        <button className={btn + ' mt-2'} onClick={() => setEdit({ ...blank })}>+ New package</button></div>
-      {edit && (<div className={`${box} grid grid-cols-2 md:grid-cols-3 gap-2`}>
-        <label className={lbl}>Name<input className={inp} value={edit.name} onChange={e => setEdit({ ...edit, name: e.target.value })} /></label>
-        <label className={lbl}>Coins<input className={inp} type="number" min="1" value={edit.coins} onChange={e => setEdit({ ...edit, coins: e.target.value })} /></label>
-        <label className={lbl}>Bonus coins<input className={inp} type="number" min="0" value={edit.bonus_coins} onChange={e => setEdit({ ...edit, bonus_coins: e.target.value })} /></label>
-        <label className={lbl}>Price ₦<input className={inp} type="number" min="1" value={edit.price_naira} onChange={e => setEdit({ ...edit, price_naira: e.target.value })} /></label>
-        <label className={lbl}>Badge (e.g. Best value)<input className={inp} maxLength={20} value={edit.badge || ''} onChange={e => setEdit({ ...edit, badge: e.target.value })} /></label>
-        <label className={lbl}>Order<input className={inp} type="number" value={edit.sort_order} onChange={e => setEdit({ ...edit, sort_order: e.target.value })} /></label>
-        <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={!!edit.active} onChange={e => setEdit({ ...edit, active: e.target.checked })} />Shown to customers</label>
-        <div className="col-span-2 flex gap-2"><button className={btn} onClick={save}>Save</button><button className={btn2} onClick={() => setEdit(null)}>Cancel</button></div></div>)}
-      {rows.map(p => (<div key={p.id} className={`${box} flex flex-wrap items-center gap-3 ${p.active ? '' : 'opacity-60'}`}>
-        <b className="text-sm">{p.name}</b><span className="text-xs font-semibold">{Number(p.coins).toLocaleString()} + {Number(p.bonus_coins).toLocaleString()} bonus coins</span>
-        <span className="text-xs font-black text-emerald-800">{naira(p.price_naira)}</span>{p.badge && <span className="text-[10px] font-black bg-amber-100 text-amber-800 rounded-full px-2 py-0.5">{p.badge}</span>}
-        {!p.active && <span className="text-[10px] font-black bg-slate-200 rounded-full px-2 py-0.5">HIDDEN</span>}
-        <button className={btn2 + ' ml-auto'} onClick={() => setEdit({ ...p })}>Edit</button></div>))}
-      {rows.length === 0 && <p className="text-xs text-slate-500">No packages yet.</p>}
-    </>
   );
 }
 
@@ -334,108 +305,6 @@ function Rewards({ cfg, reload, toast }: { cfg: Cfg; reload: () => void; toast: 
   );
 }
 
-// ======================================================= 6. Premium membership
-function Membership({ cfg, toast }: { cfg: Cfg; toast: Toast }) {
-  const [plans, setPlans] = useState<any[]>([]); const [mem, setMem] = useState<any[]>([]); const [edit, setEdit] = useState<any | null>(null);
-  const [gr, setGr] = useState<any>({ q: '', found: [], customer: null, plan: '', days: '', note: '' });
-  const load = useCallback(async () => {
-    const [a, b] = await Promise.all([call<any[]>('admin_game_list_plans', undefined, toast), call<any[]>('admin_game_list_memberships', { p_limit: 50 }, toast)]);
-    if (a.ok) setPlans(a.data || []); if (b.ok) setMem(b.data || []);
-  }, [toast]);
-  useEffect(() => { load(); }, [load]);
-  const blank = { name: '', price_naira: 1000, period: 'monthly', benefits: [], included_games: [], popular: false, active: true, sort_order: plans.length };
-  const savePlan = async () => {
-    const r = await call('admin_game_save_plan', { p: { ...edit, price_naira: Number(edit.price_naira), sort_order: Number(edit.sort_order) } }, toast, 'Plan saved');
-    if (r.ok) { setEdit(null); load(); }
-  };
-  const find = async () => { const r = await call<any[]>('admin_game_find_customer', { p_q: gr.q }, toast); if (r.ok) setGr({ ...gr, found: r.data || [] }); };
-  return (
-    <>
-      <div className={box}><p className="text-sm font-black">Membership plans</p>
-        <p className="text-[11px] text-slate-500 font-medium">Plans appear in the Premium Gaming Club. Subscription payments are not connected, so access is granted by you below. Premium status is checked on the server.</p>
-        <button className={btn + ' mt-2'} onClick={() => setEdit({ ...blank })}>+ New plan</button></div>
-      {edit && (<div className={`${box} space-y-2`}>
-        <div className="grid grid-cols-2 gap-2">
-          <label className={lbl}>Plan name<input className={inp} value={edit.name} onChange={e => setEdit({ ...edit, name: e.target.value })} /></label>
-          <label className={lbl}>Price ₦<input className={inp} type="number" min="0" value={edit.price_naira} onChange={e => setEdit({ ...edit, price_naira: e.target.value })} /></label>
-          <label className={lbl}>Billing period<select className={inp} value={edit.period} onChange={e => setEdit({ ...edit, period: e.target.value })}><option value="monthly">Monthly (30 days)</option><option value="quarterly">Quarterly (90 days)</option><option value="yearly">Yearly (365 days)</option></select></label>
-          <label className={lbl}>Order<input className={inp} type="number" value={edit.sort_order} onChange={e => setEdit({ ...edit, sort_order: e.target.value })} /></label></div>
-        <label className={lbl}>Benefits (one per line)<textarea className={inp} rows={3} value={(edit.benefits || []).join('\n')} onChange={e => setEdit({ ...edit, benefits: e.target.value.split('\n').map((x: string) => x.trim()).filter(Boolean) })} /></label>
-        <p className={lbl}>Included games</p><div className="flex flex-wrap gap-3">{cfg.games.map((g: any) => (
-          <label key={g.game_key} className="flex items-center gap-1.5 text-xs font-semibold"><input type="checkbox" checked={(edit.included_games || []).includes(g.game_key)}
-            onChange={e => setEdit({ ...edit, included_games: e.target.checked ? [...(edit.included_games || []), g.game_key] : edit.included_games.filter((x: string) => x !== g.game_key) })} />{g.name}</label>))}</div>
-        <div className="flex gap-4"><label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={!!edit.popular} onChange={e => setEdit({ ...edit, popular: e.target.checked })} />Most popular</label>
-          <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={!!edit.active} onChange={e => setEdit({ ...edit, active: e.target.checked })} />Shown to customers</label></div>
-        <div className="flex gap-2"><button className={btn} onClick={savePlan}>Save plan</button><button className={btn2} onClick={() => setEdit(null)}>Cancel</button></div></div>)}
-      {plans.map(p => (<div key={p.id} className={`${box} flex flex-wrap items-center gap-3 ${p.active ? '' : 'opacity-60'}`}><b className="text-sm">{p.name}</b>
-        <span className="text-xs font-semibold">{naira(p.price_naira)} / {p.period}</span>{p.popular && <span className="text-[10px] font-black bg-amber-100 text-amber-800 rounded-full px-2 py-0.5">POPULAR</span>}
-        <button className={btn2 + ' ml-auto'} onClick={() => setEdit({ ...p })}>Edit</button></div>))}
-      <div className={`${box} space-y-2`}><p className="text-sm font-black">Give someone premium access</p>
-        <div className="flex gap-2"><input className={inp} placeholder="Search customer name or phone" value={gr.q} onChange={e => setGr({ ...gr, q: e.target.value })} /><button className={btn2} onClick={find}>Search</button></div>
-        {gr.found.map((c: any) => <button key={c.id} className={`block w-full text-left text-xs font-bold rounded-lg border px-3 py-2 ${gr.customer?.id === c.id ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200'}`} onClick={() => setGr({ ...gr, customer: c })}>{c.name} · {c.phone}</button>)}
-        {gr.customer && <p className="text-xs font-black text-emerald-800">Selected: {gr.customer.name}</p>}
-        <div className="grid grid-cols-3 gap-2"><label className={lbl}>Plan<select className={inp} value={gr.plan} onChange={e => setGr({ ...gr, plan: e.target.value })}><option value="">Choose</option>{plans.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
-          <label className={lbl}>Days (blank = plan length)<input className={inp} type="number" min="1" value={gr.days} onChange={e => setGr({ ...gr, days: e.target.value })} /></label>
-          <label className={lbl}>Note<input className={inp} value={gr.note} onChange={e => setGr({ ...gr, note: e.target.value })} /></label></div>
-        <button className={btn} disabled={!gr.customer || !gr.plan} onClick={async () => { const r = await call('admin_game_grant_membership', { p_customer: gr.customer.id, p_plan: gr.plan, p_days: gr.days ? Number(gr.days) : null, p_note: gr.note }, toast, 'Premium access granted'); if (r.ok) { setGr({ q: '', found: [], customer: null, plan: '', days: '', note: '' }); load(); } }}>Grant access</button></div>
-      {mem.map(m => (<div key={m.id} className={`${box} flex flex-wrap items-center gap-3 text-xs`}><b>{m.customer_name}</b><span>{m.customer_phone}</span><span>{m.plan_name}</span>
-        <span className={`font-black ${m.is_live ? 'text-emerald-700' : 'text-slate-500'}`}>{m.is_live ? 'ACTIVE' : m.status.toUpperCase()}</span><span>until {dt(m.expires_at)}</span><span className="text-slate-400">({m.source})</span>
-        {m.is_live && <button className={btn2 + ' ml-auto'} onClick={async () => { if (!window.confirm('Remove this access?')) return; const r = await call('admin_game_revoke_membership', { p_id: m.id }, toast, 'Access removed'); if (r.ok) load(); }}>Remove</button>}</div>))}
-    </>
-  );
-}
-
-// ======================================================= 7. Customer game transactions
-function Transactions({ toast }: { toast: Toast }) {
-  const [rows, setRows] = useState<any[]>([]); const [kind, setKind] = useState(''); const [cust, setCust] = useState<any>(null);
-  const [orders, setOrders] = useState<any[]>([]); const [ostatus, setOstatus] = useState('pending');
-  const [q, setQ] = useState(''); const [found, setFound] = useState<any[]>([]);
-  const [g, setG] = useState<any>({ customer: null, amount: '', note: '', key: newKey() });
-  const [refs, setRefs] = useState<Record<string, string>>({});
-  const load = useCallback(async () => {
-    const [a, b] = await Promise.all([call<any[]>('admin_game_ledger', { p_customer: cust?.id ?? null, p_kind: kind || null, p_limit: 60, p_offset: 0 }, toast), call<any[]>('admin_game_orders', { p_status: ostatus || null, p_limit: 50 }, toast)]);
-    if (a.ok) setRows(a.data || []); if (b.ok) setOrders(b.data || []);
-  }, [cust, kind, ostatus, toast]);
-  useEffect(() => { load(); }, [load]);
-  const find = async (forGrant: boolean) => { const r = await call<any[]>('admin_game_find_customer', { p_q: q }, toast); if (r.ok) { setFound(r.data || []); if (!forGrant) setCust(null); } };
-  return (
-    <>
-      <div className={`${box} space-y-2`}><p className="text-sm font-black">Coin orders</p>
-        <p className="text-[11px] text-slate-500 font-medium">When a customer pays, enter the payment reference and press Confirm. Coins are then credited once; a reference can never be used twice. Never confirm without seeing the money.</p>
-        <label className={lbl}>Show<select className={inp} value={ostatus} onChange={e => setOstatus(e.target.value)}><option value="pending">Waiting</option><option value="">All</option><option value="successful">Successful</option><option value="failed">Failed</option><option value="refunded">Refunded</option><option value="cancelled">Cancelled</option></select></label>
-        {orders.length === 0 && <p className="text-xs text-slate-500">No orders.</p>}
-        {orders.map(o => (<div key={o.id} className="rounded-xl border border-slate-200 p-3 text-xs space-y-2">
-          <div className="flex flex-wrap gap-x-3 gap-y-1 items-center"><b>{o.customer_name}</b><span>{o.customer_phone}</span><span>{(o.coins + o.bonus_coins).toLocaleString()} coins</span><b>{naira(o.price_naira)}</b>
-            <span className="font-black uppercase">{o.status}</span><span className="text-slate-400">{dt(o.created_at)} · #{String(o.id).slice(0, 8).toUpperCase()}</span>{o.provider_ref && <span>ref {o.provider_ref}</span>}</div>
-          {o.status === 'pending' && <div className="flex flex-wrap gap-2"><input className={inp + ' flex-1 min-w-[10rem]'} placeholder="Payment reference" value={refs[o.id] || ''} onChange={e => setRefs({ ...refs, [o.id]: e.target.value })} />
-            <button className={btn} onClick={async () => { const r = await call('admin_game_confirm_order', { p_order: o.id, p_provider_ref: refs[o.id] || '', p_note: null }, toast, 'Payment confirmed, coins added'); if (r.ok) load(); }}>Confirm payment</button>
-            <button className={btn2} onClick={async () => { if (!window.confirm('Mark this order as failed?')) return; const r = await call('admin_game_close_order', { p_order: o.id, p_status: 'failed', p_note: null }, toast, 'Order closed'); if (r.ok) load(); }}>Reject</button></div>}
-          {o.status === 'successful' && <button className={btn2} onClick={async () => { if (!window.confirm('Refund this order? The coins are taken back (only works if the customer still has them).')) return; const r = await call('admin_game_close_order', { p_order: o.id, p_status: 'refunded', p_note: null }, toast, 'Refunded'); if (r.ok) load(); }}>Refund</button>}
-        </div>))}
-      </div>
-      <div className={`${box} space-y-2`}><p className="text-sm font-black">Add or remove coins for a customer</p>
-        <div className="flex gap-2"><input className={inp} placeholder="Search customer name or phone" value={q} onChange={e => setQ(e.target.value)} /><button className={btn2} onClick={() => find(true)}>Search</button></div>
-        {found.map(c => <button key={c.id} className={`block w-full text-left text-xs font-bold rounded-lg border px-3 py-2 ${g.customer?.id === c.id ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200'}`} onClick={() => setG({ ...g, customer: c })}>{c.name} · {c.phone}</button>)}
-        <div className="grid grid-cols-2 gap-2"><label className={lbl}>Coins (use a minus to remove)<input className={inp} type="number" value={g.amount} onChange={e => setG({ ...g, amount: e.target.value })} /></label>
-          <label className={lbl}>Reason (required)<input className={inp} value={g.note} onChange={e => setG({ ...g, note: e.target.value })} /></label></div>
-        <button className={btn} disabled={!g.customer || !g.amount || g.note.trim().length < 3} onClick={async () => {
-          if (!window.confirm(`${Number(g.amount) > 0 ? 'Add' : 'Remove'} ${Math.abs(Number(g.amount))} coins ${Number(g.amount) > 0 ? 'to' : 'from'} ${g.customer.name}?`)) return;
-          const r = await call('admin_game_grant_coins', { p_customer: g.customer.id, p_amount: Number(g.amount), p_note: g.note, p_idem: g.key }, toast, 'Done and recorded in the audit log');
-          if (r.ok) { setG({ customer: null, amount: '', note: '', key: newKey() }); load(); }
-        }}>Apply</button></div>
-      <div className={`${box} space-y-2`}><p className="text-sm font-black">Coin ledger</p>
-        <div className="flex flex-wrap gap-2 items-end"><label className={lbl}>Type<select className={inp} value={kind} onChange={e => setKind(e.target.value)}><option value="">All</option>{Object.entries(KIND_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
-          <input className={inp + ' flex-1 min-w-[10rem]'} placeholder="Filter by customer: search name or phone" value={q} onChange={e => setQ(e.target.value)} />
-          <button className={btn2} onClick={() => find(false)}>Search</button>{cust && <button className={btn2} onClick={() => setCust(null)}>Clear: {cust.name}</button>}</div>
-        {!cust && found.length > 0 && <div className="flex flex-wrap gap-2">{found.map(c => <button key={c.id} className={btn2} onClick={() => setCust(c)}>{c.name}</button>)}</div>}
-        <div className="overflow-x-auto"><table className="w-full text-xs"><thead><tr className="text-left text-slate-500"><th className="py-1 pr-3">When</th><th className="pr-3">Customer</th><th className="pr-3">Type</th><th className="pr-3 text-right">Coins</th><th className="pr-3 text-right">Balance</th><th>Note</th></tr></thead>
-          <tbody>{rows.map(r => <tr key={r.id} className="border-t border-slate-100"><td className="py-1 pr-3 whitespace-nowrap">{dt(r.created_at)}</td><td className="pr-3">{r.customer_name}</td><td className="pr-3">{KIND_LABEL[r.kind] || r.kind}</td>
-            <td className={`pr-3 text-right font-black ${r.amount > 0 ? 'text-emerald-700' : 'text-red-600'}`}>{r.amount > 0 ? '+' : ''}{r.amount}</td><td className="pr-3 text-right">{r.balance_after}</td><td className="text-slate-500">{r.note}</td></tr>)}</tbody></table></div>
-        {rows.length === 0 && <p className="text-xs text-slate-500">No coin activity yet.</p>}</div>
-    </>
-  );
-}
-
 // ======================================================= 8. Reports
 function Reports({ toast }: { toast: Toast }) {
   const [days, setDays] = useState(14); const [r, setR] = useState<any>(null);
@@ -457,9 +326,9 @@ function Reports({ toast }: { toast: Toast }) {
 
 // ======================================================= 9. Promotions
 function Promotions({ cfg, toast }: { cfg: Cfg; toast: Toast }) {
-  const [rows, setRows] = useState<any[]>([]); const [edit, setEdit] = useState<any | null>(null);
+  const [rows, setRows] = useState<any[]>([]); const [edit, setEdit] = useState<any | null>(null); const [plans, setPlans] = useState<any[]>([]);
   const load = useCallback(async () => { const r = await call<any[]>('admin_game_list_promotions', undefined, toast); if (r.ok) setRows(r.data || []); }, [toast]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); (async () => { const r = await call<any[]>('admin_game_list_plans', undefined, toast); if (r.ok) setPlans(r.data || []); })(); }, [load, toast]);
   const local = (iso?: string) => (iso ? new Date(new Date(iso).getTime() - new Date(iso).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '');
   const save = async () => {
     const r = await call('admin_game_save_promotion', { p: { ...edit, value: Number(edit.value), starts_at: new Date(edit.starts_at).toISOString(), ends_at: new Date(edit.ends_at).toISOString() } }, toast, 'Promotion saved');
@@ -468,18 +337,20 @@ function Promotions({ cfg, toast }: { cfg: Cfg; toast: Toast }) {
   const now = new Date(); const later = new Date(now.getTime() + 7 * 86400000);
   return (
     <>
-      <div className={box}><p className="text-sm font-black">Promotions</p><p className="text-[11px] text-slate-500 font-medium">A reward booster multiplies game coin rewards during the dates you choose (for example 2 = double rewards). The daily reward limit still applies.</p>
-        <button className={btn + ' mt-2'} onClick={() => setEdit({ name: '', value: 2, game_key: '', starts_at: local(now.toISOString()), ends_at: local(later.toISOString()), active: true })}>+ New promotion</button></div>
+      <div className={box}><p className="text-sm font-black">Promotions</p><p className="text-[11px] text-slate-500 font-medium">A reward booster multiplies game coin rewards (2 = double). A purchase bonus gives extra coins as a percentage of the base coins in a package (10 = +10%). Either can be limited to one membership category, and runs only between the dates you choose. The daily reward limit still applies to game rewards.</p>
+        <button className={btn + ' mt-2'} onClick={() => setEdit({ name: '', kind: 'reward_multiplier', value: 2, game_key: '', plan_id: '', starts_at: local(now.toISOString()), ends_at: local(later.toISOString()), active: true })}>+ New promotion</button></div>
       {edit && (<div className={`${box} grid grid-cols-2 gap-2`}>
         <label className={lbl}>Name<input className={inp} value={edit.name} onChange={e => setEdit({ ...edit, name: e.target.value })} /></label>
-        <label className={lbl}>Multiplier (1 to 10)<input className={inp} type="number" step="0.5" min="1" max="10" value={edit.value} onChange={e => setEdit({ ...edit, value: e.target.value })} /></label>
+        <label className={lbl}>Type<select className={inp} value={edit.kind || 'reward_multiplier'} onChange={e => setEdit({ ...edit, kind: e.target.value, value: e.target.value === 'reward_multiplier' ? 2 : 10 })}><option value="reward_multiplier">Reward booster (multiplier)</option><option value="purchase_bonus_pct">Coin purchase bonus (%)</option></select></label>
+        <label className={lbl}>{edit.kind === 'purchase_bonus_pct' ? 'Extra bonus % (1 to 100)' : 'Multiplier (1 to 10)'}<input className={inp} type="number" step="0.5" min="1" max={edit.kind === 'purchase_bonus_pct' ? 100 : 10} value={edit.value} onChange={e => setEdit({ ...edit, value: e.target.value })} /></label>
+        <label className={lbl}>Membership category<select className={inp} value={edit.plan_id || ''} onChange={e => setEdit({ ...edit, plan_id: e.target.value })}><option value="">Everyone</option>{plans.filter((x: any) => !x.archived).map((x: any) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
         <label className={lbl}>Applies to<select className={inp} value={edit.game_key || ''} onChange={e => setEdit({ ...edit, game_key: e.target.value })}><option value="">All games</option>{cfg.games.map((g: any) => <option key={g.game_key} value={g.game_key}>{g.name}</option>)}</select></label>
         <label className="flex items-center gap-2 text-xs font-bold mt-5"><input type="checkbox" checked={!!edit.active} onChange={e => setEdit({ ...edit, active: e.target.checked })} />Active</label>
         <label className={lbl}>Starts<input className={inp} type="datetime-local" value={local(edit.starts_at) || edit.starts_at} onChange={e => setEdit({ ...edit, starts_at: e.target.value })} /></label>
         <label className={lbl}>Ends<input className={inp} type="datetime-local" value={local(edit.ends_at) || edit.ends_at} onChange={e => setEdit({ ...edit, ends_at: e.target.value })} /></label>
         <div className="col-span-2 flex gap-2"><button className={btn} onClick={save}>Save</button><button className={btn2} onClick={() => setEdit(null)}>Cancel</button></div></div>)}
       {rows.map(p => { const live = p.active && new Date(p.starts_at) <= new Date() && new Date(p.ends_at) >= new Date(); return (
-        <div key={p.id} className={`${box} flex flex-wrap items-center gap-3 text-xs`}><b>{p.name}</b><span>x{p.value} rewards</span><span>{p.game_key || 'all games'}</span><span>{dt(p.starts_at)} to {dt(p.ends_at)}</span>
+        <div key={p.id} className={`${box} flex flex-wrap items-center gap-3 text-xs`}><b>{p.name}</b><span>{p.kind === 'purchase_bonus_pct' ? `+${p.value}% bonus coins on purchases` : `x${p.value} rewards`}</span><span>{p.kind === 'purchase_bonus_pct' ? 'coin packages' : (p.game_key || 'all games')}</span><span>{p.plan_id ? (plans.find((x: any) => x.id === p.plan_id)?.name || 'one category') : 'everyone'}</span><span>{dt(p.starts_at)} to {dt(p.ends_at)}</span>
           <span className={`font-black ${live ? 'text-emerald-700' : 'text-slate-500'}`}>{live ? 'RUNNING' : p.active ? 'SCHEDULED/ENDED' : 'OFF'}</span>
           <button className={btn2 + ' ml-auto'} onClick={() => setEdit({ ...p, starts_at: local(p.starts_at), ends_at: local(p.ends_at) })}>Edit</button></div>); })}
       {rows.length === 0 && <p className="text-xs text-slate-500">No promotions yet.</p>}
@@ -487,25 +358,3 @@ function Promotions({ cfg, toast }: { cfg: Cfg; toast: Toast }) {
   );
 }
 
-// ======================================================= 10. Security and audit
-function Security({ toast }: { toast: Toast }) {
-  const [sus, setSus] = useState<any>(null); const [log, setLog] = useState<any[]>([]);
-  useEffect(() => { (async () => { const [a, b] = await Promise.all([call('admin_game_suspicious', undefined, toast), call<any[]>('admin_game_audit', { p_limit: 100 }, toast)]); if (a.ok) setSus(a.data); if (b.ok) setLog(b.data || []); })(); }, [toast]);
-  const Block = ({ title, hint, rows, cols }: { title: string; hint: string; rows: any[]; cols: [string, string][] }) => (
-    <div className={box}><p className="text-sm font-black">{title} <span className="text-slate-400">({rows.length})</span></p><p className="text-[11px] text-slate-500 font-medium">{hint}</p>
-      {rows.length === 0 ? <p className="text-xs text-emerald-700 font-bold mt-1">Nothing to review.</p> : <div className="overflow-x-auto mt-1"><table className="w-full text-xs"><thead><tr className="text-left text-slate-500">{cols.map(([k, l]) => <th key={k} className="pr-3">{l}</th>)}</tr></thead>
-        <tbody>{rows.map((r, i) => <tr key={i} className="border-t border-slate-100">{cols.map(([k]) => <td key={k} className="py-1 pr-3">{k === 'started_at' ? dt(r[k]) : String(r[k] ?? '')}</td>)}</tr>)}</tbody></table></div>}</div>);
-  return (
-    <>
-      {!sus ? <p className="text-xs text-slate-500">Loading...</p> : (<>
-        <Block title="Answers that were very fast" hint="Rounds where 4 or more answers averaged under 1.2 seconds in the last 7 days. May be a bot or a script." rows={sus.too_fast} cols={[['customer_name', 'Customer'], ['customer_phone', 'Phone'], ['answers', 'Answers'], ['avg_ms', 'Avg ms'], ['started_at', 'When']]} />
-        <Block title="Unusually heavy play today" hint="More than 20 rounds today." rows={sus.heavy_play} cols={[['customer_name', 'Customer'], ['customer_phone', 'Phone'], ['sessions_today', 'Rounds']]} />
-        <Block title="Reached the daily reward limit" hint="Customers who earned the maximum coins today." rows={sus.at_daily_cap} cols={[['customer_name', 'Customer'], ['customer_phone', 'Phone'], ['earned_today', 'Coins earned']]} />
-      </>)}
-      <div className={`${box} overflow-x-auto`}><p className="text-sm font-black mb-1">Administrative changes (audit log)</p>
-        <table className="w-full text-xs"><thead><tr className="text-left text-slate-500"><th className="pr-3">When</th><th className="pr-3">Who</th><th className="pr-3">Action</th><th>Detail</th></tr></thead>
-          <tbody>{log.map(a => <tr key={a.id} className="border-t border-slate-100 align-top"><td className="py-1 pr-3 whitespace-nowrap">{dt(a.created_at)}</td><td className="pr-3">{a.actor_name}</td><td className="pr-3 font-bold">{a.action}</td><td className="text-slate-500 break-all">{a.detail ? JSON.stringify(a.detail).slice(0, 180) : ''}</td></tr>)}</tbody></table>
-        {log.length === 0 && <p className="text-xs text-slate-500">No changes recorded yet.</p>}</div>
-    </>
-  );
-}

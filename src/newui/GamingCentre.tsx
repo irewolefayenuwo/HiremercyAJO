@@ -1,16 +1,17 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Check, ChevronRight, Clock, Crown, Eye, EyeOff, Loader2, Lock, ShieldCheck } from 'lucide-react';
+import { Check, ChevronRight, Clock, Crown, Eye, EyeOff, Loader2, ShieldCheck, Wallet } from 'lucide-react';
 import { Card, NotLive, PrimaryButton, ScreenHeader, SecondaryButton, SectionTitle, naira } from './ui';
 import { BrainChallenge } from './BrainChallenge';
+import { BuyCoinsView, MembershipView, WithdrawView } from './GameEconomy';
 import {
-  type CoinOrder, type CoinPackage, type GameDef, type GameState, KIND_LABEL, type LedgerRow, type Plan, gameRpc, loadGameState, newKey
+  type GameDef, type GameState, KIND_LABEL, type LedgerRow, gameRpc, loadGameState
 } from './gameApi';
 import { type ArtKind, CoinIcon, GameArt, GameStyles, IconMusic, IconSound } from './GameArt';
 import { getSoundPrefs, setSoundPref } from './gameSound';
 
 type View =
   | { v: 'home' } | { v: 'games'; tab?: 'all' | 'standard' | 'premium' } | { v: 'premium' }
-  | { v: 'rewards'; tab?: 'coins' | 'rewards' | 'history' } | { v: 'buy' } | { v: 'plans' }
+  | { v: 'rewards'; tab?: 'coins' | 'rewards' | 'history' } | { v: 'buy' } | { v: 'plans' } | { v: 'withdraw' }
   | { v: 'entry'; key: string } | { v: 'play'; key: string; round: number } | { v: 'upcoming'; key: string };
 
 const when = (s: string) => new Date(s).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -25,8 +26,8 @@ const RULES: Record<string, string> = {
 };
 
 function Tag({ g, gs }: { g: GameDef; gs: GameState }) {
-  const cost = g.entry_cost;
-  const [txt, cls] = !g.playable ? ['Coming soon', 'bg-slate-700 text-white'] : g.tier === 'premium' ? ['Premium', 'bg-amber-400 text-emerald-950'] : cost === 0 || !gs.settings.paid_play ? ['Free', 'bg-emerald-500 text-white'] : [`${cost} coins`, 'bg-emerald-500 text-white'];
+  const cost = g.access?.cost ?? g.entry_cost; const code = g.access?.code;
+  const [txt, cls] = !g.playable ? ['Coming soon', 'bg-slate-700 text-white'] : code === 'MAINTENANCE' ? ['Maintenance', 'bg-red-600 text-white'] : code === 'MEMBERSHIP_REQUIRED' ? ['Members only', 'bg-amber-400 text-emerald-950'] : g.tier === 'premium' ? ['Premium', 'bg-amber-400 text-emerald-950'] : cost === 0 || !gs.settings.paid_play ? ['Free', 'bg-emerald-500 text-white'] : [`${cost} coins`, 'bg-emerald-500 text-white'];
   return <span className={`absolute left-1.5 top-1.5 rounded-full px-2 py-0.5 text-[10px] font-black shadow ${cls}`}>{txt}</span>;
 }
 
@@ -110,12 +111,14 @@ export function GamingCentre({ onSection }: { onSection?: (s: any) => void }) {
   const premiumGames = gs.games.filter(g => g.tier === 'premium');
   const standardGames = gs.games.filter(g => g.tier === 'standard');
   const brain = game('brain');
+  const wd = !!gs.settings.withdrawals?.available;
 
   // ---------------- entry confirmation ----------------
   if (view.v === 'entry') {
     const g = game(view.key);
     if (!g) { pop(); return null; }
-    const cost = g.entry_cost; const short = cost > 0 && bal < cost; const cfg = g.config || {};
+    const acc = g.access; const blocked = !!acc && !acc.allowed; const cost = acc?.allowed ? (acc.cost ?? g.entry_cost) : g.entry_cost;
+    const short = !blocked && cost > 0 && bal < cost; const cfg = g.config || {};
     return (
       <div className="max-w-xl mx-auto space-y-4 fade-in"><GameStyles />
         <ScreenHeader title={g.name} subtitle="Confirm and start" onBack={pop} />
@@ -126,17 +129,19 @@ export function GamingCentre({ onSection }: { onSection?: (s: any) => void }) {
             {gs.settings.rewards && <li>Finish all questions to win {cfg.win_reward ?? 0} coins{cfg.win_bonus ? ` plus ${cfg.win_bonus} bonus coins` : ''}</li>}
             {gs.settings.rewards && (cfg.per_correct ?? 0) > 0 && <li>Each correct answer earns {cfg.per_correct} coins if you do not finish</li>}</ul>}
           <dl className="divide-y divide-slate-100 text-sm">
-            <div className="flex justify-between py-2"><dt className="text-slate-500 font-semibold">Entry</dt><dd className="font-black text-slate-900">{cost > 0 ? <span className="inline-flex items-center gap-1"><CoinIcon size={16} />{cost} coins</span> : 'Free play'}</dd></div>
+            <div className="flex justify-between py-2"><dt className="text-slate-500 font-semibold">Entry</dt><dd className="font-black text-slate-900">{cost > 0 ? <span className="inline-flex items-center gap-1"><CoinIcon size={16} />{cost} coins</span> : 'Free play'}{!!acc?.discount_pct && acc.discount_pct > 0 && <span className="ml-2 text-[10px] font-bold text-emerald-700">{acc.discount_pct}% member discount{acc.base_cost ? ` (was ${acc.base_cost})` : ''}</span>}</dd></div>
             <div className="flex justify-between py-2"><dt className="text-slate-500 font-semibold">Your coins</dt><dd className="font-black text-slate-900 inline-flex items-center gap-1"><CoinIcon size={16} />{bal.toLocaleString()}</dd></div>
           </dl>
         </Card>
+        {blocked && <NotLive title="You cannot play this right now">{acc?.message}{acc?.code === 'MEMBERSHIP_REQUIRED' && acc.upgrade?.length ? ` Available with: ${acc.upgrade.map(u => u.name).join(', ')}.` : ''}</NotLive>}
+        {blocked && acc?.code === 'MEMBERSHIP_REQUIRED' && <PrimaryButton onClick={() => push({ v: 'plans' })} className="w-full">See memberships</PrimaryButton>}
         {short && <NotLive title="Not enough coins">You need {cost} coins to play. {gs.settings.coin_purchases ? 'Buy coins to continue.' : 'Coin purchases are not open yet.'}</NotLive>}
         <div className="grid grid-cols-2 gap-3">
           <SecondaryButton onClick={pop}>Cancel</SecondaryButton>
           {short && gs.settings.coin_purchases ? <PrimaryButton onClick={() => push({ v: 'buy' })}>Buy coins</PrimaryButton>
-            : <PrimaryButton disabled={short} onClick={() => replace({ v: 'play', key: g.key, round: Date.now() })}>{cost > 0 ? `Pay ${cost} & play` : 'Start'}</PrimaryButton>}
+            : <PrimaryButton disabled={short || blocked} onClick={() => replace({ v: 'play', key: g.key, round: Date.now() })}>{cost > 0 ? `Pay ${cost} & play` : 'Start'}</PrimaryButton>}
         </div>
-        <p className="text-[11px] text-slate-500 font-medium">Game coins are for playing only. They cannot be withdrawn or exchanged for cash.</p>
+        <p className="text-[11px] text-slate-500 font-medium">Coins you buy are for playing only. Only eligible earned coins can be converted to wallet money, and only when withdrawals are open.</p>
       </div>);
   }
 
@@ -206,9 +211,10 @@ export function GamingCentre({ onSection }: { onSection?: (s: any) => void }) {
       </div>);
   }
 
-  if (view.v === 'rewards') return <RewardsView gs={gs} tab={view.tab ?? 'coins'} setTab={t => replace({ v: 'rewards', tab: t })} onBack={pop} onBuy={() => push({ v: 'buy' })} hide={hide} setHide={setHide} />;
-  if (view.v === 'buy') return <BuyView gs={gs} onBack={pop} />;
-  if (view.v === 'plans') return <PlansView gs={gs} onBack={pop} />;
+  if (view.v === 'rewards') return <RewardsView gs={gs} tab={view.tab ?? 'coins'} setTab={t => replace({ v: 'rewards', tab: t })} onBack={pop} onBuy={() => push({ v: 'buy' })} onWithdraw={() => push({ v: 'withdraw' })} hide={hide} setHide={setHide} />;
+  if (view.v === 'buy') return <BuyCoinsView gs={gs} onBack={pop} onChanged={() => reload(true)} onPlans={() => push({ v: 'plans' })} onAddMoney={() => onSection?.('wallet')} />;
+  if (view.v === 'plans') return <MembershipView gs={gs} onBack={pop} onChanged={() => reload(true)} onAddMoney={() => onSection?.('wallet')} />;
+  if (view.v === 'withdraw') return <WithdrawView gs={gs} onBack={pop} onChanged={() => reload(true)} />;
 
   // ---------------- play & earn home ----------------
   return (
@@ -225,8 +231,9 @@ export function GamingCentre({ onSection }: { onSection?: (s: any) => void }) {
             <p className="text-3xl font-black leading-none">{money(bal)}</p></div>
           <button type="button" onClick={() => setHide(!hide)} aria-label={hide ? 'Show balance' : 'Hide balance'} className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center">{hide ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}</button>
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className={`mt-3 grid gap-2 ${wd ? 'grid-cols-3' : 'grid-cols-2'}`}>
           <button type="button" onClick={() => push({ v: 'rewards' })} className="rounded-xl bg-white/15 border border-white/20 py-2 text-xs font-black">Coins &amp; History</button>
+          {wd && <button type="button" onClick={() => push({ v: 'withdraw' })} className="rounded-xl bg-white/10 border-2 border-amber-300 py-2 text-xs font-black inline-flex items-center justify-center gap-1.5"><Wallet className="w-4 h-4" />Withdraw Coins</button>}
           <button type="button" disabled={!gs.settings.coin_purchases} onClick={() => push({ v: 'buy' })} className="rounded-xl bg-amber-400 text-emerald-950 py-2 text-xs font-black disabled:opacity-50">{gs.settings.coin_purchases ? 'Buy Coins' : 'Buying opens soon'}</button>
         </div>
       </div>
@@ -244,13 +251,13 @@ export function GamingCentre({ onSection }: { onSection?: (s: any) => void }) {
         <GameArt kind="crown" className="w-14 h-14 shrink-0 rounded-2xl" animate={false} />
         <div className="flex-1"><p className="text-base font-black">Premium Membership</p><p className="text-xs text-emerald-100 font-medium">{gs.membership.active ? `Active until ${when(gs.membership.expires_at!)}` : 'Unlock more games and bigger rewards.'}</p></div>
         <ChevronRight className="w-5 h-5" /></button>
-      <p className="text-[11px] text-slate-500 font-medium text-center flex items-center justify-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5" />Game coins are for playing only. They cannot be withdrawn or exchanged for cash. Play responsibly.</p>
+      <p className="text-[11px] text-slate-500 font-medium text-center flex items-center justify-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5" />Purchased coins are for playing only. Only eligible earned coins can be converted, when withdrawals are open. Play responsibly.</p>
     </div>
   );
 }
 
 // =====================================================================================================
-function RewardsView({ gs, tab, setTab, onBack, onBuy, hide, setHide }: { gs: GameState; tab: 'coins' | 'rewards' | 'history'; setTab: (t: 'coins' | 'rewards' | 'history') => void; onBack: () => void; onBuy: () => void; hide: boolean; setHide: (b: boolean) => void }) {
+function RewardsView({ gs, tab, setTab, onBack, onBuy, onWithdraw, hide, setHide }: { gs: GameState; tab: 'coins' | 'rewards' | 'history'; setTab: (t: 'coins' | 'rewards' | 'history') => void; onBack: () => void; onBuy: () => void; onWithdraw: () => void; hide: boolean; setHide: (b: boolean) => void }) {
   const [rows, setRows] = useState<LedgerRow[] | null>(null);
   const [err, setErr] = useState('');
   useEffect(() => { let on = true; (async () => { const r = await gameRpc<LedgerRow[]>('game_my_ledger', { p_limit: 40 }); if (!on) return; if (r.ok) setRows(r.data); else setErr(r.message); })(); return () => { on = false; }; }, []);
@@ -259,7 +266,7 @@ function RewardsView({ gs, tab, setTab, onBack, onBuy, hide, setHide }: { gs: Ga
   const list = (n?: number) => (rows ? rows.slice(0, n) : []).map(r => (
     <li key={r.id} className="flex items-center gap-3 py-2.5">
       <span className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${r.amount > 0 ? 'bg-emerald-100' : 'bg-red-50'}`}><CoinIcon size={20} /></span>
-      <div className="flex-1 min-w-0"><p className="text-sm font-bold text-slate-900 truncate">{r.note || KIND_LABEL[r.kind] || r.kind}</p><p className="text-[10px] text-slate-400 font-semibold">{when(r.created_at)}</p></div>
+      <div className="flex-1 min-w-0"><p className="text-sm font-bold text-slate-900 truncate">{r.note || KIND_LABEL[r.kind] || r.kind}</p><p className="text-[10px] text-slate-400 font-semibold">{when(r.created_at)}{r.source_name ? ` · ${r.source_name}` : ''}{r.amount > 0 && r.eligible ? ' · withdrawable' : ''}</p></div>
       <span className={`text-sm font-black ${r.amount > 0 ? 'text-emerald-700' : 'text-red-600'}`}>{r.amount > 0 ? '+' : ''}{r.amount.toLocaleString()} coins</span></li>));
   return (
     <div className="max-w-3xl mx-auto space-y-4 fade-in"><GameStyles />
@@ -273,11 +280,12 @@ function RewardsView({ gs, tab, setTab, onBack, onBuy, hide, setHide }: { gs: Ga
             <button type="button" disabled={!gs.settings.coin_purchases} onClick={onBuy} className="rounded-full bg-emerald-700 text-white px-4 py-2 text-xs font-black disabled:opacity-50">{gs.settings.coin_purchases ? 'Buy Coins' : 'Buying soon'}</button></div>
           <button type="button" onClick={() => setHide(!hide)} className="text-[11px] font-bold text-emerald-700 inline-flex items-center gap-1">{hide ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}{hide ? 'Show balance' : 'Hide balance'}</button>
         </Card>
-        <div className="grid grid-cols-3 gap-2">{[['Earned Today', w.earned_today], ['Total Earned', w.total_earned], ['Total Spent', w.total_spent]].map(([l, v]) => (
+        <div className="grid grid-cols-3 gap-2">{[['Purchased', w.purchased], ['Earned', w.earned], ['Eligible to withdraw', w.eligible], ['Earned Today', w.earned_today], ['Total Earned', w.total_earned], ['Total Spent', w.total_spent]].map(([l, v]) => (
           <div key={String(l)} className="bg-white rounded-2xl border border-emerald-100 p-3 text-center"><p className="text-[10px] font-bold text-slate-500">{l}</p><p className="text-lg font-black text-emerald-900 inline-flex items-center gap-1 justify-center"><CoinIcon size={14} />{money(Number(v))}</p></div>))}</div>
+        {gs.settings.withdrawals?.available && <PrimaryButton onClick={onWithdraw} className="w-full">Withdraw Coins</PrimaryButton>}
         <div><div className="flex items-center justify-between"><SectionTitle>Recent Activity</SectionTitle><button type="button" onClick={() => setTab('history')} className="text-xs font-black text-emerald-700 mb-2">View All</button></div>
           <Card>{err ? <p className="text-xs text-red-600 font-semibold">{err}</p> : rows === null ? <p className="text-xs text-slate-500 font-semibold">Loading...</p> : rows.length === 0 ? <p className="text-xs text-slate-500 font-semibold py-2">No coin activity yet. Play a game to get started!</p> : <ul className="divide-y divide-slate-100">{list(5)}</ul>}</Card></div>
-        <Card className="flex items-start gap-3 bg-emerald-50 border-emerald-100"><ShieldCheck className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5" /><p className="text-xs font-semibold text-emerald-900">Game coins are for playing only. They are kept separate from your wallet and AJO savings, and cannot be withdrawn or exchanged for cash.</p></Card>
+        <Card className="flex items-start gap-3 bg-emerald-50 border-emerald-100"><ShieldCheck className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5" /><p className="text-xs font-semibold text-emerald-900">Game coins are kept separate from your wallet and AJO savings. Coins you buy are for playing only. Only eligible earned coins can be converted to wallet money, and only when withdrawals are open.</p></Card>
       </>)}
       {tab === 'rewards' && (
         <Card className="space-y-3">
@@ -291,85 +299,6 @@ function RewardsView({ gs, tab, setTab, onBack, onBuy, hide, setHide }: { gs: Ga
         </Card>)}
       {tab === 'history' && (
         <Card>{err ? <p className="text-xs text-red-600 font-semibold">{err}</p> : rows === null ? <p className="text-xs text-slate-500 font-semibold">Loading...</p> : rows.length === 0 ? <p className="text-xs text-slate-500 font-semibold py-2">Nothing here yet.</p> : <ul className="divide-y divide-slate-100">{list()}</ul>}</Card>)}
-    </div>
-  );
-}
-
-// =====================================================================================================
-const STATUS_CHIP: Record<string, string> = { pending: 'bg-amber-100 text-amber-800', successful: 'bg-emerald-100 text-emerald-800', failed: 'bg-red-100 text-red-700', refunded: 'bg-slate-200 text-slate-700', cancelled: 'bg-slate-200 text-slate-700' };
-
-function BuyView({ gs, onBack }: { gs: GameState; onBack: () => void }) {
-  const on = !!gs.settings.coin_purchases;
-  const [pk, setPk] = useState<CoinPackage[] | null>(null);
-  const [orders, setOrders] = useState<CoinOrder[]>([]);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [made, setMade] = useState<CoinOrder | null>(null);
-  const [err, setErr] = useState('');
-  const load = useCallback(async () => {
-    if (!on) return;
-    const [a, b] = await Promise.all([gameRpc<CoinPackage[]>('game_packages_public'), gameRpc<CoinOrder[]>('game_my_orders')]);
-    if (a.ok) setPk(a.data); else setErr(a.message);
-    if (b.ok) setOrders(b.data);
-  }, [on]);
-  useEffect(() => { load(); }, [load]);
-  const order = async (p: CoinPackage) => {
-    setBusy(p.id); setErr('');
-    const r = await gameRpc<CoinOrder>('game_create_coin_order', { p_package: p.id, p_idem: newKey() });
-    setBusy(null);
-    if (!r.ok) { setErr(r.message); return; }
-    setMade(r.data); load();
-  };
-  return (
-    <div className="max-w-3xl mx-auto space-y-4 fade-in"><GameStyles />
-      <ScreenHeader title="Buy Game Coins" subtitle="Coins are used to enter games" onBack={onBack} />
-      {!on && <NotLive title="Coin purchases are not open yet">You will be able to buy game coins here once payments are switched on.</NotLive>}
-      {on && made && (
-        <Card className="space-y-2 border-amber-300 bg-amber-50">
-          <p className="text-sm font-extrabold text-amber-900 flex items-center gap-2"><Clock className="w-4 h-4" />Order received: waiting for payment</p>
-          <p className="text-xs font-semibold text-amber-900">{made.coins + made.bonus_coins} coins for {naira(made.price_naira)}. Reference: <b>{made.id.slice(0, 8).toUpperCase()}</b></p>
-          {gs.settings.purchase_instructions && <p className="text-xs font-medium text-amber-900 whitespace-pre-line">{gs.settings.purchase_instructions}</p>}
-          <p className="text-[11px] font-medium text-amber-800">Your coins are added only after the payment has been checked and confirmed. Leaving this page does not cancel the order.</p>
-        </Card>)}
-      {on && err && <p className="text-xs font-bold text-red-600" role="alert">{err}</p>}
-      {on && pk === null && !err && <Card className="text-center text-xs font-semibold text-slate-500">Loading packages...</Card>}
-      {on && pk && pk.length === 0 && <Card className="text-center text-xs font-semibold text-slate-500">No coin packages are available right now.</Card>}
-      {on && pk && <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{pk.map(p => (
-        <div key={p.id} className="relative bg-white rounded-3xl border border-emerald-100 shadow-sm p-4 text-center">
-          {p.badge && <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-amber-400 text-emerald-950 text-[10px] font-black px-2.5 py-0.5">{p.badge}</span>}
-          <CoinIcon size={38} className="mx-auto" /><p className="mt-1 text-lg font-black text-emerald-950">{p.coins.toLocaleString()}</p>
-          {p.bonus_coins > 0 && <p className="text-[11px] font-black text-emerald-600">+{p.bonus_coins.toLocaleString()} bonus</p>}
-          <p className="text-[11px] font-bold text-slate-500">{p.name}</p><p className="text-base font-black text-slate-900 mt-1">{naira(p.price_naira)}</p>
-          <button type="button" disabled={busy !== null} onClick={() => order(p)} className="mt-2 w-full rounded-full bg-emerald-700 text-white py-2 text-xs font-black disabled:opacity-60">{busy === p.id ? 'Please wait...' : 'Buy'}</button></div>))}</div>}
-      {on && orders.length > 0 && (<div><SectionTitle>My orders</SectionTitle><Card><ul className="divide-y divide-slate-100">{orders.map(o => (
-        <li key={o.id} className="flex items-center justify-between gap-2 py-2.5"><div><p className="text-sm font-bold text-slate-900">{(o.coins + o.bonus_coins).toLocaleString()} coins · {naira(o.price_naira)}</p><p className="text-[10px] text-slate-400 font-semibold">{when(o.created_at)}</p></div>
-          <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-black capitalize ${STATUS_CHIP[o.status]}`}>{o.status}</span></li>))}</ul></Card></div>)}
-    </div>
-  );
-}
-
-function PlansView({ gs, onBack }: { gs: GameState; onBack: () => void }) {
-  const [plans, setPlans] = useState<Plan[] | null>(null);
-  const [period, setPeriod] = useState<'monthly' | 'quarterly' | 'yearly'>('monthly');
-  const [err, setErr] = useState('');
-  useEffect(() => { let on = true; (async () => { const r = await gameRpc<Plan[]>('game_plans_public'); if (!on) return; if (r.ok) setPlans(r.data); else setErr(r.message); })(); return () => { on = false; }; }, []);
-  const shown = (plans || []).filter(p => p.period === period);
-  return (
-    <div className="max-w-3xl mx-auto space-y-4 fade-in"><GameStyles />
-      <ScreenHeader title="Premium Membership" subtitle="Choose a plan and unlock exclusive games!" onBack={onBack} />
-      {gs.membership.active && <Card className="flex items-center gap-3 bg-emerald-50 border-emerald-200"><Crown className="w-6 h-6 text-amber-500" /><p className="text-xs font-bold text-emerald-900">You are a member: {gs.membership.plan_name}, active until {when(gs.membership.expires_at!)}.</p></Card>}
-      <div className="flex gap-2" role="tablist">{(['monthly', 'quarterly', 'yearly'] as const).map(p => (
-        <button key={p} role="tab" aria-selected={period === p} onClick={() => setPeriod(p)} className={`flex-1 rounded-full py-2 text-xs font-black capitalize ${period === p ? 'bg-emerald-700 text-white' : 'bg-white border border-emerald-200 text-emerald-800'}`}>{p}</button>))}</div>
-      {err && <p className="text-xs text-red-600 font-bold">{err}</p>}
-      {plans === null && !err && <Card className="text-center text-xs font-semibold text-slate-500">Loading plans...</Card>}
-      {plans && shown.length === 0 && <Card className="text-center text-xs font-semibold text-slate-500">No {period} plans are available yet.</Card>}
-      <div className="grid sm:grid-cols-2 gap-3">{shown.map(p => (
-        <div key={p.id} className={`relative rounded-3xl p-4 shadow-sm ${p.popular ? `${GREEN} text-white border-2 border-amber-300` : 'bg-white border border-emerald-100'}`}>
-          {p.popular && <span className="absolute -top-2.5 left-4 rounded-full bg-amber-400 text-emerald-950 text-[10px] font-black px-2.5 py-0.5">Most Popular</span>}
-          <div className="flex items-center gap-2"><Crown className={`w-5 h-5 ${p.popular ? 'text-amber-300' : 'text-amber-500'}`} /><p className="text-base font-black">{p.name}</p></div>
-          <p className="mt-1"><span className="text-2xl font-black">{naira(p.price_naira)}</span><span className={`text-xs font-bold ${p.popular ? 'text-emerald-100' : 'text-slate-500'}`}> / {p.period === 'monthly' ? 'month' : p.period === 'quarterly' ? '3 months' : 'year'}</span></p>
-          <ul className="mt-2 space-y-1">{(p.benefits || []).map((b, i) => <li key={i} className="flex gap-2 text-xs font-semibold"><Check className="w-4 h-4 shrink-0 text-emerald-500" />{b}</li>)}</ul>
-          <button type="button" disabled className={`mt-3 w-full rounded-full py-2.5 text-xs font-black inline-flex items-center justify-center gap-1.5 ${p.popular ? 'bg-amber-400 text-emerald-950' : 'bg-slate-200 text-slate-500'} opacity-90`}><Lock className="w-3.5 h-3.5" />{gs.settings.membership ? 'Ask support to join' : 'Opens soon'}</button></div>))}</div>
-      <p className="text-[11px] text-slate-500 font-medium text-center">Membership payments are not open yet. Premium access can be given by the HireMercyAJO team.</p>
     </div>
   );
 }
